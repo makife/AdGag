@@ -1,6 +1,7 @@
 import "dart:async" show StreamSubscription, unawaited;
 import "dart:io";
 
+import "package:file_picker/file_picker.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:image_picker/image_picker.dart";
@@ -17,10 +18,11 @@ import "../../domain/video_project.dart";
 import "../providers/create_ad_flow_controller.dart";
 
 /// The creation flow's one editing step (CLAUDE.md section 4/38): trim,
-/// rotate, flip, mute, slow-motion zones, and timed text/sticker
-/// overlays, all on a single screen with a timeline. Not split into a
-/// separate "basic" vs. "advanced" screen — a slow-motion zone is just
-/// another tool next to rotate, not a different product.
+/// rotate, flip, mute, a color filter, background music, slow-motion
+/// zones, and timed text/sticker overlays, all on a single screen with a
+/// timeline. Not split into a separate "basic" vs. "advanced" screen — a
+/// slow-motion zone is just another tool next to rotate, not a different
+/// product.
 ///
 /// Two render paths, picked automatically at "Continue", not exposed to
 /// the user as a choice: a plain trim/rotate/flip/mute edit (no zones, no
@@ -46,6 +48,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   AppFlipDirection _flip = AppFlipDirection.none;
   bool _removeAudio = false;
   AppColorFilter _colorFilter = AppColorFilter.none;
+  BackgroundAudio? _bgAudio;
   final List<SpeedZone> _speedZones = <SpeedZone>[];
   final List<VideoOverlay> _overlays = <VideoOverlay>[];
 
@@ -181,6 +184,21 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     );
   }
 
+  Future<void> _pickMusic() async {
+    final PlatformFile? picked = await FilePicker.pickFile(type: FileType.audio);
+    final String? path = picked?.path;
+    if (path == null || !mounted) {
+      return;
+    }
+    final BackgroundAudio? audio = await showDialog<BackgroundAudio>(
+      context: context,
+      builder: (BuildContext context) => _BackgroundAudioDialog(filePath: path, maxDuration: _trimmedDuration),
+    );
+    if (audio != null) {
+      setState(() => _bgAudio = audio);
+    }
+  }
+
   void _onOverlayDrag(VideoOverlay overlay, DragUpdateDetails details, Size previewSize) {
     final double dx = details.delta.dx / previewSize.width;
     final double dy = details.delta.dy / previewSize.height;
@@ -234,6 +252,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       _flip = AppFlipDirection.none;
       _removeAudio = false;
       _colorFilter = AppColorFilter.none;
+      _bgAudio = null;
       _speedZones.clear();
       _overlays.clear();
     });
@@ -264,8 +283,10 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       // Color grading has no equivalent in the fast easy_video_editor
       // pipeline (no color-filter support there), so it forces the FFmpeg
       // path the same way a speed zone or overlay does.
-      final bool hasAdvancedEdit =
-          _speedZones.isNotEmpty || _overlays.isNotEmpty || _colorFilter != AppColorFilter.none;
+      final bool hasAdvancedEdit = _speedZones.isNotEmpty ||
+          _overlays.isNotEmpty ||
+          _colorFilter != AppColorFilter.none ||
+          _bgAudio != null;
 
       final LocalVideoDraft finalDraft;
       if (!needsTrim && !hasSimpleEdit && !hasAdvancedEdit) {
@@ -283,6 +304,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
           flip: _flip,
           removeAudio: _removeAudio,
           colorFilter: _colorFilter,
+          bgAudio: _bgAudio,
         );
         final VideoExportService service = ref.read(videoExportServiceProvider);
         _progressSub = service.progress.listen((double p) {
@@ -440,6 +462,12 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                         label: _colorFilter.label,
                         selected: _colorFilter != AppColorFilter.none,
                         onTap: _cycleColorFilter,
+                      ),
+                      _ToolButton(
+                        icon: Icons.music_note_outlined,
+                        label: "Music",
+                        selected: _bgAudio != null,
+                        onTap: () => unawaited(_pickMusic()),
                       ),
                       _ToolButton(
                         icon: Icons.slow_motion_video_outlined,
@@ -886,6 +914,54 @@ class _TextOverlayDialogState extends State<_TextOverlayDialog> {
                       text: _textController.text.trim(),
                     ),
                   ),
+          child: const Text("Add"),
+        ),
+      ],
+    );
+  }
+}
+
+class _BackgroundAudioDialog extends StatefulWidget {
+  const _BackgroundAudioDialog({required this.filePath, required this.maxDuration});
+  final String filePath;
+  final Duration maxDuration;
+
+  @override
+  State<_BackgroundAudioDialog> createState() => _BackgroundAudioDialogState();
+}
+
+class _BackgroundAudioDialogState extends State<_BackgroundAudioDialog> {
+  double _volume = 0.5;
+  double _fadeIn = 1.0;
+  double _fadeOut = 1.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final double maxFade = (widget.maxDuration.inMilliseconds / 1000.0).clamp(0, 5);
+    return AlertDialog(
+      title: const Text("Background music"),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text("Volume: ${(_volume * 100).round()}%"),
+          Slider(value: _volume, onChanged: (double v) => setState(() => _volume = v)),
+          Text("Fade in: ${_fadeIn.toStringAsFixed(1)}s"),
+          Slider(value: _fadeIn, max: maxFade, onChanged: (double v) => setState(() => _fadeIn = v)),
+          Text("Fade out: ${_fadeOut.toStringAsFixed(1)}s"),
+          Slider(value: _fadeOut, max: maxFade, onChanged: (double v) => setState(() => _fadeOut = v)),
+        ],
+      ),
+      actions: <Widget>[
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text("Cancel")),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(
+            BackgroundAudio(
+              filePath: widget.filePath,
+              volume: _volume,
+              fadeInDuration: Duration(milliseconds: (_fadeIn * 1000).round()),
+              fadeOutDuration: Duration(milliseconds: (_fadeOut * 1000).round()),
+            ),
+          ),
           child: const Text("Add"),
         ),
       ],

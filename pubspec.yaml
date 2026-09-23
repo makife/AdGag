@@ -77,14 +77,35 @@ dependencies:
   # system libraries in every tier, GPL-irrelevant.
   ffmpeg_kit_flutter_new_video: ^2.5.2
 
+  # Background-music file selection. The first attempt at this (session
+  # notes: see CLAUDE.md checkpoint) used file_picker ^11.0.3 to dodge a
+  # windows_file_picker/win32 version conflict with share_plus — but
+  # 11.0.3 predates file_picker's federated-plugin rewrite and still
+  # applies its own embedded Kotlin Gradle Plugin at a version (1.8.22)
+  # older than this project's, which is what actually broke the Android
+  # build ("cannot find symbol FilePickerPlugin"), not the package's
+  # size/scope. The current federated version's Android implementation
+  # (android_file_picker) properly defers to AGP 9's built-in Kotlin
+  # instead of forcing its own — verified by reading its actual
+  # android/build.gradle.kts before pinning this, not assumed. Needs
+  # share_plus bumped to ^13.3.0 (above) to resolve the win32 conflict
+  # instead.
+  file_picker: ^13.1.0
+
   # Media delivery / rendering
   cached_network_image: ^3.4.1
 
   # Permissions (camera, microphone, photo library)
   permission_handler: ^11.3.1
 
-  # Native share sheet (section 33 — external viral loop)
-  share_plus: ^12.0.2
+  # Native share sheet (section 33 — external viral loop). ^13.3.0, not
+  # ^12.0.2 — required to resolve alongside file_picker (which needs
+  # win32 ^6.3.0 via its Windows sub-package; share_plus 12.x pinned
+  # win32 ^5.5.3). Verified via pub.dev before bumping: still
+  # is:built-in-kotlin, 150/160 points, no API change needed (this app
+  # already uses the modern SharePlus.instance/ShareParams API, not the
+  # older static Share.share it also long ago deprecated).
+  share_plus: ^13.3.0
 
   # Filesystem paths for local drafts/cache (section 39/40)
   path_provider: ^2.1.5
