@@ -256,12 +256,20 @@ flutter test
 
 ### Deep Links (Phase H)
 
-`RoutePaths.adDetail`/`userProfile`/`subject` and `AdDetailScreen` etc. already handle the in-app routing once the OS hands a URL to the app. What's still missing is entirely platform/hosting configuration outside this repo's scope:
+Two different kinds of deep link, easy to conflate:
 
+**1. Auth callback (email confirmation / OAuth redirect) — configured and working.** `supabase_flutter` listens for incoming deep links automatically via `app_links` (no Dart code needed — see `_handleIncomingLinks`/`_isAuthCallbackDeeplink` in its source, which detect an auth callback by the presence of auth-related query/fragment params, not by a specific scheme). The app registers a custom URL scheme, `adgag://login-callback`:
+- Android: an `<intent-filter>` for `adgag://login-callback` in `android/app/src/main/AndroidManifest.xml` (alongside the launcher intent-filter — this file is hand-edited, not `flutter create .`-generated, and since `/android/` is gitignored, **this edit must be redone if the platform folder is ever regenerated from scratch** — see the note at the bottom of this section).
+- iOS: a `CFBundleURLTypes` entry for the `adgag` scheme in `ios/Runner/Info.plist` (same regeneration caveat).
+- Supabase project: `Authentication > URL Configuration` — Site URL and the redirect allow-list are set to `adgag://login-callback` (done via the Management API for the `diwxzyhwmcajyjbcfwhe` project; if you ever point this app at a different Supabase project, redo this in that project's dashboard or it'll default to `http://localhost:3000` and email confirmation links will appear to fail — though the confirmation itself still succeeds server-side before the broken redirect, since Supabase confirms the token first and redirects second).
+
+**2. Universal/App Links for sharing** (`/ad/:id`, `/u/:username`, `/subjects/:id` — what `ShareButton` builds links to). `RoutePaths.adDetail`/`userProfile`/`subject` and `AdDetailScreen` etc. already handle the in-app routing once the OS hands a URL to the app, but this is a *separate* mechanism from the custom-scheme auth callback above, and still needs platform/hosting configuration outside this repo's scope:
 - **iOS Universal Links**: host an `apple-app-site-association` file at `https://<APP_LINK_HOST>/.well-known/apple-app-site-association` (needs your Apple Team ID + bundle id) and add the associated domain capability in Xcode.
-- **Android App Links**: host `https://<APP_LINK_HOST>/.well-known/assetlinks.json` (needs your app's SHA-256 signing certificate fingerprint) and add an `<intent-filter>` with `android:autoVerify="true"` to `AndroidManifest.xml`.
+- **Android App Links**: host `https://<APP_LINK_HOST>/.well-known/assetlinks.json` (needs your app's SHA-256 signing certificate fingerprint) and add a *second*, separate `<intent-filter>` with `android:autoVerify="true"` for `https://<APP_LINK_HOST>/...` to `AndroidManifest.xml` — don't confuse this with the auth-callback intent-filter above.
 - **Web fallback**: a simple landing page at `https://<APP_LINK_HOST>/ad/:id` for users without the app installed (App Store/Play Store redirect) — not part of this Flutter/Supabase codebase; needs separate static hosting.
 - `EnvConfig.appLinkHost` (already wired) controls the host `ShareButton` builds links against per environment.
+
+**Regenerating platform folders**: if you ever delete and rerun `flutter create .` (or set this project up fresh on another machine), both native edits in part 1 need to be reapplied by hand — they are not something any Flutter tooling regenerates automatically, unlike the launcher icon (`flutter_launcher_icons`) or the platform folders themselves.
 
 ### Push Notifications (Phase H)
 
