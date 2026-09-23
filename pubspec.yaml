@@ -89,10 +89,35 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0
 
+  # Generates native launcher icons (Android mipmaps, iOS AppIcon.appiconset,
+  # web/windows/macos) from assets/branding/AdGagIkon.png — run via
+  # `dart run flutter_launcher_icons`. Dev-only: never a runtime dependency.
+  flutter_launcher_icons: ^0.14.4
+
 flutter:
   uses-material-design: true
   generate: true # drives flutter gen-l10n from l10n.yaml
 
-  # assets:
-  #   - assets/images/
-  #   - assets/icons/
+  assets:
+    - assets/branding/
+
+# flutter_launcher_icons config (CLAUDE.md section 65: brand assets stay
+# swappable — this is the one place the launcher icon source is named).
+# AdGagIkon.png is the icon-only mark (no wordmark/tagline baked in),
+# distinct from AdGag.png (full lockup with wordmark + tagline, used as an
+# in-app image, not an icon source — see splash_screen.dart/
+# onboarding_screen.dart).
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/branding/AdGagIkon.png"
+  min_sdk_android: 21
+  web:
+    generate: true
+    image_path: "assets/branding/AdGagIkon.png"
+  windows:
+    generate: true
+    image_path: "assets/branding/AdGagIkon.png"
+  macos:
+    generate: true
+    image_path: "assets/branding/AdGagIkon.png"

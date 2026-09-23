@@ -19,7 +19,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int _page = 0;
 
   static const List<_OnboardingSlide> _slides = <_OnboardingSlide>[
-    _OnboardingSlide(title: "AdGag", subtitle: "The social network where everything is an ad."),
+    _OnboardingSlide(
+      title: "AdGag",
+      subtitle: "The social network where everything is an ad.",
+      useLogoImage: true,
+    ),
     _OnboardingSlide(title: "Pick anything.", subtitle: "A rock. Your coffee. Yourself. Monday."),
     _OnboardingSlide(title: "Sell it in 10 seconds.", subtitle: "Short, punchy, funny. That's the format."),
     _OnboardingSlide(title: "See it. Ad it. Go.", subtitle: "Watch an ad. Make a better one. Publish."),
@@ -102,9 +106,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 }
 
 class _OnboardingSlide {
-  const _OnboardingSlide({required this.title, required this.subtitle});
+  const _OnboardingSlide({required this.title, required this.subtitle, this.useLogoImage = false});
   final String title;
   final String subtitle;
+
+  /// True only for the brand-name slide — shows the actual
+  /// assets/branding/AdGag.png lockup instead of recreating the "AdGag"
+  /// wordmark with a TextStyle/ShaderMask approximation. Other slides'
+  /// titles are onboarding copy, not the brand wordmark, so they stay text.
+  final bool useLogoImage;
 }
 
 class _SlideView extends StatelessWidget {
@@ -119,13 +129,16 @@ class _SlideView extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          ShaderMask(
-            shaderCallback: (Rect bounds) => AppColors.brandGradient.createShader(bounds),
-            child: Text(
-              slide.title,
-              style: Theme.of(context).textTheme.displayLarge?.copyWith(color: Colors.white),
+          if (slide.useLogoImage)
+            Image.asset("assets/branding/AdGag.png", width: 220)
+          else
+            ShaderMask(
+              shaderCallback: (Rect bounds) => AppColors.brandGradient.createShader(bounds),
+              child: Text(
+                slide.title,
+                style: Theme.of(context).textTheme.displayLarge?.copyWith(color: Colors.white),
+              ),
             ),
-          ),
           const SizedBox(height: AppSpacing.md),
           Text(slide.subtitle, style: Theme.of(context).textTheme.bodyLarge),
         ],

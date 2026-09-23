@@ -27,6 +27,7 @@ build/
 .idea/
 .vscode/
 *.iml
+.claude/
 
 # Secrets / environment
 env/*.json

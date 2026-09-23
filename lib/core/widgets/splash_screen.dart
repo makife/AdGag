@@ -5,6 +5,10 @@ import "../theme/app_colors.dart";
 /// Shown only while the initial auth session is being resolved. Kept
 /// deliberately brief and static — no animation dependency — since it's on
 /// the critical cold-start path (section 50: time from install -> first Ad).
+///
+/// Uses the actual brand lockup image (assets/branding/AdGag.png — icon +
+/// "AdGag" wordmark + tagline, exactly as designed) rather than
+/// recreating the wordmark with a TextStyle/ShaderMask approximation.
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
@@ -13,12 +17,9 @@ class SplashScreen extends StatelessWidget {
     return ColoredBox(
       color: AppColors.darkBackground,
       child: Center(
-        child: ShaderMask(
-          shaderCallback: (Rect bounds) => AppColors.brandGradient.createShader(bounds),
-          child: const Text(
-            "AdGag",
-            style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900),
-          ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 64),
+          child: Image.asset("assets/branding/AdGag.png"),
         ),
       ),
     );
