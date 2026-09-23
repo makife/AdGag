@@ -93,7 +93,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     (AdSubject subject) => ListTile(
                       title: Text("${subject.displayName.toUpperCase()}™"),
                       subtitle: Text("${subject.adsCount} Ads"),
-                      onTap: () => context.goTo(RoutePaths.subjectOf(subject.id)),
+                      onTap: () => unawaited(context.pushTo(RoutePaths.subjectOf(subject.id))),
                     ),
                   ),
                 ],
@@ -106,7 +106,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     (UserSearchResult user) => ListTile(
                       title: Text("@${user.username}"),
                       subtitle: user.displayName != null ? Text(user.displayName!) : null,
-                      onTap: () => context.goTo(RoutePaths.userProfileOf(user.username)),
+                      onTap: () => unawaited(context.pushTo(RoutePaths.userProfileOf(user.username))),
                     ),
                   ),
                 ],

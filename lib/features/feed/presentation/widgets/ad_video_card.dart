@@ -10,6 +10,7 @@ import "../../../../core/analytics/analytics_providers.dart";
 import "../../../../core/theme/app_colors.dart";
 import "../../../../core/theme/app_spacing.dart";
 import "../../../../core/video/video_controller_pool.dart";
+import "../../../../core/video/video_providers.dart";
 import "../../../../core/video/video_service.dart";
 import "../../../../shared/widgets/creator_header.dart";
 import "../../../../shared/widgets/subject_badge.dart";
@@ -93,6 +94,7 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
     final VideoPlayerController controller =
         widget.pool.controllerFor(adId: widget.ad.id, playbackUrl: url);
     unawaited(controller.setLooping(true));
+    unawaited(controller.setVolume(ref.read(isFeedMutedProvider) ? 0 : 1));
     controller.addListener(_onControllerTick);
     setState(() => _controller = controller);
     widget.pool.initializationOf(widget.ad.id)?.then((_) {
@@ -169,33 +171,76 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
     super.dispose();
   }
 
+  void _togglePlayPause() {
+    final VideoPlayerController? controller = _controller;
+    if (controller == null || !controller.value.isInitialized) {
+      return;
+    }
+    setState(() {
+      if (controller.value.isPlaying) {
+        unawaited(controller.pause());
+      } else {
+        unawaited(controller.play());
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final VideoPlayerController? controller = _controller;
     final bool showVideo = controller != null && controller.value.isInitialized;
+    final bool isPaused = showVideo && !controller.value.isPlaying;
+
+    ref.listen(isFeedMutedProvider, (bool? previous, bool next) {
+      final VideoPlayerController? c = _controller;
+      if (c != null) {
+        unawaited(c.setVolume(next ? 0 : 1));
+      }
+    });
+    final bool isMuted = ref.watch(isFeedMutedProvider);
 
     return ColoredBox(
       color: AppColors.darkBackground,
       child: Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          if (showVideo)
-            FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: controller.value.size.width,
-                height: controller.value.size.height,
-                child: VideoPlayer(controller),
+          GestureDetector(
+            onTap: _togglePlayPause,
+            child: showVideo
+                ? FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: controller.value.size.width,
+                      height: controller.value.size.height,
+                      child: VideoPlayer(controller),
+                    ),
+                  )
+                : widget.ad.thumbnailUrl != null
+                    ? CachedNetworkImage(
+                        imageUrl: widget.ad.thumbnailUrl!,
+                        fit: BoxFit.cover,
+                        errorWidget: (context, url, error) => const SizedBox.shrink(),
+                      )
+                    : const Center(child: CircularProgressIndicator()),
+          ),
+
+          if (isPaused)
+            const IgnorePointer(
+              child: Center(
+                child: Icon(Icons.play_arrow, size: 72, color: Colors.white70),
               ),
-            )
-          else if (widget.ad.thumbnailUrl != null)
-            CachedNetworkImage(
-              imageUrl: widget.ad.thumbnailUrl!,
-              fit: BoxFit.cover,
-              errorWidget: (context, url, error) => const SizedBox.shrink(),
-            )
-          else
-            const Center(child: CircularProgressIndicator()),
+            ),
+
+          Positioned(
+            top: AppSpacing.md,
+            right: AppSpacing.md,
+            child: SafeArea(
+              child: _MuteButton(
+                isMuted: isMuted,
+                onTap: () => ref.read(isFeedMutedProvider.notifier).state = !isMuted,
+              ),
+            ),
+          ),
 
           Positioned(
             right: AppSpacing.md,
@@ -210,6 +255,29 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
             child: _Overlay(ad: widget.ad),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MuteButton extends StatelessWidget {
+  const _MuteButton({required this.isMuted, required this.onTap});
+
+  final bool isMuted;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.xs),
+        decoration: const BoxDecoration(color: Colors.black38, shape: BoxShape.circle),
+        child: Icon(
+          isMuted ? Icons.volume_off : Icons.volume_up,
+          color: Colors.white,
+          size: 20,
+        ),
       ),
     );
   }

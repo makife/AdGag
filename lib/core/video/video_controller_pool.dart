@@ -87,6 +87,16 @@ final class VideoControllerPool {
     }
   }
 
+  /// Resumes [adId]'s controller if it's still held and initialized — call
+  /// when the screen holding this pool becomes visible again (e.g. the
+  /// feed's bottom-nav tab regains focus after [pauseAll] paused it).
+  void resume(String adId) {
+    final VideoPlayerController? controller = _controllers[adId];
+    if (controller != null && controller.value.isInitialized) {
+      unawaited(controller.play());
+    }
+  }
+
   void _disposeOne(String adId) {
     final VideoPlayerController? controller = _controllers.remove(adId);
     _initFutures.remove(adId);

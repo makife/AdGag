@@ -1,15 +1,24 @@
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
 import "../theme/app_colors.dart";
 import "../theme/app_spacing.dart";
+
+/// Which shell branch (bottom-nav tab) is currently visible. [IndexedStack]
+/// (what [StatefulShellRoute.indexedStack] uses under the hood) keeps every
+/// branch's widget tree mounted even when it's not the displayed one — it
+/// does not pause timers, animations, or playing video on its own. Screens
+/// that own playing media (the feed) watch this to pause when their branch
+/// is hidden and resume when it becomes visible again (section 17).
+final StateProvider<int> activeShellBranchIndexProvider = StateProvider<int>((ref) => 0);
 
 /// Bottom navigation shell (CLAUDE.md section 5): HOME, MARKET, AD (central
 /// creation action), ACTIVITY, PROFILE. Built on [StatefulShellRoute] so
 /// each tab keeps its own navigation stack and scroll position when
 /// switching tabs — important for the feed, which must not rebuild/reset
 /// on every tab switch (section 41).
-class AppShell extends StatelessWidget {
+class AppShell extends ConsumerWidget {
   const AppShell({required this.navigationShell, super.key});
 
   final StatefulNavigationShell navigationShell;
@@ -23,7 +32,14 @@ class AppShell extends StatelessWidget {
   ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final StateController<int> activeBranch = ref.read(activeShellBranchIndexProvider.notifier);
+      if (activeBranch.state != navigationShell.currentIndex) {
+        activeBranch.state = navigationShell.currentIndex;
+      }
+    });
+
     return Scaffold(
       extendBody: true,
       body: navigationShell,

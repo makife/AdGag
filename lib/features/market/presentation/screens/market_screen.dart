@@ -58,7 +58,7 @@ class MarketScreen extends ConsumerWidget {
                     padding: const EdgeInsets.only(right: AppSpacing.sm),
                     child: ActionChip(
                       label: Text("${subject.displayName.toUpperCase()}™"),
-                      onPressed: () => context.goTo(RoutePaths.subjectOf(subject.id)),
+                      onPressed: () => unawaited(context.pushTo(RoutePaths.subjectOf(subject.id))),
                     ),
                   );
                 },

@@ -13,3 +13,8 @@ final Provider<VideoService> videoServiceProvider = Provider<VideoService>((ref)
 final Provider<VideoUploader> videoUploaderProvider = Provider<VideoUploader>((ref) {
   return DioVideoUploader();
 });
+
+/// Shared across every feed video card so muting persists as the user
+/// swipes (CLAUDE.md section 17: "Respect mute/audio state") rather than
+/// resetting to unmuted on every new Ad.
+final StateProvider<bool> isFeedMutedProvider = StateProvider<bool>((ref) => false);

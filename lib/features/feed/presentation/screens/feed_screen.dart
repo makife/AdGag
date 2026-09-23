@@ -3,6 +3,7 @@ import "dart:async" show unawaited;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../../../core/router/app_shell.dart";
 import "../../../../core/theme/app_colors.dart";
 import "../../../../core/video/video_controller_pool.dart";
 import "../../../../core/video/video_providers.dart";
@@ -90,6 +91,21 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
   @override
   Widget build(BuildContext context) {
     final AsyncValue<FeedState> feedAsync = ref.watch(feedControllerProvider);
+
+    // IndexedStack (StatefulShellRoute.indexedStack) keeps this screen
+    // mounted, not paused, when another bottom-nav tab is showing — without
+    // this listener the active video keeps playing behind e.g. the AD
+    // (creation) tab, and never resumes on returning to Home.
+    ref.listen(activeShellBranchIndexProvider, (int? previous, int next) {
+      if (next == 0) {
+        final List<Ad>? ads = ref.read(feedControllerProvider).valueOrNull?.ads;
+        if (ads != null && _activeIndex < ads.length) {
+          _pool.resume(ads[_activeIndex].id);
+        }
+      } else {
+        _pool.pauseAll();
+      }
+    });
 
     return Scaffold(
       backgroundColor: AppColors.darkBackground,
