@@ -1,3 +1,5 @@
+import "dart:async" show unawaited;
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -28,7 +30,7 @@ class ProfileScreen extends ConsumerWidget {
               Text("@${user?.username ?? ''}", style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: AppSpacing.xxl),
               OutlinedButton(
-                onPressed: () => ref.read(authControllerProvider.notifier).signOut(),
+                onPressed: () => unawaited(ref.read(authControllerProvider.notifier).signOut()),
                 child: const Text("Sign out"),
               ),
             ],

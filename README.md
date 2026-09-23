@@ -82,7 +82,8 @@ reports (target_type, target_id, reason, status)
 | 0003 | `follows.sql` | B | `follows` table, RLS (public read, self-only insert/delete) |
 | 0004 | `ad_subjects.sql` | B | `ad_subjects`, `ad_subject_aliases`, `ad_subject_translations`, `canonicalize_subject_text()`, `get_or_create_ad_subject()` RPC |
 | 0005 | `ads.sql` | B | `ads` (full target schema, §25), `ad_status`/`ad_visibility` enums, `create_draft_ad()`/`update_draft_ad()`/`delete_own_ad()` RPCs, `ads_count` sync trigger, feed indexes |
-| — | *(later)* | C–H | video processing columns already exist on `ads`; webhook handler, `sold_reactions`, `comments`, `ad_views`, `daily_challenges` (+ FK back onto `ads.daily_challenge_id`), `reports`, `blocks`, `notifications`, `device_tokens` |
+| 0006 | `video_pipeline.sql` | C | `video_webhook_events` idempotency log, `ads.video_asset_id` lookup index |
+| — | *(later)* | D–H | `sold_reactions`, `comments`, `ad_views`, `daily_challenges` (+ FK back onto `ads.daily_challenge_id`), `reports`, `blocks`, `notifications`, `device_tokens` |
 
 Run migrations with the Supabase CLI once a project exists: `supabase db push` (or apply via the Supabase dashboard SQL editor for a quick start). Never hand-create tables in the dashboard outside a migration file (§23).
 
@@ -116,6 +117,19 @@ Flutter                Edge Function              Video Provider (Mux)         S
 ```
 
 Webhook handling is idempotent (keyed on provider asset id) and signature-verified (§43) — a POST merely *claiming* "video ready" without a valid signature is rejected.
+
+**Implemented** (Phase C): `supabase/functions/create-upload-session` (steps 2-3 above — checks the caller owns the draft Ad, mints a Mux Direct Upload with `passthrough` set to the Ad id, marks the Ad `uploading`) and `supabase/functions/mux-webhook` (steps 6-8 — verifies the `Mux-Signature` HMAC, records the delivery in `video_webhook_events` before acting on it, updates the Ad to `ready`/`failed`/`processing`/`deleted` by event type). Step 4 (the client PUT) is `lib/core/video/dio_video_uploader.dart`; step 9 is `FeedRepository` only ever selecting `status = 'ready'`.
+
+**Deploying the functions:**
+
+```bash
+supabase functions deploy create-upload-session
+supabase functions deploy mux-webhook --no-verify-jwt   # see supabase/config.toml comment — Mux can't send a Supabase JWT
+
+supabase secrets set MUX_TOKEN_ID=... MUX_TOKEN_SECRET=... MUX_WEBHOOK_SIGNING_SECRET=...
+```
+
+Then in the Mux dashboard, add a webhook endpoint pointing at `https://<project-ref>.supabase.co/functions/v1/mux-webhook` subscribed at least to `video.asset.ready`, `video.asset.errored`, and `video.asset.deleted`.
 
 ## 7. Feed Sequence (target — Phase F ranking, Phase C metadata)
 
@@ -170,7 +184,7 @@ Following CLAUDE.md §52 DEVELOPMENT ORDER exactly:
 
 - [x] **Phase A — Foundation:** Flutter scaffold, theming, routing + deep-link-ready shell, localization (en/tr), Supabase integration, email auth + session handling, `profiles` migration + RLS, unit tests for username rules.
 - [x] **Phase B — Social Core:** `follows` (+ `FollowRepository`), `ad_subjects` with canonicalization/aliases/translations (+ `SubjectRepository`), full `ads` metadata schema with draft-lifecycle RPCs (+ `DraftAdRepository`), cursor-paginated `FeedRepository` (freshness-only ordering — heuristic ranking is Phase F), unit tests for row-mapping logic. No new screens this phase by design — feed/creation UI needs video (Phase C/D) to be meaningful; the data layer is ready for them.
-- [ ] **Phase C — Video:** `VideoService` abstraction, Mux integration, upload/processing webhook, bounded player pool, preloading.
+- [x] **Phase C — Video:** `VideoService`/`VideoUploader` abstractions; `create-upload-session` + `mux-webhook` Edge Functions (signature verification, idempotency, ownership checks); `VideoControllerPool` (bounded, evicts outside the current+neighbor window); `FeedScreen` now a real vertical `PageView` of playable Ads (subject/creator overlay only — SOLD/REVIEWS/AD THIS are Phase E). Recording/import UI is still Phase D; this phase is the plumbing a recorded file flows through.
 - [ ] **Phase D — Creation:** camera/gallery capture, 10s constraint, subject picker, publish flow, draft/error handling.
 - [ ] **Phase E — Engagement:** SOLD, REVIEWS, AD THIS, external share, subject pages.
 - [ ] **Phase F — Discovery:** Market, search, Daily Ad, heuristic ranking.
@@ -207,10 +221,13 @@ cp env/dev.example.json env/dev.json
 supabase link --project-ref YOUR_PROJECT_REF
 supabase db push
 
-# 5. Run
+# 5. (Phase C) Deploy Edge Functions + set video-provider secrets —
+# see "Video Upload / Playback Sequence" above for the exact commands.
+
+# 6. Run
 flutter run --dart-define-from-file=env/dev.json
 
-# 6. Verify
+# 7. Verify
 flutter analyze
 flutter test
 ```

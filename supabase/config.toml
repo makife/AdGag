@@ -1,0 +1,18 @@
+# Minimal Supabase CLI config for Edge Function deployment behavior. This
+# was written by hand (Supabase CLI unavailable in this dev environment) —
+# running `supabase init` will fill in the rest of the standard sections
+# (db, auth, storage, ...) for local development; merge rather than
+# overwrite this file's [functions.*] entries when you do.
+project_id = "adgag"
+
+[functions.create-upload-session]
+# Default: requires the caller's Supabase auth JWT. This function checks
+# ad ownership itself (see index.ts) — JWT verification is an additional
+# platform-level gate, not a substitute for that check.
+verify_jwt = true
+
+[functions.mux-webhook]
+# Mux calls this directly and cannot supply a Supabase JWT. Authentication
+# for this endpoint is the Mux-Signature HMAC check inside index.ts —
+# see the large comment at the top of that file before changing this.
+verify_jwt = false

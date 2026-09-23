@@ -74,6 +74,10 @@ dependencies:
   # Structured logging (section 55) — thin wrapper, no vendor lock-in
   logging: ^1.3.0
 
+  # Direct-to-provider video upload with progress/cancellation (section 39).
+  # Used only inside lib/core/video/ — never leaks past that boundary.
+  dio: ^5.7.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

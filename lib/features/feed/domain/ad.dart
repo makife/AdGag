@@ -22,9 +22,17 @@ final class Ad {
     this.inspiredByAdId,
     this.dailyChallengeId,
     this.publishedAt,
+    this.subjectDisplayName,
+    this.creatorUsername,
   });
 
   factory Ad.fromRow(Map<String, dynamic> row) {
+    // ad_subjects/profiles are only present when the query embedded them
+    // via PostgREST's relationship syntax (see FeedRepositoryImpl) — both
+    // are null for a bare `ads` row, e.g. the create/update draft RPCs.
+    final Map<String, dynamic>? subjectEmbed = row["ad_subjects"] as Map<String, dynamic>?;
+    final Map<String, dynamic>? profileEmbed = row["profiles"] as Map<String, dynamic>?;
+
     return Ad(
       id: row["id"] as String,
       userId: row["user_id"] as String,
@@ -44,6 +52,8 @@ final class Ad {
       createdAt: DateTime.parse(row["created_at"] as String),
       publishedAt:
           row["published_at"] == null ? null : DateTime.parse(row["published_at"] as String),
+      subjectDisplayName: subjectEmbed?["display_name"] as String?,
+      creatorUsername: profileEmbed?["username"] as String?,
     );
   }
 
@@ -64,4 +74,9 @@ final class Ad {
   final int adThisCount;
   final DateTime createdAt;
   final DateTime? publishedAt;
+
+  /// Denormalized display fields from an embedded feed query — see
+  /// [Ad.fromRow]. Not part of the `ads` table itself.
+  final String? subjectDisplayName;
+  final String? creatorUsername;
 }

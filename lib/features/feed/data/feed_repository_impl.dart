@@ -18,8 +18,13 @@ final class FeedRepositoryImpl implements FeedRepository {
 
   @override
   Future<FeedPage> fetchPage({String? cursor, int limit = 10}) async {
-    supa.PostgrestFilterBuilder<List<Map<String, dynamic>>> query =
-        _client.from("ads").select().eq("status", "ready");
+    // Embed subject display name + creator username so the feed overlay
+    // (section 6) doesn't need a second round trip per card — this is the
+    // "basic feed metadata" the query returns, never video bytes.
+    supa.PostgrestFilterBuilder<List<Map<String, dynamic>>> query = _client
+        .from("ads")
+        .select("*, ad_subjects(display_name), profiles(username)")
+        .eq("status", "ready");
 
     final _Cursor? decoded = cursor == null ? null : _Cursor.decode(cursor);
     if (decoded != null) {

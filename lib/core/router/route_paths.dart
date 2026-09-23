@@ -1,3 +1,5 @@
+import "dart:async" show unawaited;
+
 import "package:flutter/widgets.dart";
 import "package:go_router/go_router.dart";
 
@@ -28,5 +30,5 @@ abstract final class RoutePaths {
 extension AppNavigation on BuildContext {
   void goTo(String path) => GoRouter.of(this).go(path);
   Future<T?> pushTo<T>(String path) => GoRouter.of(this).push<T>(path);
-  void pushReplacementTo(String path) => GoRouter.of(this).pushReplacement(path);
+  void pushReplacementTo(String path) => unawaited(GoRouter.of(this).pushReplacement(path));
 }

@@ -69,5 +69,57 @@ void main() {
       expect(ad.publishedAt, isNull);
       expect(ad.playbackId, isNull);
     });
+
+    test("parses embedded subject/profile data when present", () {
+      final Ad ad = Ad.fromRow(<String, dynamic>{
+        "id": "ad3",
+        "user_id": "u1",
+        "subject_id": "s1",
+        "caption": null,
+        "playback_id": "pb1",
+        "thumbnail_url": null,
+        "duration_ms": 5000,
+        "status": "ready",
+        "inspired_by_ad_id": null,
+        "daily_challenge_id": null,
+        "view_count": 0,
+        "sold_count": 0,
+        "comment_count": 0,
+        "share_count": 0,
+        "ad_this_count": 0,
+        "created_at": "2026-01-01T00:00:00Z",
+        "published_at": "2026-01-01T00:05:00Z",
+        "ad_subjects": <String, dynamic>{"display_name": "SOCK"},
+        "profiles": <String, dynamic>{"username": "rockfan"},
+      });
+
+      expect(ad.subjectDisplayName, "SOCK");
+      expect(ad.creatorUsername, "rockfan");
+    });
+
+    test("leaves display fields null without embeds (e.g. draft RPC response)", () {
+      final Ad ad = Ad.fromRow(<String, dynamic>{
+        "id": "ad4",
+        "user_id": "u1",
+        "subject_id": "s1",
+        "caption": null,
+        "playback_id": null,
+        "thumbnail_url": null,
+        "duration_ms": null,
+        "status": "draft",
+        "inspired_by_ad_id": null,
+        "daily_challenge_id": null,
+        "view_count": 0,
+        "sold_count": 0,
+        "comment_count": 0,
+        "share_count": 0,
+        "ad_this_count": 0,
+        "created_at": "2026-01-01T00:00:00Z",
+        "published_at": null,
+      });
+
+      expect(ad.subjectDisplayName, isNull);
+      expect(ad.creatorUsername, isNull);
+    });
   });
 }
