@@ -69,27 +69,37 @@ class _CaptureStepState extends ConsumerState<CaptureStep> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Record or import")),
-      body: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            if (_error != null) ...<Widget>[
-              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-              const SizedBox(height: AppSpacing.lg),
-            ],
-            FilledButton.icon(
-              onPressed: _busy ? null : _record,
-              icon: const Icon(Icons.videocam),
-              label: const Text("Record"),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 280),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                if (_error != null) ...<Widget>[
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                ],
+                FilledButton.icon(
+                  onPressed: _busy ? null : _record,
+                  icon: const Icon(Icons.videocam),
+                  label: const Text("Record"),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _importFromGallery,
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: const Text("Import from gallery"),
+                ),
+              ],
             ),
-            const SizedBox(height: AppSpacing.md),
-            OutlinedButton.icon(
-              onPressed: _busy ? null : _importFromGallery,
-              icon: const Icon(Icons.photo_library_outlined),
-              label: const Text("Import from gallery"),
-            ),
-          ],
+          ),
         ),
       ),
     );

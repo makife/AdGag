@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../../core/theme/app_colors.dart";
+import "../../../../core/theme/app_spacing.dart";
 import "../../../../core/video/video_controller_pool.dart";
 import "../../../../core/video/video_providers.dart";
 import "../../../feed/domain/ad.dart";
@@ -47,19 +48,43 @@ class _SubjectAdsViewerScreenState extends ConsumerState<SubjectAdsViewerScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.darkBackground,
-      body: PageView.builder(
-        controller: _pageController,
-        scrollDirection: Axis.vertical,
-        itemCount: widget.ads.length,
-        onPageChanged: _onPageChanged,
-        itemBuilder: (BuildContext context, int index) {
-          return AdVideoCard(
-            ad: widget.ads[index],
-            pool: _pool,
-            videoService: ref.read(videoServiceProvider),
-            isActive: index == _activeIndex,
-          );
-        },
+      body: Stack(
+        children: <Widget>[
+          PageView.builder(
+            controller: _pageController,
+            scrollDirection: Axis.vertical,
+            itemCount: widget.ads.length,
+            onPageChanged: _onPageChanged,
+            itemBuilder: (BuildContext context, int index) {
+              return AdVideoCard(
+                ad: widget.ads[index],
+                pool: _pool,
+                videoService: ref.read(videoServiceProvider),
+                isActive: index == _activeIndex,
+              );
+            },
+          ),
+          // No AppBar here — it would look like a different screen from
+          // the rest of the app's fullscreen video presentation. This
+          // still has to be reachable somehow other than the system back
+          // gesture (which isn't discoverable on every device/nav mode):
+          // this screen is always reached via Navigator.push (has
+          // something to pop back to), it just had no *visible* way to.
+          Positioned(
+            top: AppSpacing.md,
+            left: AppSpacing.md,
+            child: SafeArea(
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  decoration: const BoxDecoration(color: Colors.black38, shape: BoxShape.circle),
+                  child: const Icon(Icons.arrow_back, color: Colors.white, size: 22),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

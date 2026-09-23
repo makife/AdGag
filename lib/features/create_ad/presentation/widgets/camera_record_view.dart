@@ -90,7 +90,16 @@ class _CameraRecordViewState extends State<CameraRecordView> {
     if (current == null) {
       return;
     }
-    setState(() => _switchingCamera = true);
+    // Null the controller out *before* disposing it — otherwise a build()
+    // triggered by this setState (or the dispose() below) renders
+    // CameraPreview against an already-disposed controller, which throws
+    // a CameraException that isn't caught by the try/catch below (it
+    // happens during widget build, not inside the awaited call) and
+    // surfaces as Flutter's red error screen.
+    setState(() {
+      _switchingCamera = true;
+      _controller = null;
+    });
     final CameraLensDirection nextDirection =
         current.description.lensDirection == CameraLensDirection.back
             ? CameraLensDirection.front
@@ -203,7 +212,19 @@ class _CameraRecordViewState extends State<CameraRecordView> {
       child: Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          CameraPreview(controller),
+          // CameraPreview stretches to fill whatever box it's given rather
+          // than preserving its own aspect ratio — placed directly under
+          // StackFit.expand (full-screen, ~9:16) it visibly distorted the
+          // image ("ince uzun" — stretched thin and tall). aspectRatio is
+          // reported in the sensor's natural (landscape) orientation, so
+          // it's inverted here for portrait display — the standard fix for
+          // this exact camera-plugin gotcha.
+          Center(
+            child: AspectRatio(
+              aspectRatio: 1 / controller.value.aspectRatio,
+              child: CameraPreview(controller),
+            ),
+          ),
           if (_cameras.length > 1)
             Positioned(
               top: AppSpacing.md,

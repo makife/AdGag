@@ -23,6 +23,13 @@ class AppShell extends ConsumerWidget {
 
   final StatefulNavigationShell navigationShell;
 
+  /// The bar's own height, excluding the safe-area inset added around it
+  /// below. Screens under it (the feed, via `Scaffold(extendBody: true)`)
+  /// need this to keep bottom-anchored content — the action rail,
+  /// subject/creator overlay — from sitting behind the (opaque, not
+  /// translucent) bar instead of above it.
+  static const double barHeight = 56;
+
   static const List<_TabSpec> _tabs = <_TabSpec>[
     _TabSpec(icon: Icons.home_outlined, selectedIcon: Icons.home, label: "Home"),
     _TabSpec(icon: Icons.storefront_outlined, selectedIcon: Icons.storefront, label: "Market"),
@@ -50,7 +57,7 @@ class AppShell extends ConsumerWidget {
         ),
         child: SafeArea(
           child: SizedBox(
-            height: 56,
+            height: barHeight,
             child: Row(
               children: List<Widget>.generate(_tabs.length, (int index) {
                 final _TabSpec tab = _tabs[index];

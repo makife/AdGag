@@ -7,6 +7,7 @@ import "package:video_player/video_player.dart";
 
 import "../../../../core/analytics/ad_event_type.dart";
 import "../../../../core/analytics/analytics_providers.dart";
+import "../../../../core/router/app_shell.dart";
 import "../../../../core/theme/app_colors.dart";
 import "../../../../core/theme/app_spacing.dart";
 import "../../../../core/video/video_controller_pool.dart";
@@ -39,6 +40,17 @@ class AdVideoCard extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<AdVideoCard> createState() => _AdVideoCardState();
+}
+
+/// `Scaffold(extendBody: true)` (app_shell.dart) draws the feed's body
+/// behind the bottom-nav bar for the full-bleed video look, but the bar
+/// itself is opaque, not translucent — so bottom-anchored overlay content
+/// (the action rail, subject/creator text) needs to clear its full height
+/// plus the safe-area inset the bar itself adds, or it renders hidden
+/// behind it instead of above it. A fixed AppSpacing offset alone isn't
+/// enough since the bar's safe-area inset varies by device.
+double _bottomClearance(BuildContext context) {
+  return AppSpacing.xxxl + AppShell.barHeight + MediaQuery.paddingOf(context).bottom;
 }
 
 class _AdVideoCardState extends ConsumerState<AdVideoCard> {
@@ -244,14 +256,14 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
 
           Positioned(
             right: AppSpacing.md,
-            bottom: AppSpacing.xxxl,
+            bottom: _bottomClearance(context),
             child: FeedActionRail(ad: widget.ad),
           ),
 
           Positioned(
             left: AppSpacing.lg,
             right: 88, // keep clear of the action rail
-            bottom: AppSpacing.xxxl,
+            bottom: _bottomClearance(context),
             child: _Overlay(ad: widget.ad),
           ),
         ],
