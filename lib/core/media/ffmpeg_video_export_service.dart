@@ -1,10 +1,12 @@
 import "dart:async";
 import "dart:io";
+import "dart:typed_data" show ByteData;
 
 import "package:ffmpeg_kit_flutter_new_video/ffmpeg_kit.dart";
 import "package:ffmpeg_kit_flutter_new_video/ffmpeg_session.dart";
 import "package:ffmpeg_kit_flutter_new_video/return_code.dart";
 import "package:ffmpeg_kit_flutter_new_video/statistics.dart";
+import "package:flutter/services.dart" show rootBundle;
 import "package:path_provider/path_provider.dart";
 
 import "../../features/create_ad/domain/video_project.dart";
@@ -44,16 +46,40 @@ final class FfmpegVideoExportService implements VideoExportService {
     return "mpeg4";
   }
 
+  /// FFmpeg's `drawtext` filter needs a real font *file* on disk — Android
+  /// has no fontconfig-discoverable "Sans" family the way desktop Linux
+  /// does, so relying on a bare family name fails with "Cannot find a
+  /// valid font for the family Sans" (confirmed live, via a user's actual
+  /// device — this bundled Roboto TTF, extracted once to a real path, is
+  /// the fix, not a font-family-name tweak). Cached after the first
+  /// extraction since the bytes never change between exports.
+  String? _fontFilePath;
+
+  Future<String> _ensureFontFile() async {
+    final String? cached = _fontFilePath;
+    if (cached != null && File(cached).existsSync()) {
+      return cached;
+    }
+    final ByteData data = await rootBundle.load("assets/fonts/Roboto-Regular.ttf");
+    final Directory tempDir = await getTemporaryDirectory();
+    final File file = File("${tempDir.path}/adgag_drawtext_font.ttf");
+    await file.writeAsBytes(data.buffer.asUint8List(), flush: true);
+    _fontFilePath = file.path;
+    return file.path;
+  }
+
   @override
   Future<String> export(VideoProject project) async {
     final Directory tempDir = await getTemporaryDirectory();
     final String outputPath =
         "${tempDir.path}/adgag_export_${DateTime.now().millisecondsSinceEpoch}.mp4";
+    final String fontFilePath = await _ensureFontFile();
 
     final List<String> args = VideoFilterGraphBuilder.build(
       project: project,
       outputPath: outputPath,
       videoEncoder: _videoEncoder,
+      fontFilePath: fontFilePath,
     );
 
     final int totalMs = project.trimmedDuration.inMilliseconds;

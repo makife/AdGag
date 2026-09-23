@@ -136,6 +136,7 @@ flutter:
 
   assets:
     - assets/branding/
+    - assets/fonts/
 
 # flutter_launcher_icons config (CLAUDE.md section 65: brand assets stay
 # swappable — this is the one place the launcher icon source is named).

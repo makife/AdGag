@@ -1,7 +1,10 @@
+import "dart:async" show unawaited;
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
+import "../../features/create_ad/presentation/providers/create_ad_flow_controller.dart";
 import "../theme/app_colors.dart";
 import "../theme/app_spacing.dart";
 
@@ -38,6 +41,31 @@ class AppShell extends ConsumerWidget {
     _TabSpec(icon: Icons.person_outline, selectedIcon: Icons.person, label: "Profile"),
   ];
 
+  /// The AD tab's index in [_tabs] — the one screen ([TrimStep]) that can
+  /// have in-progress, losable edits when the user switches away from it.
+  static const int _createTabIndex = 2;
+
+  Future<void> _onTabTap(BuildContext context, WidgetRef ref, int index) async {
+    final bool leavingCreateTab = navigationShell.currentIndex == _createTabIndex && index != _createTabIndex;
+    if (leavingCreateTab && ref.read(hasUnsavedCreateEditsProvider)) {
+      final bool? leave = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext dialogContext) => AlertDialog(
+          title: const Text("Leave without finishing?"),
+          content: const Text("You'll lose the edits you made to this Ad."),
+          actions: <Widget>[
+            TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text("Stay")),
+            TextButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text("Leave")),
+          ],
+        ),
+      );
+      if (leave != true) {
+        return;
+      }
+    }
+    navigationShell.goBranch(index, initialLocation: index == navigationShell.currentIndex);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -68,7 +96,7 @@ class AppShell extends ConsumerWidget {
                   return Expanded(
                     child: Center(
                       child: GestureDetector(
-                        onTap: () => navigationShell.goBranch(index),
+                        onTap: () => unawaited(_onTabTap(context, ref, index)),
                         child: Container(
                           width: 44,
                           height: 32,
@@ -94,7 +122,7 @@ class AppShell extends ConsumerWidget {
 
                 return Expanded(
                   child: InkWell(
-                    onTap: () => navigationShell.goBranch(index, initialLocation: index == navigationShell.currentIndex),
+                    onTap: () => unawaited(_onTabTap(context, ref, index)),
                     child: Semantics(
                       label: tab.label,
                       selected: isSelected,

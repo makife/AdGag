@@ -82,8 +82,22 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   void dispose() {
     _progressSub?.cancel();
     _controller?.dispose().ignore();
+    // Whatever happens next (successful Continue, Retake, or the shell
+    // itself navigating away after confirmation) means there's nothing
+    // left on *this* screen to warn about losing.
+    ref.read(hasUnsavedCreateEditsProvider.notifier).state = false;
     super.dispose();
   }
+
+  bool get _hasAnyEdit =>
+      _startSeconds > 0 ||
+      _rotation != AppVideoRotation.none ||
+      _flip != AppFlipDirection.none ||
+      _removeAudio ||
+      _colorFilter != AppColorFilter.none ||
+      _bgAudio != null ||
+      _speedZones.isNotEmpty ||
+      _overlays.isNotEmpty;
 
   double get _maxStartSeconds {
     final Duration? total = _controller?.value.duration;
@@ -380,6 +394,14 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   Widget build(BuildContext context) {
     final VideoPlayerController? controller = _controller;
     final bool ready = controller != null && controller.value.isInitialized;
+
+    final bool hasEdits = _hasAnyEdit;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final StateController<bool> flag = ref.read(hasUnsavedCreateEditsProvider.notifier);
+      if (flag.state != hasEdits) {
+        flag.state = hasEdits;
+      }
+    });
 
     // Same IndexedStack problem as the feed (see app_shell.dart's doc
     // comment on activeShellBranchIndexProvider): switching to a
@@ -701,6 +723,41 @@ class _Timeline extends StatelessWidget {
   final void Function(SpeedZone) onRemoveZone;
   final void Function(String) onRemoveOverlay;
 
+  Future<void> _confirmRemoveZone(BuildContext context, SpeedZone zone) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Text("Remove this speed zone?"),
+        content: Text("${zone.factor}x from ${zone.start.inSeconds}s to ${zone.end.inSeconds}s."),
+        actions: <Widget>[
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text("Remove")),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      onRemoveZone(zone);
+    }
+  }
+
+  Future<void> _confirmRemoveOverlay(BuildContext context, VideoOverlay overlay) async {
+    final String label = overlay is TextOverlay ? '"${overlay.text}"' : "this sticker";
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Text("Remove this?"),
+        content: Text("Removes $label from the video."),
+        actions: <Widget>[
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text("Remove")),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      onRemoveOverlay(overlay.id);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final double totalSec = originalDuration.inMilliseconds / 1000.0;
@@ -712,7 +769,7 @@ class _Timeline extends StatelessWidget {
     final ColorScheme scheme = Theme.of(context).colorScheme;
 
     return SizedBox(
-      height: 76,
+      height: 112,
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
           final double width = constraints.maxWidth;
@@ -720,10 +777,11 @@ class _Timeline extends StatelessWidget {
           final double selWidth = (trimmedSec / totalSec) * width;
 
           return Stack(
+            clipBehavior: Clip.none,
             children: <Widget>[
               // Base track — the full original clip.
               Positioned(
-                top: 18,
+                top: 20,
                 left: 0,
                 right: 0,
                 child: Container(
@@ -735,67 +793,99 @@ class _Timeline extends StatelessWidget {
                 ),
               ),
               // Selection window — drag to move where the up-to-10s clip
-              // starts within the original.
+              // starts within the original. The hit area (44dp, per the
+              // platform-minimum touch target) is much taller than the
+              // visible pill (16dp) — the previous version made them the
+              // same size, which was genuinely too small/fiddly to drag
+              // reliably on a real device.
               Positioned(
                 left: selLeft,
                 width: selWidth,
-                top: 12,
+                top: 0,
+                height: 44,
                 child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onHorizontalDragUpdate: !draggable
                       ? null
                       : (DragUpdateDetails d) {
                           final double deltaSec = d.delta.dx / width * totalSec;
                           onTrimStartChanged((trimStartSeconds + deltaSec).clamp(0, maxTrimStartSeconds));
                         },
-                  child: Container(
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: scheme.primary.withValues(alpha: 0.3),
-                      border: Border.all(color: scheme.primary, width: 2),
-                      borderRadius: BorderRadius.circular(4),
+                  child: Center(
+                    child: Container(
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withValues(alpha: 0.3),
+                        border: Border.all(color: scheme.primary, width: 2),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
                     ),
                   ),
                 ),
               ),
               // Speed zones, positioned relative to the *original* clip
               // (zone times are relative to the trim window's own start).
+              // Tapping asks before removing — a bare tap used to delete
+              // instantly, which was far too easy to trigger by accident.
               for (final SpeedZone zone in speedZones)
                 Positioned(
                   left: ((zone.start.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
                   width: ((zone.end - zone.start).inMilliseconds / 1000.0 / totalSec) * width,
-                  top: 36,
+                  top: 52,
                   child: GestureDetector(
-                    onTap: () => onRemoveZone(zone),
-                    child: Tooltip(
-                      message: "${zone.factor}x — tap to remove",
-                      child: Container(
-                        height: 20,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: scheme.primary,
-                          borderRadius: BorderRadius.circular(AppRadius.sm),
-                        ),
-                        child: Text(
-                          "${zone.factor}x",
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
-                        ),
+                    onTap: () => unawaited(_confirmRemoveZone(context, zone)),
+                    child: Container(
+                      height: 28,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: scheme.primary,
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                      ),
+                      child: Text(
+                        "${zone.factor}x slow-mo",
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                        overflow: TextOverflow.clip,
+                        softWrap: false,
                       ),
                     ),
                   ),
                 ),
+              // Overlay markers — a labeled chip (the actual text, or
+              // "sticker"), not a bare small icon with no context.
               for (final VideoOverlay overlay in overlays)
                 Positioned(
-                  left:
-                      ((overlay.startSec.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width - 8,
-                  top: 58,
+                  left: ((overlay.startSec.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
+                  top: 84,
                   child: GestureDetector(
-                    onTap: () => onRemoveOverlay(overlay.id),
-                    child: Tooltip(
-                      message: "tap to remove",
-                      child: Icon(
-                        overlay is TextOverlay ? Icons.text_fields : Icons.emoji_emotions_outlined,
-                        size: 16,
-                        color: scheme.secondary,
+                    onTap: () => unawaited(_confirmRemoveOverlay(context, overlay)),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 110),
+                      child: Container(
+                        height: 24,
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+                        decoration: BoxDecoration(
+                          color: scheme.secondary,
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Icon(
+                              overlay is TextOverlay ? Icons.text_fields : Icons.emoji_emotions_outlined,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 3),
+                            Flexible(
+                              child: Text(
+                                overlay is TextOverlay ? overlay.text : "sticker",
+                                style: const TextStyle(color: Colors.white, fontSize: 11),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
