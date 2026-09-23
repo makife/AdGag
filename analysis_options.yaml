@@ -10,6 +10,12 @@ analyzer:
     - "**/*.freezed.dart"
     - "lib/l10n/**"
     - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
 
 linter:
   rules:
