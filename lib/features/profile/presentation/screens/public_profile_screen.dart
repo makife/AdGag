@@ -6,6 +6,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../../core/theme/app_spacing.dart";
 import "../../../feed/domain/ad.dart";
+import "../../../moderation/presentation/providers/moderation_providers.dart";
 import "../../../social/presentation/providers/social_providers.dart";
 import "../../../subjects/presentation/screens/subject_ads_viewer_screen.dart";
 import "../../domain/public_profile.dart";
@@ -68,7 +69,18 @@ class _ProfileBody extends ConsumerWidget {
                   Text(profile.bio!),
                 ],
                 const SizedBox(height: AppSpacing.lg),
-                if (!isOwnProfile && currentUserId != null) _FollowButton(userId: profile.id),
+                if (!isOwnProfile && currentUserId != null)
+                  Row(
+                    children: <Widget>[
+                      _FollowButton(userId: profile.id),
+                      const SizedBox(width: AppSpacing.sm),
+                      IconButton(
+                        icon: const Icon(Icons.block_outlined),
+                        tooltip: "Block",
+                        onPressed: () => unawaited(_block(context, ref)),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -121,6 +133,19 @@ class _ProfileBody extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  Future<void> _block(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref.read(moderationRepositoryProvider).blockUser(profile.id);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Blocked.")));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Couldn't block: $e")));
+      }
+    }
   }
 }
 

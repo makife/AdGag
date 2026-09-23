@@ -2,14 +2,16 @@ import "package:flutter/material.dart";
 
 import "../../../../core/theme/app_spacing.dart";
 import "../../../../shared/widgets/ad_this_button.dart";
+import "../../../../shared/widgets/more_menu_button.dart";
 import "../../../../shared/widgets/review_button.dart";
 import "../../../../shared/widgets/share_button.dart";
 import "../../../../shared/widgets/sold_button.dart";
 import "../../domain/ad.dart";
 
 /// The right-edge action column (CLAUDE.md section 6/64): SOLD, REVIEWS,
-/// AD THIS, SHARE. Composes the shared design-system buttons rather than
-/// reimplementing each one inline in [AdVideoCard].
+/// AD THIS, SHARE, and a Report/Block entry point (section 30/31).
+/// Composes the shared design-system buttons rather than reimplementing
+/// each one inline in [AdVideoCard].
 class FeedActionRail extends StatelessWidget {
   const FeedActionRail({required this.ad, super.key});
 
@@ -33,6 +35,8 @@ class FeedActionRail extends StatelessWidget {
           ),
         const SizedBox(height: AppSpacing.sm),
         ShareButton(adId: ad.id, subjectDisplayName: ad.subjectDisplayName, shareCount: ad.shareCount),
+        const SizedBox(height: AppSpacing.sm),
+        MoreMenuButton(adId: ad.id, adOwnerUserId: ad.userId),
       ],
     );
   }
