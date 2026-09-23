@@ -1,0 +1,103 @@
+import "dart:async";
+import "dart:io";
+
+import "package:ffmpeg_kit_flutter_new_video/ffmpeg_kit.dart";
+import "package:ffmpeg_kit_flutter_new_video/ffmpeg_session.dart";
+import "package:ffmpeg_kit_flutter_new_video/return_code.dart";
+import "package:ffmpeg_kit_flutter_new_video/statistics.dart";
+import "package:path_provider/path_provider.dart";
+
+import "../../features/create_ad/domain/video_project.dart";
+import "../utils/app_logger.dart";
+import "video_export_service.dart";
+import "video_filter_graph_builder.dart";
+
+/// [VideoExportService] backed by `ffmpeg_kit_flutter_new_video` (LGPL-3.0
+/// — the "video" tier of the `sk3llo/ffmpeg_kit_flutter` fork, verified
+/// live against pub.dev before pinning: not the discontinued original
+/// `ffmpeg_kit_flutter`, and not a `-gpl` variant. See pubspec.yaml's
+/// comment on this dependency for the full verification trail.
+///
+/// Encodes with the platform's hardware H.264 encoder (`h264_mediacodec`
+/// on Android, `h264_videotoolbox` on iOS) rather than the GPL-only
+/// software `libx264` — this is what actually keeps the app's own build
+/// license-clean, not just which FFmpeg package is chosen.
+final class FfmpegVideoExportService implements VideoExportService {
+  final StreamController<double> _progressController = StreamController<double>.broadcast();
+  final _log = AppLogger.named("FfmpegVideoExportService");
+  FFmpegSession? _activeSession;
+
+  @override
+  Stream<double> get progress => _progressController.stream;
+
+  String get _videoEncoder {
+    if (Platform.isAndroid) {
+      return "h264_mediacodec";
+    }
+    if (Platform.isIOS) {
+      return "h264_videotoolbox";
+    }
+    // Desktop/other: no vetted hardware path here yet — mpeg4 keeps this
+    // functional (if slow) rather than throwing, per the spec's own
+    // fallback. Not expected to be hit on the app's actual target
+    // platforms (Android/iOS).
+    return "mpeg4";
+  }
+
+  @override
+  Future<String> export(VideoProject project) async {
+    final Directory tempDir = await getTemporaryDirectory();
+    final String outputPath =
+        "${tempDir.path}/adgag_export_${DateTime.now().millisecondsSinceEpoch}.mp4";
+
+    final List<String> args = VideoFilterGraphBuilder.build(
+      project: project,
+      outputPath: outputPath,
+      videoEncoder: _videoEncoder,
+    );
+
+    final int totalMs = project.trimmedDuration.inMilliseconds;
+    final Completer<String> completer = Completer<String>();
+
+    _activeSession = await FFmpegKit.executeWithArgumentsAsync(
+      args,
+      (FFmpegSession session) async {
+        _activeSession = null;
+        final ReturnCode? code = await session.getReturnCode();
+        if (ReturnCode.isSuccess(code)) {
+          _progressController.add(1.0);
+          if (!completer.isCompleted) {
+            completer.complete(outputPath);
+          }
+        } else if (ReturnCode.isCancel(code)) {
+          if (!completer.isCompleted) {
+            completer.completeError(StateError("Export cancelled"));
+          }
+        } else {
+          final String? logs = await session.getAllLogsAsString();
+          _log.warning("FFmpeg export failed (code: $code)", logs);
+          if (!completer.isCompleted) {
+            completer.completeError(StateError("Export failed: ${logs ?? code}"));
+          }
+        }
+      },
+      null,
+      (Statistics stats) {
+        if (totalMs > 0) {
+          final double fraction = (stats.getTime() / totalMs).clamp(0.0, 1.0);
+          _progressController.add(fraction);
+        }
+      },
+    );
+
+    return completer.future;
+  }
+
+  @override
+  Future<void> cancel() async {
+    final int? sessionId = _activeSession?.getSessionId();
+    if (sessionId != null) {
+      await FFmpegKit.cancel(sessionId);
+    }
+  }
+}

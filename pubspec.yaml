@@ -62,6 +62,21 @@ dependencies:
   # (a prior pin of ^1.1.0 here was wrong — that version never existed).
   easy_video_editor: ^0.1.6
 
+  # Timeline export (filter_complex: setpts speed ramps, amix/afade music
+  # mixing, drawtext/overlay text+image compositing, hardware H.264 encode).
+  # The original arthenica ffmpeg_kit_flutter is discontinued (pub.dev:
+  # isDiscontinued=true) and its native binaries were pulled from Maven
+  # Central/CocoaPods on 2025-04-01 — do not reintroduce it. This is the
+  # `sk3llo/ffmpeg_kit_flutter` community fork instead, verified live
+  # against pub.dev before pinning: license:lgpl-3.0 (NOT the -gpl variant
+  # — no x264/x265/xvidcore/vid.stab), actively published (2026-07),
+  # Dart-3-compatible, 130/160 pub points. Specifically the "_video" tier,
+  # not "_min": min excludes freetype/fontconfig/libass, which drawtext
+  # needs to render text at all — video adds exactly those while still
+  # being GPL-free. Hardware encoders (MediaCodec/VideoToolbox) are OS
+  # system libraries in every tier, GPL-irrelevant.
+  ffmpeg_kit_flutter_new_video: ^2.5.2
+
   # Media delivery / rendering
   cached_network_image: ^3.4.1
 
