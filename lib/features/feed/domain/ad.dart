@@ -27,11 +27,16 @@ final class Ad {
   });
 
   factory Ad.fromRow(Map<String, dynamic> row) {
-    // ad_subjects/profiles are only present when the query embedded them
-    // via PostgREST's relationship syntax (see FeedRepositoryImpl) — both
-    // are null for a bare `ads` row, e.g. the create/update draft RPCs.
+    // Display fields arrive in one of three shapes depending on the query:
+    // - PostgREST relationship embed (ad_subjects.display_name / profiles.username)
+    // - the get_feed_page() RPC's flat subject_display_name/creator_username columns
+    // - absent entirely (a bare `ads` row, e.g. the create/update draft RPCs)
     final Map<String, dynamic>? subjectEmbed = row["ad_subjects"] as Map<String, dynamic>?;
     final Map<String, dynamic>? profileEmbed = row["profiles"] as Map<String, dynamic>?;
+    final String? subjectDisplayName =
+        subjectEmbed?["display_name"] as String? ?? row["subject_display_name"] as String?;
+    final String? creatorUsername =
+        profileEmbed?["username"] as String? ?? row["creator_username"] as String?;
 
     return Ad(
       id: row["id"] as String,
@@ -52,8 +57,8 @@ final class Ad {
       createdAt: DateTime.parse(row["created_at"] as String),
       publishedAt:
           row["published_at"] == null ? null : DateTime.parse(row["published_at"] as String),
-      subjectDisplayName: subjectEmbed?["display_name"] as String?,
-      creatorUsername: profileEmbed?["username"] as String?,
+      subjectDisplayName: subjectDisplayName,
+      creatorUsername: creatorUsername,
     );
   }
 

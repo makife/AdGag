@@ -42,6 +42,16 @@ final class CreateAdFlowController extends Notifier<CreateAdFlowState> {
     state = CreateAdFlowState(subject: subject, step: CreateAdStep.capture);
   }
 
+  /// Entry point for joining Today's Ad (CLAUDE.md section 11): subject
+  /// and challenge id already known from the active challenge.
+  void startDailyChallenge({required AdSubject subject, required String dailyChallengeId}) {
+    state = CreateAdFlowState(
+      subject: subject,
+      dailyChallengeId: dailyChallengeId,
+      step: CreateAdStep.capture,
+    );
+  }
+
   /// Called once a recording/import produces a local file. Skips the trim
   /// step entirely when the clip is already within
   /// [VideoConstraints] — "Editing must remain intentionally lightweight"
@@ -84,6 +94,7 @@ final class CreateAdFlowController extends Notifier<CreateAdFlowState> {
             subjectId: subjectId,
             caption: state.caption.trim(),
             inspiredByAdId: state.inspiredByAdId,
+            dailyChallengeId: state.dailyChallengeId,
           );
       state = state.copyWith(adId: draftAd.id);
 

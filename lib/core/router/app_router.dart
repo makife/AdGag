@@ -12,6 +12,7 @@ import "../../features/feed/presentation/screens/feed_screen.dart";
 import "../../features/market/presentation/screens/market_screen.dart";
 import "../../features/notifications/presentation/activity_screen.dart";
 import "../../features/profile/presentation/screens/profile_screen.dart";
+import "../../features/profile/presentation/screens/public_profile_screen.dart";
 import "../../features/subjects/presentation/screens/subject_screen.dart";
 import "app_shell.dart";
 import "route_paths.dart";
@@ -75,6 +76,11 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.subject,
         builder: (BuildContext context, GoRouterState state) =>
             SubjectScreen(subjectId: state.pathParameters["subjectId"]!),
+      ),
+      GoRoute(
+        path: RoutePaths.userProfile,
+        builder: (BuildContext context, GoRouterState state) =>
+            PublicProfileScreen(username: state.pathParameters["username"]!),
       ),
       StatefulShellRoute.indexedStack(
         builder: (BuildContext context, GoRouterState state, StatefulNavigationShell shell) {

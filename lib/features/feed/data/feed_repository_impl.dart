@@ -6,11 +6,12 @@ import "../domain/ad.dart";
 import "../domain/feed_page.dart";
 import "../domain/feed_repository.dart";
 
-/// Phase B implementation: correct cursor pagination over `status = 'ready'`
-/// Ads ordered by freshness, with no heuristic ranking yet (see
-/// [FeedRepository] doc comment). Keyset pagination on
-/// `(published_at, id)` rather than OFFSET, so page N+1 stays O(limit) even
-/// on a large table (CLAUDE.md section 16/57).
+/// Phase F implementation: calls the `get_feed_page` RPC (see
+/// supabase/migrations/0010_feed_ranking.sql), which owns the actual
+/// heuristic ranking (CLAUDE.md section 16/59) — this class only handles
+/// the keyset-pagination cursor and mapping rows to [Ad]. Swapping the
+/// ranking formula later means changing that SQL function, not this file
+/// or anything upstream of [FeedRepository].
 final class FeedRepositoryImpl implements FeedRepository {
   FeedRepositoryImpl(this._client);
 
@@ -18,37 +19,28 @@ final class FeedRepositoryImpl implements FeedRepository {
 
   @override
   Future<FeedPage> fetchPage({String? cursor, int limit = 10}) async {
-    // Embed subject display name + creator username so the feed overlay
-    // (section 6) doesn't need a second round trip per card — this is the
-    // "basic feed metadata" the query returns, never video bytes.
-    supa.PostgrestFilterBuilder<List<Map<String, dynamic>>> query = _client
-        .from("ads")
-        .select("*, ad_subjects(display_name), profiles(username)")
-        .eq("status", "ready");
-
     final _Cursor? decoded = cursor == null ? null : _Cursor.decode(cursor);
-    if (decoded != null) {
-      query = query.or(
-        "published_at.lt.${decoded.publishedAtIso},"
-        "and(published_at.eq.${decoded.publishedAtIso},id.lt.${decoded.id})",
-      );
-    }
 
     // Fetch one extra row to know whether a next page exists without a
-    // separate COUNT query.
-    final List<Map<String, dynamic>> rows = await query
-        .order("published_at", ascending: false)
-        .order("id", ascending: false)
-        .limit(limit + 1);
+    // separate COUNT query (same trick as the pre-ranking implementation).
+    final List<Map<String, dynamic>> rows =
+        await _client.rpc<List<dynamic>>(
+      "get_feed_page",
+      params: <String, dynamic>{
+        "p_cursor_score": decoded?.score,
+        "p_cursor_id": decoded?.id,
+        "p_limit": limit + 1,
+      },
+    ).then((List<dynamic> value) => value.cast<Map<String, dynamic>>());
 
     final bool hasMore = rows.length > limit;
     final List<Map<String, dynamic>> pageRows = hasMore ? rows.sublist(0, limit) : rows;
     final List<Ad> ads = pageRows.map(Ad.fromRow).toList(growable: false);
 
     String? nextCursor;
-    if (hasMore && ads.isNotEmpty) {
-      final Ad last = ads.last;
-      nextCursor = _Cursor(publishedAtIso: last.publishedAt!.toIso8601String(), id: last.id).encode();
+    if (hasMore) {
+      final Map<String, dynamic> last = pageRows.last;
+      nextCursor = _Cursor(score: (last["rank_score"] as num).toDouble(), id: last["id"] as String).encode();
     }
 
     return FeedPage(ads: ads, nextCursor: nextCursor);
@@ -56,7 +48,7 @@ final class FeedRepositoryImpl implements FeedRepository {
 }
 
 final class _Cursor {
-  const _Cursor({required this.publishedAtIso, required this.id});
+  const _Cursor({required this.score, required this.id});
 
   static final RegExp _uuidPattern =
       RegExp(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
@@ -64,25 +56,22 @@ final class _Cursor {
   factory _Cursor.decode(String encoded) {
     final Map<String, dynamic> json =
         jsonDecode(utf8.decode(base64Url.decode(encoded))) as Map<String, dynamic>;
-    final String publishedAtIso = json["p"] as String;
+    final double score = (json["s"] as num).toDouble();
     final String id = json["id"] as String;
 
-    // Cursors are opaque to callers but still get here as plain strings
-    // interpolated into a PostgREST `.or()` filter — validate shape so a
-    // malformed/tampered cursor fails fast with a clear error instead of
-    // producing an unexpected filter string.
-    DateTime.parse(publishedAtIso);
+    // Cursors are opaque to callers but still get passed as literal RPC
+    // params — validate shape so a malformed/tampered cursor fails fast.
     if (!_uuidPattern.hasMatch(id)) {
       throw const FormatException("Invalid feed cursor");
     }
 
-    return _Cursor(publishedAtIso: publishedAtIso, id: id);
+    return _Cursor(score: score, id: id);
   }
 
-  final String publishedAtIso;
+  final double score;
   final String id;
 
   String encode() {
-    return base64Url.encode(utf8.encode(jsonEncode(<String, String>{"p": publishedAtIso, "id": id})));
+    return base64Url.encode(utf8.encode(jsonEncode(<String, dynamic>{"s": score, "id": id})));
   }
 }

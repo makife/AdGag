@@ -1,6 +1,9 @@
+import "dart:async" show unawaited;
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/router/route_paths.dart";
 import "../../core/supabase/supabase_providers.dart";
 import "../../core/theme/app_spacing.dart";
 import "../../features/social/presentation/providers/social_providers.dart";
@@ -22,9 +25,14 @@ class CreatorHeader extends ConsumerWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Text(
-          "@${username ?? 'unknown'}",
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        GestureDetector(
+          onTap: username == null
+              ? null
+              : () => unawaited(context.pushTo(RoutePaths.userProfileOf(username!))),
+          child: Text(
+            "@${username ?? 'unknown'}",
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
         ),
         if (!isOwnAd && currentUserId != null) ...<Widget>[
           const SizedBox(width: AppSpacing.sm),

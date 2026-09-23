@@ -14,6 +14,7 @@ final class DraftAdRepositoryImpl implements DraftAdRepository {
     required String subjectId,
     String? caption,
     String? inspiredByAdId,
+    String? dailyChallengeId,
   }) async {
     try {
       final Map<String, dynamic> row = await _client.rpc<Map<String, dynamic>>(
@@ -22,6 +23,7 @@ final class DraftAdRepositoryImpl implements DraftAdRepository {
           "p_subject_id": subjectId,
           "p_caption": caption,
           "p_inspired_by_ad_id": inspiredByAdId,
+          "p_daily_challenge_id": dailyChallengeId,
         },
       );
       return Ad.fromRow(row);

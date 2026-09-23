@@ -14,6 +14,7 @@ final class CreateAdFlowState {
     this.errorMessage,
     this.processingStillPending = false,
     this.inspiredByAdId,
+    this.dailyChallengeId,
   });
 
   final CreateAdStep step;
@@ -42,6 +43,10 @@ final class CreateAdFlowState {
   /// the id of the Ad being remixed. Null for an ordinary creation flow.
   final String? inspiredByAdId;
 
+  /// Set when this flow was started by joining Today's Ad (CLAUDE.md
+  /// section 11). Null for an ordinary creation flow.
+  final String? dailyChallengeId;
+
   CreateAdFlowState copyWith({
     CreateAdStep? step,
     AdSubject? subject,
@@ -53,6 +58,7 @@ final class CreateAdFlowState {
     String? errorMessage,
     bool? processingStillPending,
     String? inspiredByAdId,
+    String? dailyChallengeId,
   }) {
     return CreateAdFlowState(
       step: step ?? this.step,
@@ -65,6 +71,7 @@ final class CreateAdFlowState {
       errorMessage: errorMessage ?? this.errorMessage,
       processingStillPending: processingStillPending ?? this.processingStillPending,
       inspiredByAdId: inspiredByAdId ?? this.inspiredByAdId,
+      dailyChallengeId: dailyChallengeId ?? this.dailyChallengeId,
     );
   }
 }

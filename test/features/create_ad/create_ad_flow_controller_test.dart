@@ -64,6 +64,7 @@ class _FakeDraftAdRepository implements DraftAdRepository {
     required String subjectId,
     String? caption,
     String? inspiredByAdId,
+    String? dailyChallengeId,
   }) async {
     return Ad.fromRow(_row(id: "ad1", status: AdStatus.draft));
   }

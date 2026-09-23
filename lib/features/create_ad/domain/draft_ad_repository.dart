@@ -8,8 +8,15 @@ import "../../feed/domain/ad.dart";
 abstract interface class DraftAdRepository {
   /// [inspiredByAdId] is the AD THIS lineage link (CLAUDE.md section 9) —
   /// null for an ordinary Ad, set to the origin Ad's id when the user
-  /// pressed AD THIS.
-  Future<Ad> createDraft({required String subjectId, String? caption, String? inspiredByAdId});
+  /// pressed AD THIS. [dailyChallengeId] is validated server-side against
+  /// the currently-active challenge (section 11) — passing a stale or
+  /// future challenge id fails the call rather than silently ignoring it.
+  Future<Ad> createDraft({
+    required String subjectId,
+    String? caption,
+    String? inspiredByAdId,
+    String? dailyChallengeId,
+  });
   Future<Ad> updateDraft({required String adId, String? subjectId, String? caption});
   Future<void> deleteAd(String adId);
 
