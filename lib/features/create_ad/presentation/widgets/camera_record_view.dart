@@ -165,7 +165,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
         children: <Widget>[
           CameraPreview(controller),
           Positioned(
-            bottom: AppSpacing.xxxl,
+            bottom: AppSpacing.xxxl + MediaQuery.paddingOf(context).bottom,
             left: 0,
             right: 0,
             child: Column(

@@ -50,7 +50,7 @@ final class FeedRepositoryImpl implements FeedRepository {
   Future<Ad?> getById(String adId) async {
     final Map<String, dynamic>? row = await _client
         .from("ads")
-        .select("*, ad_subjects(display_name), profiles(username)")
+        .select("*, ad_subjects(display_name), profiles!ads_user_id_fkey(username)")
         .eq("id", adId)
         .eq("status", "ready")
         .maybeSingle();

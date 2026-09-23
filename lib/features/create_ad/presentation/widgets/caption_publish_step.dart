@@ -52,34 +52,36 @@ class _CaptionPublishStepState extends ConsumerState<CaptionPublishStep> {
 
     return Scaffold(
       appBar: AppBar(title: const Text("Preview & publish")),
-      body: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          children: <Widget>[
-            Expanded(
-              child: previewReady
-                  ? AspectRatio(aspectRatio: preview.value.aspectRatio, child: VideoPlayer(preview))
-                  : const Center(child: CircularProgressIndicator()),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            TextField(
-              maxLength: 150,
-              maxLines: 2,
-              decoration: const InputDecoration(hintText: "Add a caption…"),
-              onChanged: (String value) =>
-                  ref.read(createAdFlowControllerProvider.notifier).setCaption(value),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: state.finalDraft == null
-                    ? null
-                    : () => unawaited(ref.read(createAdFlowControllerProvider.notifier).publish()),
-                child: const Text("Publish"),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            children: <Widget>[
+              Expanded(
+                child: previewReady
+                    ? AspectRatio(aspectRatio: preview.value.aspectRatio, child: VideoPlayer(preview))
+                    : const Center(child: CircularProgressIndicator()),
               ),
-            ),
-          ],
+              const SizedBox(height: AppSpacing.lg),
+              TextField(
+                maxLength: 150,
+                maxLines: 2,
+                decoration: const InputDecoration(hintText: "Add a caption…"),
+                onChanged: (String value) =>
+                    ref.read(createAdFlowControllerProvider.notifier).setCaption(value),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: state.finalDraft == null
+                      ? null
+                      : () => unawaited(ref.read(createAdFlowControllerProvider.notifier).publish()),
+                  child: const Text("Publish"),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

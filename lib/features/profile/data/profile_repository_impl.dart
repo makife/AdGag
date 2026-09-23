@@ -20,7 +20,7 @@ final class ProfileRepositoryImpl implements ProfileRepository {
   Future<List<Ad>> fetchAdsByUser(String userId, {int limit = 30}) async {
     final List<Map<String, dynamic>> rows = await _client
         .from("ads")
-        .select("*, ad_subjects(display_name), profiles(username)")
+        .select("*, ad_subjects(display_name), profiles!ads_user_id_fkey(username)")
         .eq("user_id", userId)
         .eq("status", "ready")
         .order("published_at", ascending: false)

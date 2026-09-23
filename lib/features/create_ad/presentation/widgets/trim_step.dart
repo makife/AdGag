@@ -104,45 +104,47 @@ class _TrimStepState extends ConsumerState<TrimStep> {
 
     return Scaffold(
       appBar: AppBar(title: const Text("Pick your 10 seconds")),
-      body: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          children: <Widget>[
-            Expanded(
-              child: ready
-                  ? AspectRatio(
-                      aspectRatio: controller.value.aspectRatio,
-                      child: VideoPlayer(controller),
-                    )
-                  : const Center(child: CircularProgressIndicator()),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            if (ready) ...<Widget>[
-              Text(
-                "Starts at ${_startSeconds.toStringAsFixed(1)}s",
-                style: Theme.of(context).textTheme.bodyMedium,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            children: <Widget>[
+              Expanded(
+                child: ready
+                    ? AspectRatio(
+                        aspectRatio: controller.value.aspectRatio,
+                        child: VideoPlayer(controller),
+                      )
+                    : const Center(child: CircularProgressIndicator()),
               ),
-              Slider(
-                value: _startSeconds.clamp(0, _maxStartSeconds),
-                max: _maxStartSeconds,
-                onChanged: (double v) {
-                  setState(() => _startSeconds = v);
-                  unawaited(controller.seekTo(Duration(milliseconds: (v * 1000).round())));
-                },
+              const SizedBox(height: AppSpacing.lg),
+              if (ready) ...<Widget>[
+                Text(
+                  "Starts at ${_startSeconds.toStringAsFixed(1)}s",
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                Slider(
+                  value: _startSeconds.clamp(0, _maxStartSeconds),
+                  max: _maxStartSeconds,
+                  onChanged: (double v) {
+                    setState(() => _startSeconds = v);
+                    unawaited(controller.seekTo(Duration(milliseconds: (v * 1000).round())));
+                  },
+                ),
+              ],
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                  child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                ),
+              FilledButton(
+                onPressed: (!ready || _exporting) ? null : _confirm,
+                child: _exporting
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text("Use this clip"),
               ),
             ],
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-              ),
-            FilledButton(
-              onPressed: (!ready || _exporting) ? null : _confirm,
-              child: _exporting
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text("Use this clip"),
-            ),
-          ],
+          ),
         ),
       ),
     );

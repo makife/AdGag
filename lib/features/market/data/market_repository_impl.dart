@@ -31,7 +31,7 @@ final class MarketRepositoryImpl implements MarketRepository {
   Future<List<Ad>> fetchFreshAds({int limit = 20}) async {
     final List<Map<String, dynamic>> rows = await _client
         .from("ads")
-        .select("*, ad_subjects(display_name), profiles(username)")
+        .select("*, ad_subjects(display_name), profiles!ads_user_id_fkey(username)")
         .eq("status", "ready")
         .order("published_at", ascending: false)
         .limit(limit);
