@@ -1487,6 +1487,20 @@ Also, separately, you asked for the profile page to show own Ads, allow deleting
 
 `flutter analyze`: 0 issues. `flutter test`: 61/61 (2 new: retake, and "every captured clip routes to edit, not just long ones" replacing the old skip-when-short-enough test).
 
+## Real-device round 6: the actual FFmpeg crash found and fixed (2026-09-24)
+
+The log-truncation fix from round 5 paid off immediately — a fresh screenshot showed the real error this time: `[Parsed_drawtext_5] Cannot find a valid font for the family Sans` / `Error initializing filters`. **This is the one root cause behind every "music doesn't play"/"slow-motion doesn't show" report across the last several rounds**: FFmpeg's `drawtext` filter has no fontconfig-discoverable "Sans" family to fall back to on Android (unlike desktop Linux, where a bare `font=` name usually resolves against installed system fonts) — so any export that included a text overlay failed outright at the filter-graph-initialization stage, and because export is one single FFmpeg pass, that failure took down music/slow-motion/everything else in the *same* export too, even though those specific filters were themselves fine. Every prior round's "music/slow-motion doesn't work" symptom was very likely this, not three separate effect bugs — text overlays were involved in the failing test cases each time.
+
+**Fix**: `assets/fonts/Roboto-Regular.ttf` (Apache-2.0, downloaded from Google Fonts, verified as genuine TrueType data via the `file` command before committing — not assumed) is now bundled, extracted once per app session to a real filesystem path via `rootBundle.load` + `getTemporaryDirectory` (drawtext's `fontfile=` parameter needs an actual path on disk, not an asset-bundle reference — Flutter assets are packed into the APK and aren't directly file-accessible), and passed through as a required `VideoFilterGraphBuilder.build()` parameter instead of relying on family-name lookup. **This should be the fix, not a hedge** — but hasn't yet been confirmed against a real device export at time of writing; the next test report is the actual confirmation.
+
+Also fixed, per pointed feedback that the timeline was borderline unusable:
+- **Trim-window drag handle's touch target was 16px, same as its visual size** — well below any reasonable minimum, genuinely hard to grab reliably. Now a 44px-tall hit area with the same 16px visual pill centered inside it (visual size unchanged, only the touch target grew).
+- **Speed-zone/overlay markers on the timeline deleted on a bare tap, instantly, no confirmation** — trivially easy to trigger by accident while just trying to look at or interact with them. Now shows a confirm dialog first.
+- **Overlay markers were an unlabeled 16px icon** ("pire kadar ikon" — flea-sized icon, no way to tell what it represents). Now a labeled chip showing the actual overlay text (or "sticker" for images), matching the speed-zone chip's visual weight and size.
+- **Switching bottom-nav tabs away from the edit screen with in-progress edits now asks for confirmation** (`hasUnsavedCreateEditsProvider`, a `StateProvider<bool>` `TrimStep` keeps in sync with its own edit state, read by `AppShell` before `goBranch` when leaving tab index 2 specifically) — previously it switched silently (the audio-continuing-to-play half of this was fixed in round 5; the missing warning dialog itself is what's fixed here).
+
+`flutter analyze`: 0 issues. `flutter test`: 60/60. Real build verified (config + font bundling both confirmed present in the built APK via direct inspection, not assumed).
+
 ## App icon replaced; Market screen redesigned (2026-09-23)
 
 Two independent changes, both shipped and verified together in one build:
