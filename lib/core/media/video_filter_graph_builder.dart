@@ -1,4 +1,5 @@
 import "../../features/create_ad/domain/video_project.dart";
+import "video_editor_service.dart" show AppFlipDirection, AppVideoRotation;
 
 /// Builds an FFmpeg `-filter_complex` argument list from a [VideoProject].
 /// Pure Dart, no FFmpeg dependency of its own — [VideoExportService] is the
@@ -49,9 +50,13 @@ abstract final class VideoFilterGraphBuilder {
       ...extraInputArgs,
       "-filter_complex", filterComplex,
       "-map", "[vout]",
-      "-map", "[aout]",
+      if (!project.removeAudio) ...<String>["-map", "[aout]"] else "-an",
       "-c:v", videoEncoder,
-      "-c:a", "aac",
+      // Mobile hardware encoders (mediacodec/videotoolbox) don't pick a
+      // sensible default bitrate on their own — without this the output
+      // is visibly low-quality regardless of source resolution.
+      "-b:v", "10M",
+      if (!project.removeAudio) ...<String>["-c:a", "aac"],
       "-t", _seconds(project.trimmedDuration),
       "-y",
       outputPath,
@@ -71,28 +76,33 @@ abstract final class VideoFilterGraphBuilder {
     for (int i = 0; i < timeline.segments.length; i++) {
       final _Segment seg = timeline.segments[i];
       final String vLabel = "v$i";
-      final String aLabel = "a$i";
       parts.add(
         "[0:v]trim=start=${_seconds(seg.start)}:end=${_seconds(seg.end)},"
         "setpts=(PTS-STARTPTS)/${seg.factor}[$vLabel]",
       );
-      if (seg.factor == 1.0) {
-        parts.add("[0:a]atrim=start=${_seconds(seg.start)}:end=${_seconds(seg.end)},asetpts=PTS-STARTPTS[$aLabel]");
-      } else {
-        parts.add(
-          "[0:a]atrim=start=${_seconds(seg.start)}:end=${_seconds(seg.end)},asetpts=PTS-STARTPTS,"
-          "atempo=${seg.factor}[$aLabel]",
-        );
-      }
       videoLabels.add("[$vLabel]");
-      audioLabels.add("[$aLabel]");
+
+      if (!project.removeAudio) {
+        final String aLabel = "a$i";
+        if (seg.factor == 1.0) {
+          parts.add("[0:a]atrim=start=${_seconds(seg.start)}:end=${_seconds(seg.end)},asetpts=PTS-STARTPTS[$aLabel]");
+        } else {
+          parts.add(
+            "[0:a]atrim=start=${_seconds(seg.start)}:end=${_seconds(seg.end)},asetpts=PTS-STARTPTS,"
+            "atempo=${seg.factor}[$aLabel]",
+          );
+        }
+        audioLabels.add("[$aLabel]");
+      }
     }
 
     final String vConcatOut = timeline.segments.length > 1 ? "vconcat" : "v0";
     final String aConcatOut = timeline.segments.length > 1 ? "aconcat" : "a0";
     if (timeline.segments.length > 1) {
       parts.add("${videoLabels.join()}concat=n=${videoLabels.length}:v=1:a=0[vconcat]");
-      parts.add("${audioLabels.join()}concat=n=${audioLabels.length}:v=0:a=1[aconcat]");
+      if (!project.removeAudio) {
+        parts.add("${audioLabels.join()}concat=n=${audioLabels.length}:v=0:a=1[aconcat]");
+      }
     }
 
     String currentVideoLabel = vConcatOut;
@@ -118,28 +128,54 @@ abstract final class VideoFilterGraphBuilder {
       }
       currentVideoLabel = nextLabel;
     }
-    parts.add("[$currentVideoLabel]null[vout]");
 
-    String currentAudioLabel = aConcatOut;
-    if (bgAudioInputIndex != null) {
-      final BackgroundAudio bg = project.bgAudio!;
-      final List<String> fadeFilters = <String>[];
-      if (bg.fadeInDuration > Duration.zero) {
-        fadeFilters.add("afade=t=in:st=0:d=${_seconds(bg.fadeInDuration)}");
-      }
-      if (bg.fadeOutDuration > Duration.zero) {
-        final Duration fadeOutStart = project.trimmedDuration - bg.fadeOutDuration;
-        fadeFilters.add(
-          "afade=t=out:st=${_seconds(fadeOutStart < Duration.zero ? Duration.zero : fadeOutStart)}:"
-          "d=${_seconds(bg.fadeOutDuration)}",
-        );
-      }
-      fadeFilters.add("volume=${bg.volume}");
-      parts.add("[$bgAudioInputIndex:a]${fadeFilters.join(',')}[bgfaded]");
-      parts.add("[$currentAudioLabel][bgfaded]amix=inputs=2:duration=first:dropout_transition=0[aout]");
-      currentAudioLabel = "aout";
+    final List<String> transformFilters = <String>[];
+    switch (project.rotation) {
+      case AppVideoRotation.none:
+        break;
+      case AppVideoRotation.degrees90:
+        transformFilters.add("transpose=1");
+      case AppVideoRotation.degrees180:
+        transformFilters.addAll(<String>["hflip", "vflip"]);
+      case AppVideoRotation.degrees270:
+        transformFilters.add("transpose=2");
+    }
+    switch (project.flip) {
+      case AppFlipDirection.none:
+        break;
+      case AppFlipDirection.horizontal:
+        transformFilters.add("hflip");
+      case AppFlipDirection.vertical:
+        transformFilters.add("vflip");
+    }
+    if (transformFilters.isEmpty) {
+      parts.add("[$currentVideoLabel]null[vout]");
     } else {
-      parts.add("[$currentAudioLabel]anull[aout]");
+      parts.add("[$currentVideoLabel]${transformFilters.join(',')}[vout]");
+    }
+
+    if (!project.removeAudio) {
+      String currentAudioLabel = aConcatOut;
+      if (bgAudioInputIndex != null) {
+        final BackgroundAudio bg = project.bgAudio!;
+        final List<String> fadeFilters = <String>[];
+        if (bg.fadeInDuration > Duration.zero) {
+          fadeFilters.add("afade=t=in:st=0:d=${_seconds(bg.fadeInDuration)}");
+        }
+        if (bg.fadeOutDuration > Duration.zero) {
+          final Duration fadeOutStart = project.trimmedDuration - bg.fadeOutDuration;
+          fadeFilters.add(
+            "afade=t=out:st=${_seconds(fadeOutStart < Duration.zero ? Duration.zero : fadeOutStart)}:"
+            "d=${_seconds(bg.fadeOutDuration)}",
+          );
+        }
+        fadeFilters.add("volume=${bg.volume}");
+        parts.add("[$bgAudioInputIndex:a]${fadeFilters.join(',')}[bgfaded]");
+        parts.add("[$currentAudioLabel][bgfaded]amix=inputs=2:duration=first:dropout_transition=0[aout]");
+        currentAudioLabel = "aout";
+      } else {
+        parts.add("[$currentAudioLabel]anull[aout]");
+      }
     }
 
     return parts.join(";");

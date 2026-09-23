@@ -1,3 +1,5 @@
+import "../../../core/media/video_editor_service.dart" show AppFlipDirection, AppVideoRotation;
+
 /// A time-ranged speed multiplier — e.g. 0.5 across seconds 3-5 for a
 /// slow-motion window within an otherwise normal-speed clip. Multiple
 /// zones may exist; zones must not overlap (enforced by
@@ -116,6 +118,9 @@ final class VideoProject {
     this.speedZones = const <SpeedZone>[],
     this.bgAudio,
     this.overlays = const <VideoOverlay>[],
+    this.rotation = AppVideoRotation.none,
+    this.flip = AppFlipDirection.none,
+    this.removeAudio = false,
   });
 
   final String videoPath;
@@ -125,21 +130,36 @@ final class VideoProject {
   final BackgroundAudio? bgAudio;
   final List<VideoOverlay> overlays;
 
+  /// Applied to the whole clip, after trim/speed-zones/overlays are
+  /// composited — the same simple whole-clip transforms the fast editor
+  /// (`VideoEditorService`/`easy_video_editor`) offers, folded into this
+  /// pipeline's single render pass whenever a zone or overlay also needs
+  /// FFmpeg, so a user never has to choose between "the tool with
+  /// rotate" and "the tool with slow-motion" — one editor, one export.
+  final AppVideoRotation rotation;
+  final AppFlipDirection flip;
+  final bool removeAudio;
+
   Duration get trimmedDuration => trimEnd - trimStart;
 
   bool get hasAnyEdit =>
-      speedZones.isNotEmpty || bgAudio != null || overlays.isNotEmpty;
+      speedZones.isNotEmpty ||
+      bgAudio != null ||
+      overlays.isNotEmpty ||
+      rotation != AppVideoRotation.none ||
+      flip != AppFlipDirection.none ||
+      removeAudio;
 
-  VideoProject withTrim({required Duration start, required Duration end}) {
-    return VideoProject(
-      videoPath: videoPath,
-      trimStart: start,
-      trimEnd: end,
-      speedZones: speedZones,
-      bgAudio: bgAudio,
-      overlays: overlays,
-    );
-  }
+  VideoProject withTrim({required Duration start, required Duration end}) => _copyWith(
+        trimStart: start,
+        trimEnd: end,
+      );
+
+  VideoProject withRotation(AppVideoRotation value) => _copyWith(rotation: value);
+
+  VideoProject withFlip(AppFlipDirection value) => _copyWith(flip: value);
+
+  VideoProject withRemoveAudio({required bool value}) => _copyWith(removeAudio: value);
 
   /// Adds [zone], rejecting it if it overlaps an existing zone (two
   /// different speed factors can't both apply to the same instant).
@@ -165,18 +185,26 @@ final class VideoProject {
   }
 
   VideoProject _copyWith({
+    Duration? trimStart,
+    Duration? trimEnd,
     List<SpeedZone>? speedZones,
     BackgroundAudio? bgAudio,
     bool clearBgAudio = false,
     List<VideoOverlay>? overlays,
+    AppVideoRotation? rotation,
+    AppFlipDirection? flip,
+    bool? removeAudio,
   }) {
     return VideoProject(
       videoPath: videoPath,
-      trimStart: trimStart,
-      trimEnd: trimEnd,
+      trimStart: trimStart ?? this.trimStart,
+      trimEnd: trimEnd ?? this.trimEnd,
       speedZones: speedZones ?? this.speedZones,
       bgAudio: clearBgAudio ? null : (bgAudio ?? this.bgAudio),
       overlays: overlays ?? this.overlays,
+      rotation: rotation ?? this.rotation,
+      flip: flip ?? this.flip,
+      removeAudio: removeAudio ?? this.removeAudio,
     );
   }
 }
