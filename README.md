@@ -49,21 +49,22 @@ test/              # mirrors lib/ structure
 Tables actually migrated so far are marked **[done]**; the rest is the target shape from CLAUDE.md §23, recorded here so later migrations don't drift from the plan.
 
 ```
-profiles [done]  ──┬─< follows (follower_id, following_id)
-                    ├─< ads (user_id)
+profiles [done]  ──┬─< follows [done] (follower_id, following_id)
+                    ├─< ads [done] (user_id)
                     ├─< sold_reactions (user_id)
                     ├─< comments (user_id)
                     ├─< reports (reporter_id)
                     └─< blocks (blocker_id, blocked_id)
 
-ad_subjects ──┬─< ad_subject_aliases (canonicalization — §10)
-              └─< ads (subject_id)
+ad_subjects [done] ──┬─< ad_subject_aliases [done] (canonicalization — §10)
+                      ├─< ad_subject_translations [done] (locale display names — §34)
+                      └─< ads [done] (subject_id)
 
-ads ──┬─< sold_reactions (ad_id)          unique (user_id, ad_id)
+ads [done] ──┬─< sold_reactions (ad_id)          unique (user_id, ad_id)
       ├─< comments (ad_id)
       ├─< ad_views / analytics events (ad_id)
-      ├─self inspired_by_ad_id (AD THIS lineage — §9)
-      └─> daily_challenges (daily_challenge_id, nullable)
+      ├─self inspired_by_ad_id [done, unused until Phase E's AD THIS UI] (AD THIS lineage — §9)
+      └─> daily_challenges (daily_challenge_id, nullable — FK added when that table lands in Phase F)
 
 daily_challenges ──< ads (daily_challenge_id)
 
@@ -78,8 +79,10 @@ reports (target_type, target_id, reason, status)
 |---|------|-------|----------|
 | 0001 | `extensions_and_common.sql` | A | `pgcrypto`, shared `set_updated_at()` trigger fn, `moderation_status`/`account_status` enums |
 | 0002 | `profiles_and_auth_trigger.sql` | A | `profiles` table, `handle_new_user()` trigger, RLS |
-| 0003+ | *(next)* | B | `follows`, `ad_subjects`, `ad_subject_aliases`, `ads` (metadata columns), feed-support indexes |
-| — | *(later)* | C–H | video status columns/webhooks, `sold_reactions`, `comments`, `ad_views`, `daily_challenges`, `reports`, `blocks`, `notifications`, `device_tokens` |
+| 0003 | `follows.sql` | B | `follows` table, RLS (public read, self-only insert/delete) |
+| 0004 | `ad_subjects.sql` | B | `ad_subjects`, `ad_subject_aliases`, `ad_subject_translations`, `canonicalize_subject_text()`, `get_or_create_ad_subject()` RPC |
+| 0005 | `ads.sql` | B | `ads` (full target schema, §25), `ad_status`/`ad_visibility` enums, `create_draft_ad()`/`update_draft_ad()`/`delete_own_ad()` RPCs, `ads_count` sync trigger, feed indexes |
+| — | *(later)* | C–H | video processing columns already exist on `ads`; webhook handler, `sold_reactions`, `comments`, `ad_views`, `daily_challenges` (+ FK back onto `ads.daily_challenge_id`), `reports`, `blocks`, `notifications`, `device_tokens` |
 
 Run migrations with the Supabase CLI once a project exists: `supabase db push` (or apply via the Supabase dashboard SQL editor for a quick start). Never hand-create tables in the dashboard outside a migration file (§23).
 
@@ -166,7 +169,7 @@ Real `env/*.json` files are git-ignored (only `*.example.json` is committed). **
 Following CLAUDE.md §52 DEVELOPMENT ORDER exactly:
 
 - [x] **Phase A — Foundation:** Flutter scaffold, theming, routing + deep-link-ready shell, localization (en/tr), Supabase integration, email auth + session handling, `profiles` migration + RLS, unit tests for username rules.
-- [ ] **Phase B — Social Core:** `follows`, `ad_subjects` (+ alias/canonicalization), `ads` metadata table, feed-support indexes.
+- [x] **Phase B — Social Core:** `follows` (+ `FollowRepository`), `ad_subjects` with canonicalization/aliases/translations (+ `SubjectRepository`), full `ads` metadata schema with draft-lifecycle RPCs (+ `DraftAdRepository`), cursor-paginated `FeedRepository` (freshness-only ordering — heuristic ranking is Phase F), unit tests for row-mapping logic. No new screens this phase by design — feed/creation UI needs video (Phase C/D) to be meaningful; the data layer is ready for them.
 - [ ] **Phase C — Video:** `VideoService` abstraction, Mux integration, upload/processing webhook, bounded player pool, preloading.
 - [ ] **Phase D — Creation:** camera/gallery capture, 10s constraint, subject picker, publish flow, draft/error handling.
 - [ ] **Phase E — Engagement:** SOLD, REVIEWS, AD THIS, external share, subject pages.
