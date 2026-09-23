@@ -121,8 +121,23 @@ abstract final class VideoFilterGraphBuilder {
           final int inputIdx = imageOverlayInputIndex[overlay.id]!;
           final String scaled = "ovscale${parts.length}";
           parts.add("[$inputIdx:v]scale=iw*${overlay.widthPercent}/1:-1[$scaled]");
+          final String composited;
+          if (overlay.rotationDegrees == 0) {
+            composited = scaled;
+          } else {
+            final String rotated = "ovrot${parts.length}";
+            final String radians = (overlay.rotationDegrees * 3.141592653589793 / 180).toStringAsFixed(6);
+            // c=none keeps the corners transparent instead of filling them
+            // with black — required for a sticker to still look like a
+            // rotated sticker, not a rotated black square with a sticker
+            // inside it.
+            parts.add(
+              "[$scaled]rotate=$radians:c=none:ow=rotw($radians):oh=roth($radians)[$rotated]",
+            );
+            composited = rotated;
+          }
           parts.add(
-            "[$currentVideoLabel][$scaled]overlay="
+            "[$currentVideoLabel][$composited]overlay="
             "x=(main_w*${overlay.xPercent}):y=(main_h*${overlay.yPercent}):enable='$enable'[$nextLabel]",
           );
       }
@@ -198,11 +213,17 @@ abstract final class VideoFilterGraphBuilder {
   /// and the characters that are otherwise significant inside a
   /// single-quoted filter option value.
   static String _escapeDrawtext(String text) {
+    // Order matters: escape backslashes first, so the backslashes this
+    // function itself inserts below (for the quote and colon cases)
+    // don't get double-escaped by a later step.
     return text
         .replaceAll(r"\", r"\\")
-        .replaceAll("'", r"'\\\''")
         .replaceAll(":", r"\:")
-        .replaceAll("%", r"\%");
+        .replaceAll("%", r"\%")
+        // FFmpeg's own recommended way to embed a literal single quote
+        // inside a single-quoted filter option value: close the quote,
+        // an escaped quote, reopen the quote.
+        .replaceAll("'", r"'\''");
   }
 
   static String _argbToFFmpegHex(int argbColor) {

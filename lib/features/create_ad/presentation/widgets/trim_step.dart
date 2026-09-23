@@ -1,5 +1,6 @@
 import "dart:async" show StreamSubscription, unawaited;
 import "dart:io";
+import "dart:math" show pi;
 
 import "package:file_picker/file_picker.dart";
 import "package:flutter/material.dart";
@@ -9,6 +10,7 @@ import "package:uuid/uuid.dart";
 import "package:video_player/video_player.dart";
 
 import "../../../../core/media/media_providers.dart";
+import "../../../../core/router/app_shell.dart";
 import "../../../../core/media/video_editor_service.dart";
 import "../../../../core/media/video_export_service.dart";
 import "../../../../core/theme/app_spacing.dart";
@@ -199,13 +201,39 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     }
   }
 
-  void _onOverlayDrag(VideoOverlay overlay, DragUpdateDetails details, Size previewSize) {
-    final double dx = details.delta.dx / previewSize.width;
-    final double dy = details.delta.dy / previewSize.height;
-    final double nextX = (overlay.xPercent + dx).clamp(0.0, 1.0);
-    final double nextY = (overlay.yPercent + dy).clamp(0.0, 1.0);
+  // Baseline values captured at the start of a drag/pinch/rotate gesture
+  // on an overlay — details.scale/details.rotation are cumulative from
+  // gesture start, not incremental, so the "before" state has to be
+  // remembered once rather than applied delta-by-delta.
+  String? _gestureOverlayId;
+  double _gestureBaseX = 0;
+  double _gestureBaseY = 0;
+  double _gestureBaseSize = 0;
+  double _gestureBaseRotationDegrees = 0;
+  Offset _gestureStartFocalPoint = Offset.zero;
 
-    final VideoOverlay moved = switch (overlay) {
+  void _onOverlayScaleStart(VideoOverlay overlay, ScaleStartDetails details) {
+    _gestureOverlayId = overlay.id;
+    _gestureBaseX = overlay.xPercent;
+    _gestureBaseY = overlay.yPercent;
+    _gestureBaseSize = switch (overlay) {
+      TextOverlay(:final double fontSize) => fontSize,
+      ImageOverlay(:final double widthPercent) => widthPercent,
+    };
+    _gestureBaseRotationDegrees = overlay is ImageOverlay ? overlay.rotationDegrees : 0;
+    _gestureStartFocalPoint = details.focalPoint;
+  }
+
+  void _onOverlayScaleUpdate(VideoOverlay overlay, ScaleUpdateDetails details, Size previewSize) {
+    if (_gestureOverlayId != overlay.id) {
+      return;
+    }
+    final double dx = (details.focalPoint.dx - _gestureStartFocalPoint.dx) / previewSize.width;
+    final double dy = (details.focalPoint.dy - _gestureStartFocalPoint.dy) / previewSize.height;
+    final double nextX = (_gestureBaseX + dx).clamp(0.0, 1.0);
+    final double nextY = (_gestureBaseY + dy).clamp(0.0, 1.0);
+
+    final VideoOverlay updated = switch (overlay) {
       TextOverlay() => TextOverlay(
           id: overlay.id,
           xPercent: nextX,
@@ -214,7 +242,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
           duration: overlay.duration,
           text: overlay.text,
           argbColor: overlay.argbColor,
-          fontSize: overlay.fontSize,
+          fontSize: (_gestureBaseSize * details.scale).clamp(12.0, 96.0),
         ),
       ImageOverlay() => ImageOverlay(
           id: overlay.id,
@@ -223,13 +251,14 @@ class _TrimStepState extends ConsumerState<TrimStep> {
           startSec: overlay.startSec,
           duration: overlay.duration,
           assetPath: overlay.assetPath,
-          widthPercent: overlay.widthPercent,
+          widthPercent: (_gestureBaseSize * details.scale).clamp(0.08, 0.9),
+          rotationDegrees: _gestureBaseRotationDegrees + details.rotation * 180 / pi,
         ),
     };
     setState(() {
       final int index = _overlays.indexWhere((VideoOverlay o) => o.id == overlay.id);
       if (index != -1) {
-        _overlays[index] = moved;
+        _overlays[index] = updated;
       }
     });
   }
@@ -352,6 +381,23 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     final VideoPlayerController? controller = _controller;
     final bool ready = controller != null && controller.value.isInitialized;
 
+    // Same IndexedStack problem as the feed (see app_shell.dart's doc
+    // comment on activeShellBranchIndexProvider): switching to a
+    // different bottom-nav tab while on this screen doesn't pause this
+    // preview on its own — without this listener the clip (with audio)
+    // kept playing behind whichever tab the user switched to.
+    ref.listen(activeShellBranchIndexProvider, (int? previous, int next) {
+      final VideoPlayerController? c = _controller;
+      if (c == null || !c.value.isInitialized) {
+        return;
+      }
+      if (next == 2) {
+        unawaited(c.play());
+      } else {
+        unawaited(c.pause());
+      }
+    });
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Edit your Ad"),
@@ -407,11 +453,41 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                                     left: overlay.xPercent * previewSize.width,
                                     top: overlay.yPercent * previewSize.height,
                                     child: GestureDetector(
-                                      onPanUpdate: (DragUpdateDetails d) =>
-                                          _onOverlayDrag(overlay, d, previewSize),
-                                      onLongPress: () =>
-                                          setState(() => _overlays.removeWhere((VideoOverlay o) => o.id == overlay.id)),
-                                      child: _OverlayPreview(overlay: overlay),
+                                      // onScale (not onPan) so one finger
+                                      // moves it, two fingers pinch to
+                                      // resize and rotate (images) — all
+                                      // through the same callback pair,
+                                      // since a GestureDetector can't mix
+                                      // onPanUpdate and onScaleUpdate
+                                      // without them fighting over the
+                                      // gesture arena.
+                                      onScaleStart: (ScaleStartDetails d) => _onOverlayScaleStart(overlay, d),
+                                      onScaleUpdate: (ScaleUpdateDetails d) =>
+                                          _onOverlayScaleUpdate(overlay, d, previewSize),
+                                      child: Stack(
+                                        clipBehavior: Clip.none,
+                                        children: <Widget>[
+                                          _OverlayPreview(overlay: overlay, previewWidth: previewSize.width),
+                                          Positioned(
+                                            right: -10,
+                                            top: -10,
+                                            child: GestureDetector(
+                                              onTap: () => setState(
+                                                () => _overlays.removeWhere((VideoOverlay o) => o.id == overlay.id),
+                                              ),
+                                              child: Container(
+                                                width: 22,
+                                                height: 22,
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.black87,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(Icons.close, size: 14, color: Colors.white),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                               ],
@@ -733,9 +809,10 @@ class _Timeline extends StatelessWidget {
 }
 
 class _OverlayPreview extends StatelessWidget {
-  const _OverlayPreview({required this.overlay});
+  const _OverlayPreview({required this.overlay, required this.previewWidth});
 
   final VideoOverlay overlay;
+  final double previewWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -744,7 +821,11 @@ class _OverlayPreview extends StatelessWidget {
           text,
           style: TextStyle(color: Color(argbColor), fontSize: fontSize, fontWeight: FontWeight.bold),
         ),
-      ImageOverlay(:final String assetPath) => SizedBox(width: 80, child: Image.file(File(assetPath))),
+      ImageOverlay(:final String assetPath, :final double widthPercent, :final double rotationDegrees) =>
+        Transform.rotate(
+          angle: rotationDegrees * pi / 180,
+          child: SizedBox(width: previewWidth * widthPercent, child: Image.file(File(assetPath))),
+        ),
     };
   }
 }

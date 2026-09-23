@@ -77,7 +77,7 @@ final class FfmpegVideoExportService implements VideoExportService {
           final String? logs = await session.getAllLogsAsString();
           _log.warning("FFmpeg export failed (code: $code)", logs);
           if (!completer.isCompleted) {
-            completer.completeError(StateError("Export failed: ${logs ?? code}"));
+            completer.completeError(StateError("Export failed: ${_summarize(logs) ?? code}"));
           }
         }
       },
@@ -91,6 +91,22 @@ final class FfmpegVideoExportService implements VideoExportService {
     );
 
     return completer.future;
+  }
+
+  /// FFmpeg's full log starts with a long build-configuration banner
+  /// (compiler flags, enabled libraries, paths — hundreds of characters
+  /// before anything about *this* run) followed by the actual per-run
+  /// output; the real failure reason is always near the end, never the
+  /// start. Showing the raw log to a user surfaces the banner and
+  /// nothing useful — this keeps just the last handful of non-empty
+  /// lines, which is where FFmpeg actually reports why a run failed.
+  String? _summarize(String? logs) {
+    if (logs == null || logs.trim().isEmpty) {
+      return null;
+    }
+    final List<String> lines = logs.split("\n").map((String l) => l.trim()).where((String l) => l.isNotEmpty).toList();
+    final List<String> tail = lines.length > 12 ? lines.sublist(lines.length - 12) : lines;
+    return tail.join("\n");
   }
 
   @override

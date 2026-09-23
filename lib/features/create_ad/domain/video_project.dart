@@ -103,6 +103,7 @@ final class ImageOverlay extends VideoOverlay {
     required super.duration,
     required this.assetPath,
     this.widthPercent = 0.3,
+    this.rotationDegrees = 0,
   });
 
   final String assetPath;
@@ -111,6 +112,12 @@ final class ImageOverlay extends VideoOverlay {
   /// image's own aspect ratio (not independently settable — avoids
   /// letting a sticker get stretched out of proportion).
   final double widthPercent;
+
+  /// Clockwise degrees. Rotating *text* isn't supported the same way —
+  /// FFmpeg's `drawtext` filter has no rotate parameter, only image
+  /// overlays can be rotated by [VideoFilterGraphBuilder]'s `rotate`
+  /// filter without a much larger render-text-to-image detour.
+  final double rotationDegrees;
 }
 
 /// The full editable state of one Ad's creation-flow editing session
