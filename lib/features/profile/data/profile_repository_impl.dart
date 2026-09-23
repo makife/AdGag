@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:supabase_flutter/supabase_flutter.dart" as supa;
 
 import "../../../core/error/app_exception.dart" as app_error;
@@ -30,7 +32,7 @@ final class ProfileRepositoryImpl implements ProfileRepository {
   }
 
   @override
-  Future<void> updateProfile({String? displayName, String? bio}) async {
+  Future<void> updateProfile({String? displayName, String? bio, String? avatarUrl}) async {
     final String? userId = _client.auth.currentUser?.id;
     if (userId == null) {
       throw const app_error.AuthException("You need to be signed in to do that.");
@@ -38,6 +40,7 @@ final class ProfileRepositoryImpl implements ProfileRepository {
     final Map<String, dynamic> patch = <String, dynamic>{
       if (displayName != null) "display_name": displayName,
       if (bio != null) "bio": bio,
+      if (avatarUrl != null) "avatar_url": avatarUrl,
     };
     if (patch.isEmpty) {
       return;
@@ -47,5 +50,33 @@ final class ProfileRepositoryImpl implements ProfileRepository {
     } on supa.PostgrestException catch (e) {
       throw app_error.ValidationException(e.message, e);
     }
+  }
+
+  @override
+  Future<String> uploadAvatar(File file) async {
+    final String? userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw const app_error.AuthException("You need to be signed in to do that.");
+    }
+    final String ext = file.path.contains(".") ? file.path.split(".").last.toLowerCase() : "jpg";
+    final String path = "$userId/avatar.$ext";
+
+    try {
+      await _client.storage.from("avatars").upload(
+            path,
+            file,
+            fileOptions: const supa.FileOptions(upsert: true),
+          );
+    } on supa.StorageException catch (e) {
+      throw app_error.ValidationException(e.message, e);
+    }
+
+    // Cache-bust: the path is stable across re-uploads (upsert), so without
+    // this a client/CDN image cache would keep showing the old avatar.
+    final String publicUrl = _client.storage.from("avatars").getPublicUrl(path);
+    final String bustedUrl = "$publicUrl?t=${DateTime.now().millisecondsSinceEpoch}";
+
+    await updateProfile(avatarUrl: bustedUrl);
+    return bustedUrl;
   }
 }

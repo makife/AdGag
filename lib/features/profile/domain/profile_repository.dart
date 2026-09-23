@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "../../feed/domain/ad.dart";
 import "public_profile.dart";
 
@@ -13,5 +15,11 @@ abstract interface class ProfileRepository {
   /// already restrict this to `display_name`/`avatar_url`/`bio` server-side —
   /// this call can never touch `username`, `id`, or `account_status` even if
   /// it tried to. A null field leaves that column unchanged.
-  Future<void> updateProfile({String? displayName, String? bio});
+  Future<void> updateProfile({String? displayName, String? bio, String? avatarUrl});
+
+  /// Uploads [file] to the `avatars` Storage bucket
+  /// (0018_avatar_storage.sql) at `{userId}/avatar.<ext>` (upsert — replaces
+  /// any existing avatar), updates `profiles.avatar_url` to the new public
+  /// URL, and returns that URL.
+  Future<String> uploadAvatar(File file);
 }

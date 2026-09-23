@@ -28,11 +28,13 @@ class CameraRecordView extends StatefulWidget {
 }
 
 class _CameraRecordViewState extends State<CameraRecordView> {
+  List<CameraDescription> _cameras = const <CameraDescription>[];
   CameraController? _controller;
   Timer? _tick;
   DateTime? _recordingStartedAt;
   Duration _elapsed = Duration.zero;
   bool _isRecording = false;
+  bool _switchingCamera = false;
   String? _error;
 
   @override
@@ -51,23 +53,61 @@ class _CameraRecordViewState extends State<CameraRecordView> {
 
     try {
       final List<CameraDescription> cameras = await availableCameras();
+      _cameras = cameras;
       final CameraDescription description = cameras.firstWhere(
         (CameraDescription c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
       );
-      final CameraController controller = CameraController(
-        description,
-        ResolutionPreset.high,
-        enableAudio: true,
-      );
-      await controller.initialize();
-      if (!mounted) {
-        await controller.dispose();
-        return;
-      }
-      setState(() => _controller = controller);
+      await _openCamera(description);
     } catch (e) {
       setState(() => _error = "Couldn't start the camera: $e");
+    }
+  }
+
+  Future<void> _openCamera(CameraDescription description) async {
+    final CameraController controller = CameraController(
+      description,
+      ResolutionPreset.high,
+      enableAudio: true,
+    );
+    await controller.initialize();
+    if (!mounted) {
+      await controller.dispose();
+      return;
+    }
+    setState(() => _controller = controller);
+  }
+
+  /// Switches between front and back cameras (CLAUDE.md section 4 doesn't
+  /// specify this explicitly, but every camera-first creation flow needs
+  /// it — "advertise yourself" is one of the platform's core examples,
+  /// which needs a front-facing camera).
+  Future<void> _switchCamera() async {
+    if (_cameras.length < 2 || _isRecording || _switchingCamera) {
+      return;
+    }
+    final CameraController? current = _controller;
+    if (current == null) {
+      return;
+    }
+    setState(() => _switchingCamera = true);
+    final CameraLensDirection nextDirection =
+        current.description.lensDirection == CameraLensDirection.back
+            ? CameraLensDirection.front
+            : CameraLensDirection.back;
+    final CameraDescription next = _cameras.firstWhere(
+      (CameraDescription c) => c.lensDirection == nextDirection,
+      orElse: () => _cameras.first,
+    );
+    await current.dispose();
+    try {
+      await _openCamera(next);
+    } catch (e) {
+      setState(() => _error = "Couldn't switch camera: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _switchingCamera = false);
+      }
     }
   }
 
@@ -164,6 +204,21 @@ class _CameraRecordViewState extends State<CameraRecordView> {
         fit: StackFit.expand,
         children: <Widget>[
           CameraPreview(controller),
+          if (_cameras.length > 1)
+            Positioned(
+              top: AppSpacing.md,
+              right: AppSpacing.md,
+              child: SafeArea(
+                child: GestureDetector(
+                  onTap: (_isRecording || _switchingCamera) ? null : _switchCamera,
+                  child: Container(
+                    padding: const EdgeInsets.all(AppSpacing.sm),
+                    decoration: const BoxDecoration(color: Colors.black38, shape: BoxShape.circle),
+                    child: const Icon(Icons.cameraswitch_outlined, color: Colors.white, size: 24),
+                  ),
+                ),
+              ),
+            ),
           Positioned(
             bottom: AppSpacing.xxxl + MediaQuery.paddingOf(context).bottom,
             left: 0,

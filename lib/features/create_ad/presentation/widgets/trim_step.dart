@@ -1,6 +1,5 @@
 import "dart:async" show unawaited;
 import "dart:io";
-import "dart:math" show pi;
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -75,13 +74,6 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     return maxStart < 0 ? 0 : maxStart;
   }
 
-  double get _rotationRadians => switch (_rotation) {
-        AppVideoRotation.none => 0,
-        AppVideoRotation.degrees90 => pi / 2,
-        AppVideoRotation.degrees180 => pi,
-        AppVideoRotation.degrees270 => 3 * pi / 2,
-      };
-
   void _cycleRotation() {
     setState(() {
       _rotation = switch (_rotation) {
@@ -109,6 +101,25 @@ class _TrimStepState extends ConsumerState<TrimStep> {
 
   void _retake() {
     ref.read(createAdFlowControllerProvider.notifier).retake();
+  }
+
+  /// Undoes every edit made on this screen — back to the untouched
+  /// capture, still on this screen (unlike Retake, which discards the
+  /// capture itself and goes back to record/import).
+  void _reset() {
+    setState(() {
+      _startSeconds = 0;
+      _speed = 1.0;
+      _rotation = AppVideoRotation.none;
+      _flip = AppFlipDirection.none;
+      _removeAudio = false;
+    });
+    final VideoPlayerController? controller = _controller;
+    if (controller != null) {
+      unawaited(controller.setPlaybackSpeed(1.0));
+      unawaited(controller.setVolume(1));
+      unawaited(controller.seekTo(Duration.zero));
+    }
   }
 
   Future<void> _confirm() async {
@@ -170,6 +181,10 @@ class _TrimStepState extends ConsumerState<TrimStep> {
         title: const Text("Edit your Ad"),
         actions: <Widget>[
           TextButton(
+            onPressed: _exporting ? null : _reset,
+            child: const Text("Reset"),
+          ),
+          TextButton(
             onPressed: _exporting ? null : _retake,
             child: const Text("Retake"),
           ),
@@ -186,8 +201,13 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                     ? ColoredBox(
                         color: Colors.black,
                         child: Center(
-                          child: Transform.rotate(
-                            angle: _rotationRadians,
+                          // RotatedBox (not Transform.rotate) so a 90/270
+                          // turn actually swaps the layout size it reports
+                          // to its parent — Transform.rotate only rotates
+                          // visually and was overflowing this box for
+                          // quarter turns on a 9:16 clip.
+                          child: RotatedBox(
+                            quarterTurns: _rotation.quarterTurns,
                             child: Transform(
                               alignment: Alignment.center,
                               transform: Matrix4.diagonal3Values(
@@ -211,18 +231,30 @@ class _TrimStepState extends ConsumerState<TrimStep> {
               const SizedBox(height: AppSpacing.lg),
 
               if (ready) ...<Widget>[
-                Text(
-                  "Trim — starts at ${_startSeconds.toStringAsFixed(1)}s",
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                Slider(
-                  value: _startSeconds.clamp(0, _maxStartSeconds),
-                  max: _maxStartSeconds,
-                  onChanged: (double v) {
-                    setState(() => _startSeconds = v);
-                    unawaited(controller.seekTo(Duration(milliseconds: (v * 1000).round())));
-                  },
-                ),
+                if (_maxStartSeconds > 0) ...<Widget>[
+                  Text(
+                    "Trim — starts at ${_startSeconds.toStringAsFixed(1)}s",
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  Slider(
+                    value: _startSeconds.clamp(0, _maxStartSeconds),
+                    max: _maxStartSeconds,
+                    onChanged: (double v) {
+                      setState(() => _startSeconds = v);
+                      unawaited(controller.seekTo(Duration(milliseconds: (v * 1000).round())));
+                    },
+                  ),
+                ] else
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                    child: Text(
+                      "Already fits within ${VideoConstraints.max.inSeconds}s — nothing to trim.",
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
+                  ),
                 const SizedBox(height: AppSpacing.sm),
 
                 Text(
@@ -297,5 +329,12 @@ extension on AppVideoRotation {
         AppVideoRotation.degrees90 => 90,
         AppVideoRotation.degrees180 => 180,
         AppVideoRotation.degrees270 => 270,
+      };
+
+  int get quarterTurns => switch (this) {
+        AppVideoRotation.none => 0,
+        AppVideoRotation.degrees90 => 1,
+        AppVideoRotation.degrees180 => 2,
+        AppVideoRotation.degrees270 => 3,
       };
 }

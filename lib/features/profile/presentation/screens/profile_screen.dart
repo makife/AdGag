@@ -66,8 +66,27 @@ class _ProfileBody extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.xl),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    CircleAvatar(
+                      radius: 36,
+                      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      backgroundImage:
+                          profile?.avatarUrl != null ? CachedNetworkImageProvider(profile!.avatarUrl!) : null,
+                      child: profile?.avatarUrl == null ? const Icon(Icons.person, size: 32) : null,
+                    ),
+                    const SizedBox(width: AppSpacing.lg),
+                    Expanded(
+                      child: adsAsync.maybeWhen(
+                        data: (List<Ad> ads) => _StatsRow(ads: ads),
+                        orElse: () => const SizedBox.shrink(),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
                 Text(user.displayName, style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: AppSpacing.xs),
                 Text("@${user.username}", style: Theme.of(context).textTheme.bodyMedium),
@@ -75,11 +94,6 @@ class _ProfileBody extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.sm),
                   Text(profile.bio!),
                 ],
-                const SizedBox(height: AppSpacing.lg),
-                adsAsync.maybeWhen(
-                  data: (List<Ad> ads) => _StatsRow(ads: ads),
-                  orElse: () => const SizedBox.shrink(),
-                ),
                 const SizedBox(height: AppSpacing.lg),
                 OutlinedButton(
                   onPressed: () => unawaited(ref.read(authControllerProvider.notifier).signOut()),
@@ -157,11 +171,10 @@ class _StatsRow extends StatelessWidget {
     final int viewTotal = ads.fold(0, (int sum, Ad ad) => sum + ad.viewCount);
 
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: <Widget>[
         _Stat(label: "Ads", value: ads.length),
-        const SizedBox(width: AppSpacing.xl),
         _Stat(label: "SOLD", value: soldTotal),
-        const SizedBox(width: AppSpacing.xl),
         _Stat(label: "Views", value: viewTotal),
       ],
     );
@@ -177,7 +190,6 @@ class _Stat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text("$value", style: Theme.of(context).textTheme.titleMedium),
         Text(label, style: Theme.of(context).textTheme.bodySmall),
