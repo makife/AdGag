@@ -12,8 +12,8 @@ import "../providers/feed_controller.dart";
 import "../widgets/ad_video_card.dart";
 
 /// HOME / FEED (CLAUDE.md section 6). Fullscreen vertical Ad feed with
-/// bounded-pool preloading (section 17). SOLD/REVIEWS/AD THIS overlays are
-/// intentionally absent until Phase E.
+/// bounded-pool preloading (section 17) and the SOLD/REVIEWS/AD THIS/
+/// SHARE action rail (section 64) via [AdVideoCard].
 class FeedScreen extends ConsumerStatefulWidget {
   const FeedScreen({super.key});
 
@@ -25,6 +25,13 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
   final PageController _pageController = PageController();
   final VideoControllerPool _pool = VideoControllerPool();
   int _activeIndex = 0;
+
+  // Section 63: "After several swipes, subtly surface: 'Think you can do
+  // better?' AD THIS." Session-only (not persisted) — a returning user who
+  // already knows the mechanic seeing it once more per app launch is a
+  // reasonable trade-off against the complexity of persisting "seen" state.
+  bool _hasShownAdThisHint = false;
+  static const int _adThisHintAfterSwipes = 3;
 
   @override
   void initState() {
@@ -62,6 +69,21 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
 
     if (index >= ads.length - 2) {
       unawaited(ref.read(feedControllerProvider.notifier).loadMore());
+    }
+
+    if (!_hasShownAdThisHint && index >= _adThisHintAfterSwipes) {
+      _hasShownAdThisHint = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Think you can do better? Try AD THIS."),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      });
     }
   }
 

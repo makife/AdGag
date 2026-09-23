@@ -1,6 +1,8 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/analytics/ad_event_type.dart";
+import "../../core/analytics/analytics_providers.dart";
 import "../../core/theme/app_colors.dart";
 import "../../core/theme/app_spacing.dart";
 import "../../features/feed/presentation/providers/sold_providers.dart";
@@ -53,6 +55,10 @@ class _SoldButtonState extends ConsumerState<SoldButton> {
         onTap: () async {
           try {
             await ref.read(soldControllerProvider(widget.adId).notifier).toggle();
+            final bool nowSold = ref.read(soldControllerProvider(widget.adId)).valueOrNull ?? false;
+            if (nowSold) {
+              ref.read(analyticsServiceProvider).track(widget.adId, AdEventType.sold);
+            }
           } catch (_) {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(

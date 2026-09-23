@@ -45,6 +45,17 @@ final class FeedRepositoryImpl implements FeedRepository {
 
     return FeedPage(ads: ads, nextCursor: nextCursor);
   }
+
+  @override
+  Future<Ad?> getById(String adId) async {
+    final Map<String, dynamic>? row = await _client
+        .from("ads")
+        .select("*, ad_subjects(display_name), profiles(username)")
+        .eq("id", adId)
+        .eq("status", "ready")
+        .maybeSingle();
+    return row == null ? null : Ad.fromRow(row);
+  }
 }
 
 final class _Cursor {

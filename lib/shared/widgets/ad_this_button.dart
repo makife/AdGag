@@ -1,6 +1,8 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/analytics/ad_event_type.dart";
+import "../../core/analytics/analytics_providers.dart";
 import "../../core/router/route_paths.dart";
 import "../../core/theme/app_colors.dart";
 import "../../core/theme/app_spacing.dart";
@@ -11,6 +13,12 @@ import "count_label.dart";
 /// AD THIS (CLAUDE.md section 9 — "one of the defining mechanics"). Seeds
 /// [CreateAdFlowController] with the origin Ad's subject + id and jumps
 /// straight to the AD tab past the subject step.
+///
+/// The `ad_this` analytics event fires here, at press time (intent) — the
+/// authoritative *completion* signal is `ads.ad_this_count`, incremented
+/// only once the remixed Ad actually reaches `ready`
+/// (0009_ad_this_and_shares.sql). The two are deliberately different
+/// measurements: press-through vs. follow-through.
 class AdThisButton extends ConsumerWidget {
   const AdThisButton({
     required this.adId,
@@ -33,6 +41,7 @@ class AdThisButton extends ConsumerWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.md),
         onTap: () {
+          ref.read(analyticsServiceProvider).track(adId, AdEventType.adThis);
           ref.read(createAdFlowControllerProvider.notifier).startAdThis(
                 subject: AdSubject(
                   id: subjectId,

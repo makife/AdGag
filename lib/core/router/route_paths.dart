@@ -25,6 +25,14 @@ abstract final class RoutePaths {
 
   static const String userProfile = "/u/:username";
   static String userProfileOf(String username) => "/u/$username";
+
+  /// Matches the share link shape ShareButton builds
+  /// (`https://<host>/ad/<id>` — see share_button.dart). Universal/App
+  /// Links hand the OS-resolved path straight to go_router; see README.md
+  /// > Deep Links for the platform-side association-file setup this still
+  /// needs before an external tap actually opens the app.
+  static const String adDetail = "/ad/:adId";
+  static String adDetailOf(String adId) => "/ad/$adId";
 }
 
 extension AppNavigation on BuildContext {

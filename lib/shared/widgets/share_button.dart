@@ -4,14 +4,20 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:share_plus/share_plus.dart";
 
+import "../../core/analytics/ad_event_type.dart";
+import "../../core/analytics/analytics_providers.dart";
 import "../../core/config/env_config.dart";
 import "../../core/supabase/supabase_providers.dart";
 import "../../core/theme/app_spacing.dart";
 import "count_label.dart";
 
 /// External SHARE (CLAUDE.md section 33). Opens the native share sheet
-/// with a universal-link-shaped URL; the link only actually resolves once
-/// the deep-link/App-Store-fallback landing page ships (Phase H) — the
+/// with a universal-link-shaped URL. The in-app side is wired
+/// (AdDetailScreen at RoutePaths.adDetail resolves `/ad/:id`); what's
+/// still missing is the platform association files (apple-app-site-
+/// association / assetlinks.json) that make iOS/Android actually route a
+/// tapped link into the app instead of a browser, and a web fallback page
+/// for users without the app installed — see README.md > Deep Links. The
 /// share action and share_count tracking work today regardless.
 class ShareButton extends ConsumerWidget {
   const ShareButton({
@@ -54,6 +60,8 @@ class ShareButton extends ConsumerWidget {
     await SharePlus.instance.share(
       ShareParams(text: "${subjectLine}on AdGag: $url"),
     );
+
+    ref.read(analyticsServiceProvider).track(adId, AdEventType.shared);
 
     try {
       await ref

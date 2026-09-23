@@ -90,7 +90,10 @@ reports (target_type, target_id, reason, status)
 | 0011 | `daily_challenges.sql` | F | `daily_challenges`, `get_current_daily_challenge()` (server-controlled time window, never trust device clock), `create_draft_ad()` gains `p_daily_challenge_id`, `ads.daily_challenge_id` FK finally wired up, participant-count sync trigger |
 | 0012 | `reports_and_blocks.sql` | G | `reports`, `blocks`, `report_content()`/`block_user()`/`unblock_user()` RPCs, `is_blocked_either_way()` applied to `get_feed_page()` and REVIEWS visibility |
 | 0013 | `rate_limiting.sql` | G | `rate_limit_events` + `enforce_rate_limit()`, wired into `create_comment`/`toggle_sold_reaction`/`create_draft_ad`/`report_content` and a `follows` insert trigger |
-| — | *(later)* | H | `ad_views`, `notifications`, `device_tokens` |
+| 0014 | `notifications.sql` | H | `notifications`, `device_tokens`, triggers producing `new_follower`/`new_review`/`ad_this` notifications, `mark_notification_read()` RPC |
+| 0015 | `analytics.sql` | H | `ad_events` (impression/play_started/two_second_view/completed/rewatched/shared/sold/ad_this), write-only from the client, batched inserts |
+
+All 15 migrations are now applied — this is the full schema for the MVP scope in section 51.
 
 Run migrations with the Supabase CLI once a project exists: `supabase db push` (or apply via the Supabase dashboard SQL editor for a quick start). Never hand-create tables in the dashboard outside a migration file (§23).
 
@@ -196,7 +199,9 @@ Following CLAUDE.md §52 DEVELOPMENT ORDER exactly:
 - [x] **Phase E — Engagement:** SOLD (atomic toggle RPC, optimistic UI with server-truth reconciliation on next fetch), REVIEWS (paginated comments sheet, post/delete-own), AD THIS (`CreateAdFlowController.startAdThis` reuses the Phase D engine, lineage stored via `ads.inspired_by_ad_id`), external SHARE (`share_plus` + `increment_share_count`), AdSubject pages (`SOCK™` header, Trending/Top/New tabs, AD THIS SUBJECT, tap-through viewer). Design-system components added per section 64: `SoldButton`, `ReviewButton`, `AdThisButton`, `ShareButton`, `CreatorHeader`, `SubjectBadge`, `FeedActionRail`, `CountLabel`.
 - [x] **Phase F — Discovery:** heuristic feed ranking (`get_feed_page()` — freshness + engagement, with an explicit note on its keyset-pagination-under-time-decay tradeoff); Market screen (Trending Subjects, Fresh Ads, Daily Ad banner, search entry); search over subjects and users (debounced); Daily Ad end-to-end (banner -> JOIN -> `CreateAdFlowController.startDailyChallenge` -> server-validated against the currently-active challenge). Also closed a gap the search feature exposed: there was no "view another user's profile" screen yet, so added `ProfileRepository`/`PublicProfileScreen` (section 13) with a FOLLOW button and Ads grid, reusing `SubjectAdsViewerScreen`'s tap-through pattern.
 - [x] **Phase G — Safety:** report (Ad/user/comment) via `ReportSheet`, block/unblock (blocking auto-unfollows both directions), rate limiting on the five abuse vectors CLAUDE.md section 29 names explicitly. Block filtering is applied to the main feed and REVIEWS — **explicitly not yet** to subject pages, Market's Fresh Ads, profile Ads grids, or search (documented as a known gap in the migration itself, not silently assumed complete). No Flutter admin UI was built, per section 46 — moderation queue review is a Supabase-dashboard/future-internal-tool concern.
-- [ ] **Phase H — Polish:** notifications, deep links end-to-end, analytics, performance pass, accessibility, onboarding polish.
+- [x] **Phase H — Polish:** notifications foundation (in-app ACTIVITY list, backed by triggers on follow/review/AD THIS; push *dispatch* deliberately not built — see "External Services" below, this needs real FCM/APNs credentials this environment doesn't have); `/ad/:id` deep link (`AdDetailScreen`) with the platform association-file setup documented below as the remaining external step; `ad_events` analytics wired into `AdVideoCard` (impression/play_started/two_second_view/completed/rewatched via a controller-position listener) and into SOLD/SHARE/AD THIS; a contextual "Think you can do better? Try AD THIS" hint after a few swipes (section 63). Performance/accessibility groundwork (bounded controller pool, cursor pagination everywhere, `Semantics` labels on custom buttons, 44px minimum tap targets) was built incrementally through earlier phases rather than as a separate pass — see each phase's entry above.
+
+### All 8 phases (A–H) from CLAUDE.md section 52 are now implemented, unverified.
 
 ---
 
@@ -246,18 +251,41 @@ flutter test
 
 **Why `flutter create .` and not hand-written `android/`/`ios/` folders:** native platform scaffolding (Gradle files, `Info.plist`, Xcode project) is generated and kept correct by the Flutter tool itself and changes with each Flutter release. Hand-writing it here, without the SDK available to verify it builds, would be the highest-risk part of the codebase for the lowest benefit — `flutter create .` on an existing project only adds the missing platform folders and does not touch `lib/` or `pubspec.yaml`.
 
+### Deep Links (Phase H)
+
+`RoutePaths.adDetail`/`userProfile`/`subject` and `AdDetailScreen` etc. already handle the in-app routing once the OS hands a URL to the app. What's still missing is entirely platform/hosting configuration outside this repo's scope:
+
+- **iOS Universal Links**: host an `apple-app-site-association` file at `https://<APP_LINK_HOST>/.well-known/apple-app-site-association` (needs your Apple Team ID + bundle id) and add the associated domain capability in Xcode.
+- **Android App Links**: host `https://<APP_LINK_HOST>/.well-known/assetlinks.json` (needs your app's SHA-256 signing certificate fingerprint) and add an `<intent-filter>` with `android:autoVerify="true"` to `AndroidManifest.xml`.
+- **Web fallback**: a simple landing page at `https://<APP_LINK_HOST>/ad/:id` for users without the app installed (App Store/Play Store redirect) — not part of this Flutter/Supabase codebase; needs separate static hosting.
+- `EnvConfig.appLinkHost` (already wired) controls the host `ShareButton` builds links against per environment.
+
+### Push Notifications (Phase H)
+
+The `notifications`/`device_tokens` tables and in-app ACTIVITY list are implemented and usable today without any of this. Actual push *delivery* needs:
+
+| What | Where to get it | Notes |
+|---|---|---|
+| Firebase project + `google-services.json`/`GoogleService-Info.plist` | Firebase Console | Needed to add `firebase_messaging` to `pubspec.yaml` at all — not added yet, since it can't be verified without real config |
+| APNs auth key (iOS) | Apple Developer → Keys | Uploaded to Firebase Cloud Messaging settings |
+| A push-dispatch Edge Function | *(to be written)* | Reads `device_tokens`, calls FCM's HTTP v1 API using a service account, triggered by the same events that already write to `notifications` (section 32) |
+
+Deliberately not implemented speculatively: a `firebase_messaging` integration written against invented config would be broken code, not working code, in this environment.
+
 ### What I need from you (§67 — external services)
 
 | Credential | Where to get it | Goes in |
 |---|---|---|
 | Supabase project URL + anon key | Supabase dashboard → Project Settings → API | `env/dev.json` (and staging/prod equivalents) |
-| Supabase service role key | Same page — **never** put this in `env/` | Supabase Edge Function secrets only, when Phase C adds the upload-session function |
+| Supabase service role key | Same page — **never** put this in `env/` | Supabase Edge Function secrets only (Phase C's upload-session function) |
 | Mux access token + secret | Mux dashboard → Settings → Access Tokens | Supabase Edge Function secrets (Phase C) |
 | Mux webhook signing secret | Mux dashboard → Settings → Webhooks | Supabase Edge Function secrets (Phase C) |
 | Apple Services ID + key (Sign in with Apple) | Apple Developer → Certificates, IDs & Profiles | Supabase Auth provider config + `sign_in_with_apple` native setup (before App Store submission — see note in `auth_repository_impl.dart`) |
 | Google OAuth client ID (Android/iOS/Web) | Google Cloud Console → APIs & Services → Credentials | Supabase Auth provider config |
+| Apple Team ID + app signing cert fingerprint | Apple Developer / Android signing config | Deep link association files (above) |
+| Firebase project + APNs key | Firebase Console / Apple Developer | Push notifications (above) |
 
-Nothing above blocks continued implementation — Phases B onward proceed without them; they're only needed to actually run the app against a live backend.
+Nothing above blocks continued implementation — every phase proceeded without them; they're only needed to actually run the app against a live backend and to enable push/deep-link delivery specifically.
 
 ## Testing
 
@@ -266,4 +294,4 @@ flutter analyze
 flutter test
 ```
 
-No test has been run in this session (Flutter SDK unavailable here). `test/core/username_validator_test.dart` and `test/features/auth/app_user_test.dart` cover the pure-Dart logic written in Phase A; run them once the SDK is installed and treat any failure as a real bug to fix, not a false positive.
+No test has been run in this session (Flutter SDK unavailable here) — `flutter analyze`/`flutter test` have never executed against this codebase. 14 test files (121 lib files) cover pure-Dart logic across every phase: username/video-constraint validation, row-mapping for every domain model, DB-enum-to-Dart-enum mappings (username/ad_status/report_reason/ad_event_type/notification_type — a mismatch in any of these silently breaks the corresponding feature with a Postgres cast error), Mux URL builders, and the full creation-flow state machine exercised end-to-end against fake repositories. Run them once the SDK is installed and treat any failure as a real bug to fix, not a false positive — see "Setup" above for the full first-run sequence, and the per-phase notes throughout this README for the specific files most worth reviewing carefully first (`camera_record_view.dart`, `supabase/functions/*` in particular).

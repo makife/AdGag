@@ -1,3 +1,4 @@
+import "ad.dart";
 import "feed_page.dart";
 
 /// Feed access, kept behind an interface so the ranking implementation can
@@ -11,4 +12,10 @@ import "feed_page.dart";
 /// work and slot in behind this same method signature.
 abstract interface class FeedRepository {
   Future<FeedPage> fetchPage({String? cursor, int limit = 10});
+
+  /// Single Ad by id, with the same display embeds as [fetchPage] — used
+  /// by the `/ad/:id` deep-link target (section 33/54). Returns null if
+  /// the Ad doesn't exist or isn't `ready` (a blocked/deleted/draft Ad
+  /// shouldn't be viewable via a shared link either).
+  Future<Ad?> getById(String adId);
 }
