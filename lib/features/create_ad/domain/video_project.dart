@@ -1,5 +1,12 @@
 import "../../../core/media/video_editor_service.dart" show AppFlipDirection, AppVideoRotation;
 
+/// Whole-clip color grading (CLAUDE.md section 35's "premium, playful"
+/// look, applied at the user's choice, not by default). Each maps to one
+/// FFmpeg `eq`/`hue` filter — see [VideoFilterGraphBuilder] — and one
+/// `ColorFilter.matrix` approximation for the live preview, so what's
+/// previewed while editing matches what actually gets rendered.
+enum AppColorFilter { none, warm, cool, blackAndWhite }
+
 /// A time-ranged speed multiplier — e.g. 0.5 across seconds 3-5 for a
 /// slow-motion window within an otherwise normal-speed clip. Multiple
 /// zones may exist; zones must not overlap (enforced by
@@ -121,6 +128,7 @@ final class VideoProject {
     this.rotation = AppVideoRotation.none,
     this.flip = AppFlipDirection.none,
     this.removeAudio = false,
+    this.colorFilter = AppColorFilter.none,
   });
 
   final String videoPath;
@@ -139,6 +147,7 @@ final class VideoProject {
   final AppVideoRotation rotation;
   final AppFlipDirection flip;
   final bool removeAudio;
+  final AppColorFilter colorFilter;
 
   Duration get trimmedDuration => trimEnd - trimStart;
 
@@ -148,7 +157,8 @@ final class VideoProject {
       overlays.isNotEmpty ||
       rotation != AppVideoRotation.none ||
       flip != AppFlipDirection.none ||
-      removeAudio;
+      removeAudio ||
+      colorFilter != AppColorFilter.none;
 
   VideoProject withTrim({required Duration start, required Duration end}) => _copyWith(
         trimStart: start,
@@ -160,6 +170,8 @@ final class VideoProject {
   VideoProject withFlip(AppFlipDirection value) => _copyWith(flip: value);
 
   VideoProject withRemoveAudio({required bool value}) => _copyWith(removeAudio: value);
+
+  VideoProject withColorFilter(AppColorFilter value) => _copyWith(colorFilter: value);
 
   /// Adds [zone], rejecting it if it overlaps an existing zone (two
   /// different speed factors can't both apply to the same instant).
@@ -194,6 +206,7 @@ final class VideoProject {
     AppVideoRotation? rotation,
     AppFlipDirection? flip,
     bool? removeAudio,
+    AppColorFilter? colorFilter,
   }) {
     return VideoProject(
       videoPath: videoPath,
@@ -205,6 +218,7 @@ final class VideoProject {
       rotation: rotation ?? this.rotation,
       flip: flip ?? this.flip,
       removeAudio: removeAudio ?? this.removeAudio,
+      colorFilter: colorFilter ?? this.colorFilter,
     );
   }
 }

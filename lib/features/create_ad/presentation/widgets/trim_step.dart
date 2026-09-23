@@ -45,6 +45,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   AppVideoRotation _rotation = AppVideoRotation.none;
   AppFlipDirection _flip = AppFlipDirection.none;
   bool _removeAudio = false;
+  AppColorFilter _colorFilter = AppColorFilter.none;
   final List<SpeedZone> _speedZones = <SpeedZone>[];
   final List<VideoOverlay> _overlays = <VideoOverlay>[];
 
@@ -116,6 +117,17 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   void _toggleRemoveAudio() {
     setState(() => _removeAudio = !_removeAudio);
     unawaited(_controller?.setVolume(_removeAudio ? 0 : 1));
+  }
+
+  void _cycleColorFilter() {
+    setState(() {
+      _colorFilter = switch (_colorFilter) {
+        AppColorFilter.none => AppColorFilter.warm,
+        AppColorFilter.warm => AppColorFilter.cool,
+        AppColorFilter.cool => AppColorFilter.blackAndWhite,
+        AppColorFilter.blackAndWhite => AppColorFilter.none,
+      };
+    });
   }
 
   Future<void> _addSpeedZone() async {
@@ -221,6 +233,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       _rotation = AppVideoRotation.none;
       _flip = AppFlipDirection.none;
       _removeAudio = false;
+      _colorFilter = AppColorFilter.none;
       _speedZones.clear();
       _overlays.clear();
     });
@@ -248,7 +261,11 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       final bool hasSimpleEdit = _rotation != AppVideoRotation.none ||
           _flip != AppFlipDirection.none ||
           _removeAudio;
-      final bool hasAdvancedEdit = _speedZones.isNotEmpty || _overlays.isNotEmpty;
+      // Color grading has no equivalent in the fast easy_video_editor
+      // pipeline (no color-filter support there), so it forces the FFmpeg
+      // path the same way a speed zone or overlay does.
+      final bool hasAdvancedEdit =
+          _speedZones.isNotEmpty || _overlays.isNotEmpty || _colorFilter != AppColorFilter.none;
 
       final LocalVideoDraft finalDraft;
       if (!needsTrim && !hasSimpleEdit && !hasAdvancedEdit) {
@@ -265,6 +282,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
           rotation: _rotation,
           flip: _flip,
           removeAudio: _removeAudio,
+          colorFilter: _colorFilter,
         );
         final VideoExportService service = ref.read(videoExportServiceProvider);
         _progressSub = service.progress.listen((double p) {
@@ -343,18 +361,21 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                               fit: StackFit.expand,
                               children: <Widget>[
                                 Center(
-                                  child: RotatedBox(
-                                    quarterTurns: _rotation.quarterTurns,
-                                    child: Transform(
-                                      alignment: Alignment.center,
-                                      transform: Matrix4.diagonal3Values(
-                                        _flip == AppFlipDirection.horizontal ? -1 : 1,
-                                        _flip == AppFlipDirection.vertical ? -1 : 1,
-                                        1,
-                                      ),
-                                      child: AspectRatio(
-                                        aspectRatio: controller.value.aspectRatio,
-                                        child: VideoPlayer(controller),
+                                  child: ColorFiltered(
+                                    colorFilter: _colorFilter.previewFilter,
+                                    child: RotatedBox(
+                                      quarterTurns: _rotation.quarterTurns,
+                                      child: Transform(
+                                        alignment: Alignment.center,
+                                        transform: Matrix4.diagonal3Values(
+                                          _flip == AppFlipDirection.horizontal ? -1 : 1,
+                                          _flip == AppFlipDirection.vertical ? -1 : 1,
+                                          1,
+                                        ),
+                                        child: AspectRatio(
+                                          aspectRatio: controller.value.aspectRatio,
+                                          child: VideoPlayer(controller),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -384,35 +405,6 @@ class _TrimStepState extends ConsumerState<TrimStep> {
               const SizedBox(height: AppSpacing.lg),
 
               if (ready) ...<Widget>[
-                if (_maxStartSeconds > 0) ...<Widget>[
-                  Text(
-                    "Trim — starts at ${_startSeconds.toStringAsFixed(1)}s",
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  Slider(
-                    value: _startSeconds.clamp(0, _maxStartSeconds),
-                    max: _maxStartSeconds,
-                    onChanged: (double v) {
-                      setState(() => _startSeconds = v);
-                      unawaited(controller.seekTo(Duration(milliseconds: (v * 1000).round())));
-                    },
-                  ),
-                ] else
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        "Already fits within ${VideoConstraints.max.inSeconds}s — nothing to trim.",
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: AppSpacing.sm),
-
                 SizedBox(
                   height: 56,
                   child: ListView(
@@ -444,6 +436,12 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                         onTap: _toggleRemoveAudio,
                       ),
                       _ToolButton(
+                        icon: Icons.palette_outlined,
+                        label: _colorFilter.label,
+                        selected: _colorFilter != AppColorFilter.none,
+                        onTap: _cycleColorFilter,
+                      ),
+                      _ToolButton(
                         icon: Icons.slow_motion_video_outlined,
                         label: "Slow-mo",
                         onTap: () => unawaited(_addSpeedZone()),
@@ -462,17 +460,33 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                   ),
                 ),
 
-                if (_speedZones.isNotEmpty || _overlays.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: AppSpacing.md),
-                  _EditTimeline(
-                    totalDuration: _trimmedDuration,
-                    speedZones: _speedZones,
-                    overlays: _overlays,
-                    onRemoveZone: (SpeedZone z) => setState(() => _speedZones.remove(z)),
-                    onRemoveOverlay: (String id) =>
-                        setState(() => _overlays.removeWhere((VideoOverlay o) => o.id == id)),
+                const SizedBox(height: AppSpacing.md),
+                _Timeline(
+                  originalDuration: controller.value.duration,
+                  trimStartSeconds: _startSeconds,
+                  maxTrimStartSeconds: _maxStartSeconds,
+                  trimmedDuration: _trimmedDuration,
+                  onTrimStartChanged: (double v) {
+                    setState(() => _startSeconds = v);
+                    unawaited(controller.seekTo(Duration(milliseconds: (v * 1000).round())));
+                  },
+                  speedZones: _speedZones,
+                  overlays: _overlays,
+                  onRemoveZone: (SpeedZone z) => setState(() => _speedZones.remove(z)),
+                  onRemoveOverlay: (String id) =>
+                      setState(() => _overlays.removeWhere((VideoOverlay o) => o.id == id)),
+                ),
+                if (_maxStartSeconds == 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.xs),
+                    child: Text(
+                      "Already fits within ${VideoConstraints.max.inSeconds}s — nothing to trim.",
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
                   ),
-                ],
                 const SizedBox(height: AppSpacing.lg),
               ],
 
@@ -550,22 +564,34 @@ class _ToolButton extends StatelessWidget {
   }
 }
 
-/// A real proportional timeline (not just a removable-chip list): a base
-/// track spanning [totalDuration], with speed zones drawn as colored
-/// segments positioned/sized by their actual start/end fraction, and
-/// overlay markers positioned by their start fraction. Tap either to
-/// remove it. Deliberately not draggable/resizable — see TrimStep's own
-/// doc comment for that scope note.
-class _EditTimeline extends StatelessWidget {
-  const _EditTimeline({
-    required this.totalDuration,
+/// The timeline: a base track spanning the *original* captured clip, a
+/// draggable highlighted window showing which up-to-10s slice is
+/// selected (replaces what used to be a separate "Trim" slider — trim IS
+/// the timeline, not an extra control above it), and — inside that
+/// window — speed zones as colored segments and overlay markers, both
+/// positioned by actual time fraction and tap-to-remove. Deliberately
+/// not resizable-by-dragging-edges for zones/overlays yet — see
+/// TrimStep's own doc comment for that scope note; the trim window
+/// itself IS drag-to-move, which is the piece that used to be a
+/// disconnected slider.
+class _Timeline extends StatelessWidget {
+  const _Timeline({
+    required this.originalDuration,
+    required this.trimStartSeconds,
+    required this.maxTrimStartSeconds,
+    required this.trimmedDuration,
+    required this.onTrimStartChanged,
     required this.speedZones,
     required this.overlays,
     required this.onRemoveZone,
     required this.onRemoveOverlay,
   });
 
-  final Duration totalDuration;
+  final Duration originalDuration;
+  final double trimStartSeconds;
+  final double maxTrimStartSeconds;
+  final Duration trimmedDuration;
+  final ValueChanged<double> onTrimStartChanged;
   final List<SpeedZone> speedZones;
   final List<VideoOverlay> overlays;
   final void Function(SpeedZone) onRemoveZone;
@@ -573,21 +599,27 @@ class _EditTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double totalMs = totalDuration.inMilliseconds.toDouble();
-    if (totalMs <= 0) {
+    final double totalSec = originalDuration.inMilliseconds / 1000.0;
+    if (totalSec <= 0) {
       return const SizedBox.shrink();
     }
+    final double trimmedSec = trimmedDuration.inMilliseconds / 1000.0;
+    final bool draggable = maxTrimStartSeconds > 0;
     final ColorScheme scheme = Theme.of(context).colorScheme;
 
     return SizedBox(
-      height: 40,
+      height: 76,
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
           final double width = constraints.maxWidth;
+          final double selLeft = (trimStartSeconds / totalSec) * width;
+          final double selWidth = (trimmedSec / totalSec) * width;
+
           return Stack(
             children: <Widget>[
+              // Base track — the full original clip.
               Positioned(
-                top: 10,
+                top: 18,
                 left: 0,
                 right: 0,
                 child: Container(
@@ -598,17 +630,42 @@ class _EditTimeline extends StatelessWidget {
                   ),
                 ),
               ),
+              // Selection window — drag to move where the up-to-10s clip
+              // starts within the original.
+              Positioned(
+                left: selLeft,
+                width: selWidth,
+                top: 12,
+                child: GestureDetector(
+                  onHorizontalDragUpdate: !draggable
+                      ? null
+                      : (DragUpdateDetails d) {
+                          final double deltaSec = d.delta.dx / width * totalSec;
+                          onTrimStartChanged((trimStartSeconds + deltaSec).clamp(0, maxTrimStartSeconds));
+                        },
+                  child: Container(
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withValues(alpha: 0.3),
+                      border: Border.all(color: scheme.primary, width: 2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+              ),
+              // Speed zones, positioned relative to the *original* clip
+              // (zone times are relative to the trim window's own start).
               for (final SpeedZone zone in speedZones)
                 Positioned(
-                  left: (zone.start.inMilliseconds / totalMs) * width,
-                  width: ((zone.end - zone.start).inMilliseconds / totalMs) * width,
-                  top: 0,
+                  left: ((zone.start.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
+                  width: ((zone.end - zone.start).inMilliseconds / 1000.0 / totalSec) * width,
+                  top: 36,
                   child: GestureDetector(
                     onTap: () => onRemoveZone(zone),
                     child: Tooltip(
                       message: "${zone.factor}x — tap to remove",
                       child: Container(
-                        height: 24,
+                        height: 20,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: scheme.primary,
@@ -624,8 +681,9 @@ class _EditTimeline extends StatelessWidget {
                 ),
               for (final VideoOverlay overlay in overlays)
                 Positioned(
-                  left: (overlay.startSec.inMilliseconds / totalMs) * width - 8,
-                  top: 24,
+                  left:
+                      ((overlay.startSec.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width - 8,
+                  top: 58,
                   child: GestureDetector(
                     onTap: () => onRemoveOverlay(overlay.id),
                     child: Tooltip(
@@ -833,6 +891,47 @@ class _TextOverlayDialogState extends State<_TextOverlayDialog> {
       ],
     );
   }
+}
+
+extension on AppColorFilter {
+  String get label => switch (this) {
+        AppColorFilter.none => "Filter",
+        AppColorFilter.warm => "Warm",
+        AppColorFilter.cool => "Cool",
+        AppColorFilter.blackAndWhite => "B&W",
+      };
+
+  /// A `ColorFilter.matrix` approximation of the FFmpeg `eq`/`hue` filter
+  /// [VideoFilterGraphBuilder] applies for real at render time — close
+  /// enough that what's previewed here matches what gets published,
+  /// without needing to round-trip through FFmpeg just to preview a
+  /// color grade.
+  ColorFilter get previewFilter => switch (this) {
+        AppColorFilter.none => const ColorFilter.matrix(<double>[
+            1, 0, 0, 0, 0, //
+            0, 1, 0, 0, 0, //
+            0, 0, 1, 0, 0, //
+            0, 0, 0, 1, 0, //
+          ]),
+        AppColorFilter.warm => const ColorFilter.matrix(<double>[
+            1, 0, 0, 0, 24, //
+            0, 1, 0, 0, 6, //
+            0, 0, 1, 0, -18, //
+            0, 0, 0, 1, 0, //
+          ]),
+        AppColorFilter.cool => const ColorFilter.matrix(<double>[
+            1, 0, 0, 0, -18, //
+            0, 1, 0, 0, 0, //
+            0, 0, 1, 0, 24, //
+            0, 0, 0, 1, 0, //
+          ]),
+        AppColorFilter.blackAndWhite => const ColorFilter.matrix(<double>[
+            0.2126, 0.7152, 0.0722, 0, 0, //
+            0.2126, 0.7152, 0.0722, 0, 0, //
+            0.2126, 0.7152, 0.0722, 0, 0, //
+            0, 0, 0, 1, 0, //
+          ]),
+      };
 }
 
 extension on AppVideoRotation {

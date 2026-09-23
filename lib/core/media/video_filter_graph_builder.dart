@@ -148,6 +148,16 @@ abstract final class VideoFilterGraphBuilder {
       case AppFlipDirection.vertical:
         transformFilters.add("vflip");
     }
+    switch (project.colorFilter) {
+      case AppColorFilter.none:
+        break;
+      case AppColorFilter.warm:
+        transformFilters.add("eq=gamma_r=1.15:gamma_b=0.9:saturation=1.1");
+      case AppColorFilter.cool:
+        transformFilters.add("eq=gamma_r=0.9:gamma_b=1.15:saturation=1.05");
+      case AppColorFilter.blackAndWhite:
+        transformFilters.add("hue=s=0");
+    }
     if (transformFilters.isEmpty) {
       parts.add("[$currentVideoLabel]null[vout]");
     } else {
