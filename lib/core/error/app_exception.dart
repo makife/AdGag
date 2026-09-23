@@ -4,7 +4,7 @@
 /// pattern-matches on a third-party exception type (CLAUDE.md section 56 —
 /// consistent error handling).
 sealed class AppException implements Exception {
-  const AppException(this.message, {this.cause});
+  const AppException(this.message, [this.cause]);
 
   final String message;
   final Object? cause;

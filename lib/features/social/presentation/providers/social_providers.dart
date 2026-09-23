@@ -8,15 +8,15 @@ final Provider<FollowRepository> followRepositoryProvider = Provider<FollowRepos
   return FollowRepositoryImpl(ref.watch(supabaseClientProvider));
 });
 
-final FutureProvider<bool> isFollowingProvider = FutureProvider.family<bool, String>(
+final FutureProviderFamily<bool, String> isFollowingProvider = FutureProvider.family<bool, String>(
   (ref, userId) => ref.watch(followRepositoryProvider).isFollowing(userId),
 );
 
-final FutureProvider<int> followerCountProvider = FutureProvider.family<int, String>(
+final FutureProviderFamily<int, String> followerCountProvider = FutureProvider.family<int, String>(
   (ref, userId) => ref.watch(followRepositoryProvider).followerCount(userId),
 );
 
-final FutureProvider<int> followingCountProvider = FutureProvider.family<int, String>(
+final FutureProviderFamily<int, String> followingCountProvider = FutureProvider.family<int, String>(
   (ref, userId) => ref.watch(followRepositoryProvider).followingCount(userId),
 );
 

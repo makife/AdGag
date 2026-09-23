@@ -93,21 +93,31 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
           return AppShell(navigationShell: shell);
         },
         branches: <StatefulShellBranch>[
-          StatefulShellBranch(routes: <RouteBase>[
-            GoRoute(path: RoutePaths.home, builder: (context, state) => const FeedScreen()),
-          ]),
-          StatefulShellBranch(routes: <RouteBase>[
-            GoRoute(path: RoutePaths.market, builder: (context, state) => const MarketScreen()),
-          ]),
-          StatefulShellBranch(routes: <RouteBase>[
-            GoRoute(path: RoutePaths.create, builder: (context, state) => const CreateAdScreen()),
-          ]),
-          StatefulShellBranch(routes: <RouteBase>[
-            GoRoute(path: RoutePaths.activity, builder: (context, state) => const ActivityScreen()),
-          ]),
-          StatefulShellBranch(routes: <RouteBase>[
-            GoRoute(path: RoutePaths.profile, builder: (context, state) => const ProfileScreen()),
-          ]),
+          StatefulShellBranch(
+            routes: <RouteBase>[
+              GoRoute(path: RoutePaths.home, builder: (context, state) => const FeedScreen()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: <RouteBase>[
+              GoRoute(path: RoutePaths.market, builder: (context, state) => const MarketScreen()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: <RouteBase>[
+              GoRoute(path: RoutePaths.create, builder: (context, state) => const CreateAdScreen()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: <RouteBase>[
+              GoRoute(path: RoutePaths.activity, builder: (context, state) => const ActivityScreen()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: <RouteBase>[
+              GoRoute(path: RoutePaths.profile, builder: (context, state) => const ProfileScreen()),
+            ],
+          ),
         ],
       ),
     ],

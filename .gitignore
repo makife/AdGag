@@ -10,6 +10,11 @@ build/
 *.freezed.dart
 **/generated_plugin_registrant.dart
 
+# Generated from l10n/*.arb by `flutter gen-l10n` (runs automatically via
+# pubspec.yaml's `generate: true` on every pub get/run/build/test) —
+# source of truth is the ARB files, not this output.
+/lib/core/localization/generated/
+
 # Platform folders (generated via `flutter create .` — see README)
 /android/
 /ios/

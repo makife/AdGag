@@ -11,13 +11,14 @@ final Provider<SubjectRepository> subjectRepositoryProvider = Provider<SubjectRe
   return SubjectRepositoryImpl(ref.watch(supabaseClientProvider));
 });
 
-final FutureProvider<AdSubject?> subjectByIdProvider = FutureProvider.family<AdSubject?, String>(
+final FutureProviderFamily<AdSubject?, String> subjectByIdProvider =
+    FutureProvider.family<AdSubject?, String>(
   (ref, subjectId) => ref.watch(subjectRepositoryProvider).getSubjectById(subjectId),
 );
 
 /// Keyed by (subjectId, sort) so each tab on the subject page caches
 /// independently.
-final FutureProvider<List<Ad>> subjectAdsProvider =
+final FutureProviderFamily<List<Ad>, (String, SubjectAdsSort)> subjectAdsProvider =
     FutureProvider.family<List<Ad>, (String, SubjectAdsSort)>((ref, args) {
   final (String subjectId, SubjectAdsSort sort) = args;
   return ref.watch(subjectRepositoryProvider).fetchAdsForSubject(subjectId: subjectId, sort: sort);

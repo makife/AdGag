@@ -4,6 +4,7 @@ import "package:cached_network_image/cached_network_image.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../../../core/supabase/supabase_providers.dart";
 import "../../../../core/theme/app_spacing.dart";
 import "../../../feed/domain/ad.dart";
 import "../../../moderation/presentation/providers/moderation_providers.dart";

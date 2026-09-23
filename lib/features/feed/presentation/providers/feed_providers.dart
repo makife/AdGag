@@ -9,6 +9,6 @@ final Provider<FeedRepository> feedRepositoryProvider = Provider<FeedRepository>
   return FeedRepositoryImpl(ref.watch(supabaseClientProvider));
 });
 
-final FutureProvider<Ad?> adByIdProvider = FutureProvider.family<Ad?, String>(
+final FutureProviderFamily<Ad?, String> adByIdProvider = FutureProvider.family<Ad?, String>(
   (ref, adId) => ref.watch(feedRepositoryProvider).getById(adId),
 );

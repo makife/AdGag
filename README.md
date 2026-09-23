@@ -201,7 +201,7 @@ Following CLAUDE.md §52 DEVELOPMENT ORDER exactly:
 - [x] **Phase G — Safety:** report (Ad/user/comment) via `ReportSheet`, block/unblock (blocking auto-unfollows both directions), rate limiting on the five abuse vectors CLAUDE.md section 29 names explicitly. Block filtering is applied to the main feed and REVIEWS — **explicitly not yet** to subject pages, Market's Fresh Ads, profile Ads grids, or search (documented as a known gap in the migration itself, not silently assumed complete). No Flutter admin UI was built, per section 46 — moderation queue review is a Supabase-dashboard/future-internal-tool concern.
 - [x] **Phase H — Polish:** notifications foundation (in-app ACTIVITY list, backed by triggers on follow/review/AD THIS; push *dispatch* deliberately not built — see "External Services" below, this needs real FCM/APNs credentials this environment doesn't have); `/ad/:id` deep link (`AdDetailScreen`) with the platform association-file setup documented below as the remaining external step; `ad_events` analytics wired into `AdVideoCard` (impression/play_started/two_second_view/completed/rewatched via a controller-position listener) and into SOLD/SHARE/AD THIS; a contextual "Think you can do better? Try AD THIS" hint after a few swipes (section 63). Performance/accessibility groundwork (bounded controller pool, cursor pagination everywhere, `Semantics` labels on custom buttons, 44px minimum tap targets) was built incrementally through earlier phases rather than as a separate pass — see each phase's entry above.
 
-### All 8 phases (A–H) from CLAUDE.md section 52 are now implemented, unverified.
+### All 8 phases (A–H) from CLAUDE.md section 52 are now implemented. `flutter analyze` and `flutter test` pass — see "Testing" below for exactly what that does and doesn't prove.
 
 ---
 
@@ -209,7 +209,7 @@ Following CLAUDE.md §52 DEVELOPMENT ORDER exactly:
 
 ### Prerequisites
 
-1. **Flutter SDK** (stable channel, 3.47+ / Dart 3.13+) — **not installed in this dev environment**; install it yourself and run the steps below. Until then, this codebase has been written carefully but **not compiled or run** — treat it as reviewed-but-unverified.
+1. **Flutter SDK** (stable channel, 3.47+ / Dart 3.13+). `flutter analyze` and `flutter test` now both pass clean against Flutter 3.47.5 — see "Verification log" below for what that did and didn't catch.
 2. A [Supabase](https://supabase.com) project (free tier is fine for dev).
 3. (Phase C) A [Mux](https://mux.com) account.
 4. (Social login, optional for Phase A) Apple Developer account + Google Cloud OAuth client.
@@ -294,4 +294,27 @@ flutter analyze
 flutter test
 ```
 
-No test has been run in this session (Flutter SDK unavailable here) — `flutter analyze`/`flutter test` have never executed against this codebase. 14 test files (121 lib files) cover pure-Dart logic across every phase: username/video-constraint validation, row-mapping for every domain model, DB-enum-to-Dart-enum mappings (username/ad_status/report_reason/ad_event_type/notification_type — a mismatch in any of these silently breaks the corresponding feature with a Postgres cast error), Mux URL builders, and the full creation-flow state machine exercised end-to-end against fake repositories. Run them once the SDK is installed and treat any failure as a real bug to fix, not a false positive — see "Setup" above for the full first-run sequence, and the per-phase notes throughout this README for the specific files most worth reviewing carefully first (`camera_record_view.dart`, `supabase/functions/*` in particular).
+Both commands pass clean as of the verification below. 14 test files cover pure-Dart logic across every phase: username/video-constraint validation, row-mapping for every domain model, DB-enum-to-Dart-enum mappings (username/ad_status/report_reason/ad_event_type/notification_type — a mismatch in any of these silently breaks the corresponding feature with a Postgres cast error), Mux URL builders, and the full creation-flow state machine exercised end-to-end against fake repositories.
+
+**What this verification does NOT cover** — none of the following have run, because they need a real Supabase project, a real Mux account, and/or a physical device, none of which exist in this environment:
+- The SQL migrations have never executed against a real Postgres instance (`supabase db push` or equivalent).
+- `supabase/functions/*` (TypeScript/Deno) have never run at all — a completely different toolchain `flutter analyze` doesn't touch.
+- `camera_record_view.dart`, the upload pipeline, and anything requiring platform channels (camera, video_player, permission_handler) have never executed on a device or simulator — `flutter test` runs in a headless Dart VM, not a device.
+- No widget tests exist yet, only pure logic tests — a screen can pass `flutter analyze` and still throw at first render (a bad `Consumer` scope, a missing `MaterialApp` ancestor, etc.).
+
+Treat those as the next verification milestones, in roughly that order of risk.
+
+### Verification log (2026, Flutter 3.47.5 / Dart 3.13.4)
+
+First real `flutter pub get` against this codebase surfaced two dependency pins that were simply wrong — version numbers that had never been checked against an actual pub.dev resolve:
+- `easy_video_editor: ^1.1.0` — that version never existed; real releases top out at 0.1.6 (still a healthy package: pub score 160/160, actively maintained — only the version number was wrong). Fixed to `^0.1.6`.
+- `intl: ^0.19.0` — incompatible with the `flutter_localizations` version shipped by this Flutter SDK, which requires `^0.20.3`. Fixed accordingly.
+
+`flutter analyze` then caught several real bugs static reading alone had missed:
+- `AppException`'s `cause` was declared as a named super parameter but every subclass forwarded it positionally — fixed by making it positional on the base class (nothing referenced it by name anywhere, so this was a pure bug fix, not a behavior change).
+- `app_theme.dart` used `CupertinoPageTransitionsBuilder` without importing `package:flutter/cupertino.dart` — `material.dart` does not re-export it.
+- Six `FutureProvider.family(...)` declarations were typed as `FutureProvider<T>` when `.family` actually returns `FutureProviderFamily<T, Arg>` — a real type error in `feed_providers.dart`, `profile_providers.dart`, `social_providers.dart` (×3), and `subject_providers.dart` (×2).
+- A missing `currentUserIdProvider` import in `public_profile_screen.dart`.
+- `supabase_flutter` 2.17 deprecated `Supabase.initialize`'s `anonKey` parameter in favor of `publishableKey`.
+
+`flutter test` then passed all 59 test cases with no further changes needed.

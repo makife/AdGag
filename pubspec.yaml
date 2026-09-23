@@ -47,14 +47,20 @@ dependencies:
   # Backend
   supabase_flutter: ^2.9.1
 
-  # Localization
-  intl: ^0.19.0
+  # Localization (version pinned by what flutter_localizations from the
+  # installed Flutter SDK requires — let `flutter pub get` dictate this).
+  intl: ^0.20.3
 
   # Media: capture, playback, gallery import, trimming
   camera: ^0.11.0+2
   video_player: ^2.9.5
   image_picker: ^1.1.2
-  easy_video_editor: ^1.1.0
+  # NOTE: package is still pre-1.0 (0.1.6 as of 2026-06); pub.dev score
+  # 160/160, 53 likes, ~7.2k downloads/30d, actively maintained — but pin
+  # tightly since a 0.x package can introduce breaking changes on any
+  # minor bump per semver. Verified against pub.dev API before pinning
+  # (a prior pin of ^1.1.0 here was wrong — that version never existed).
+  easy_video_editor: ^0.1.6
 
   # Media delivery / rendering
   cached_network_image: ^3.4.1

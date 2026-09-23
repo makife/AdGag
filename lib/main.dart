@@ -14,7 +14,10 @@ Future<void> main() async {
 
   await Supabase.initialize(
     url: EnvConfig.supabaseUrl,
-    anonKey: EnvConfig.supabaseAnonKey,
+    // supabase_flutter 2.17 deprecated `anonKey` in favor of
+    // `publishableKey` (Supabase's newer API-key terminology) — same
+    // value, non-deprecated parameter name.
+    publishableKey: EnvConfig.supabaseAnonKey,
     // Deep links (section 33/54) land through go_router; Supabase only
     // needs its own auth-callback scheme for OAuth/email-link redirects.
     authOptions: const FlutterAuthClientOptions(

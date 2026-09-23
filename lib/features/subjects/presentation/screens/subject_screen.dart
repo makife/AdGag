@@ -103,11 +103,11 @@ class _SubjectAdsGrid extends ConsumerWidget {
       error: (Object error, StackTrace stackTrace) => Center(child: Text("$error")),
       data: (List<Ad> ads) {
         if (ads.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.all(AppSpacing.xxl),
+          return const Padding(
+            padding: EdgeInsets.all(AppSpacing.xxl),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              children: const <Widget>[
+              children: <Widget>[
                 Text("No one's sold this yet."),
                 SizedBox(height: AppSpacing.xs),
                 Text("Be the first to advertise it.", style: TextStyle(color: Colors.grey)),

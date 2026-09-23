@@ -10,7 +10,6 @@ import "../../../../core/theme/app_spacing.dart";
 import "../../domain/local_video_draft.dart";
 import "../../domain/video_constraints.dart";
 import "../providers/create_ad_flow_controller.dart";
-import "../providers/create_ad_flow_state.dart";
 
 /// Deliberately the simplest possible trim interaction (CLAUDE.md section
 /// 4: "Editing must remain intentionally lightweight"): pick where a

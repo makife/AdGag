@@ -10,11 +10,11 @@ final Provider<ProfileRepository> profileRepositoryProvider = Provider<ProfileRe
   return ProfileRepositoryImpl(ref.watch(supabaseClientProvider));
 });
 
-final FutureProvider<PublicProfile?> profileByUsernameProvider =
+final FutureProviderFamily<PublicProfile?, String> profileByUsernameProvider =
     FutureProvider.family<PublicProfile?, String>(
   (ref, username) => ref.watch(profileRepositoryProvider).getByUsername(username),
 );
 
-final FutureProvider<List<Ad>> adsByUserProvider = FutureProvider.family<List<Ad>, String>(
+final FutureProviderFamily<List<Ad>, String> adsByUserProvider = FutureProvider.family<List<Ad>, String>(
   (ref, userId) => ref.watch(profileRepositoryProvider).fetchAdsByUser(userId),
 );
