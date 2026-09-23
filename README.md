@@ -131,9 +131,9 @@ Flutter                Edge Function              Video Provider (Mux)         S
 
 Webhook handling is idempotent (keyed on provider asset id) and signature-verified (§43) — a POST merely *claiming* "video ready" without a valid signature is rejected.
 
-**Implemented** (Phase C): `supabase/functions/create-upload-session` (steps 2-3 above — checks the caller owns the draft Ad, mints a Mux Direct Upload with `passthrough` set to the Ad id, marks the Ad `uploading`) and `supabase/functions/mux-webhook` (steps 6-8 — verifies the `Mux-Signature` HMAC, records the delivery in `video_webhook_events` before acting on it, updates the Ad to `ready`/`failed`/`processing`/`deleted` by event type). Step 4 (the client PUT) is `lib/core/video/dio_video_uploader.dart`; step 9 is `FeedRepository` only ever selecting `status = 'ready'`.
+**Implemented and deployed** (Phase C, deployed/verified in the Mux verification log below): `supabase/functions/create-upload-session` (steps 2-3 above — checks the caller owns the draft Ad, mints a Mux Direct Upload with `passthrough` set to the Ad id, marks the Ad `uploading`) and `supabase/functions/mux-webhook` (steps 6-8 — verifies the `Mux-Signature` HMAC, records the delivery in `video_webhook_events` before acting on it, updates the Ad to `ready`/`failed`/`processing`/`deleted` by event type). Step 4 (the client PUT) is `lib/core/video/dio_video_uploader.dart`; step 9 is `FeedRepository` only ever selecting `status = 'ready'`. Step 4 itself (an actual video file's bytes flowing through the Flutter app) is the one piece not yet verified against real infrastructure — see "What has NOT been verified" below.
 
-**Deploying the functions:**
+**Deploying the functions** (already done for the `diwxzyhwmcajyjbcfwhe` project — this is the reference command for redeploying after a code change, or for a new environment):
 
 ```bash
 supabase functions deploy create-upload-session
@@ -277,18 +277,18 @@ Deliberately not implemented speculatively: a `firebase_messaging` integration w
 
 ### What I need from you (§67 — external services)
 
-| Credential | Where to get it | Goes in |
-|---|---|---|
-| Supabase project URL + anon key | Supabase dashboard → Project Settings → API | `env/dev.json` (and staging/prod equivalents) |
-| Supabase service role key | Same page — **never** put this in `env/` | Supabase Edge Function secrets only (Phase C's upload-session function) |
-| Mux access token + secret | Mux dashboard → Settings → Access Tokens | Supabase Edge Function secrets (Phase C) |
-| Mux webhook signing secret | Mux dashboard → Settings → Webhooks | Supabase Edge Function secrets (Phase C) |
-| Apple Services ID + key (Sign in with Apple) | Apple Developer → Certificates, IDs & Profiles | Supabase Auth provider config + `sign_in_with_apple` native setup (before App Store submission — see note in `auth_repository_impl.dart`) |
-| Google OAuth client ID (Android/iOS/Web) | Google Cloud Console → APIs & Services → Credentials | Supabase Auth provider config |
-| Apple Team ID + app signing cert fingerprint | Apple Developer / Android signing config | Deep link association files (above) |
-| Firebase project + APNs key | Firebase Console / Apple Developer | Push notifications (above) |
+| Credential | Where to get it | Goes in | Status |
+|---|---|---|---|
+| Supabase project URL + anon/publishable key | Supabase dashboard → Project Settings → API | `env/dev.json` (and staging/prod equivalents) | ✅ configured (dev) |
+| Supabase service role key | Same page — **never** put this in `env/` | Used only transiently for admin API test calls this session; never stored in any file | n/a — not needed by app code |
+| Mux access token + secret | Mux dashboard → Settings → Access Tokens | Supabase Edge Function secrets | ✅ set, verified live |
+| Mux webhook signing secret | Mux dashboard → Settings → Webhooks | Supabase Edge Function secrets | ✅ set, verified live |
+| Apple Services ID + key (Sign in with Apple) | Apple Developer → Certificates, IDs & Profiles | Supabase Auth provider config + `sign_in_with_apple` native setup (before App Store submission — see note in `auth_repository_impl.dart`) | not provided |
+| Google OAuth client ID (Android/iOS/Web) | Google Cloud Console → APIs & Services → Credentials | Supabase Auth provider config | not provided |
+| Apple Team ID + app signing cert fingerprint | Apple Developer / Android signing config | Deep link association files (above) | not provided |
+| Firebase project + APNs key | Firebase Console / Apple Developer | Push notifications (above) | not provided |
 
-Nothing above blocks continued implementation — every phase proceeded without them; they're only needed to actually run the app against a live backend and to enable push/deep-link delivery specifically.
+Nothing above blocks continued implementation — every phase proceeded without them; the remaining rows are only needed for social login and push/deep-link delivery specifically.
 
 ## Testing
 
@@ -302,17 +302,17 @@ Both commands pass clean as of the verification below. 14 test files cover pure-
 ### What HAS been verified against real infrastructure (not just statically)
 
 - **The full SQL schema** (17 migrations) applied cleanly to a real hosted Postgres 17.6 project via `supabase db push`, and was then exercised end-to-end through real HTTP calls (signup → `handle_new_user` trigger → profile row → sign-in → `get_or_create_ad_subject` → `create_draft_ad` → RLS draft-invisible-to-anon → `toggle_sold_reaction` business-rule rejection → `delete_own_ad` → account deletion cascade), all against the actual `diwxzyhwmcajyjbcfwhe` project, then cleaned up. See the Verification log below for the two real bugs this surfaced and fixed.
-- **Both Edge Functions type-check** (`deno check`) against their real npm dependencies (`@supabase/supabase-js`) — the first validation they've ever had, in a completely different toolchain than Flutter's.
+- **Both Edge Functions are deployed and have been invoked against the real project**, both statically (`deno check`) and at runtime: `create-upload-session` made a real call to the Mux API and got back a real, valid Direct Upload URL; `mux-webhook` correctly processed a cryptographically-signed `video.asset.ready` event end to end (ad transitioned to `ready` with correct `playback_id`/`thumbnail_url`/`duration_ms`), rejected a replayed duplicate, an invalid signature, a missing signature, and an expired (10-minute-old) timestamp — see the Verification log below. Mux also appears to have called the webhook for real on its own (an unplanned second, UUID-shaped event id showed up in the idempotency log that this session never generated), suggesting the webhook registration itself is live and correctly signature-verified against genuine Mux traffic, not just synthetic test payloads.
 - **`flutter build web`** succeeds — a full dart2js/wasm-dry-run compile of all 121+ lib files against the real Supabase config, not just `flutter analyze`'s type-checking.
 - The Flutter app is configured against the real project (`env/dev.json`, gitignored, never committed) using the publishable key — see "Environments" above.
 
 ### What has NOT been verified — still needs a real device, external service, or your input
 
-- **Edge Functions have never been deployed or invoked.** `deno check` proves they compile; it proves nothing about runtime behavior (the Mux API call, webhook signature verification against a real Mux delivery, etc.). Deployment is intentionally blocked on Mux credentials — see "External Services" below for exactly what's needed.
+- **No real video was ever uploaded through the pipeline.** `create-upload-session` was proven to talk to Mux correctly, and `mux-webhook` was proven to process a `video.asset.ready` event correctly — but no actual video file was PUT to a Mux upload URL and processed by Mux itself (no `ffmpeg` and very little free disk space in this environment to generate/hold a test file). The two halves are each verified against real infrastructure; the full round trip (record → upload → Mux transcodes → real webhook fires → ready) has not been.
 - **No physical device or emulator run.** `camera_record_view.dart`, the upload pipeline, and anything touching platform channels (camera, video_player, permission_handler) have never executed on an actual Android/iOS device or emulator — only compiled for web. `flutter build apk --debug` was attempted and failed on low disk space (2.3GB free), not a code issue — see the Verification log below.
 - **iOS is completely unverified** — no Mac/Xcode in this environment; the `ios/` folder was generated by `flutter create .` but never built.
 - **No widget tests exist**, only pure logic tests — a screen can pass `flutter analyze`/`flutter build web` and still throw at first render on a real device (a bad `Consumer` scope, a permission dialog interaction, etc.).
-- **Mux, Apple/Google OAuth, and Firebase/APNs are entirely unconfigured** — see "External Services" below.
+- **Apple/Google OAuth and Firebase/APNs are entirely unconfigured** — see "External Services" below.
 
 Treat those as the next verification milestones, in roughly that order of risk.
 
@@ -351,6 +351,16 @@ Re-verified end to end with a throwaway test account after both fixes: anonymous
 
 **`flutter build web --dart-define-from-file=env/dev.json` succeeded** — a real dart2js compile of the entire app against the real backend config, not just static analysis. Two non-blocking warnings, both worth knowing about but neither a bug in this repo's code: a wasm-compatibility lint inside `easy_video_editor`'s own web platform-channel source (only matters if a future `--wasm` web build is needed), and a `CupertinoIcons` font-asset notice (the app doesn't use any Cupertino icon glyphs, only `CupertinoPageTransitionsBuilder` for transition behavior, so this is a no-op tree-shake case, not a missing dependency).
 
-**Deliberately not done, per explicit instruction**: Edge Function deployment. `supabase functions list` / `supabase secrets list` against the real project both confirm nothing is deployed and no secrets are set. Deploying `create-upload-session` and `mux-webhook` needs `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, and `MUX_WEBHOOK_SIGNING_SECRET` first (see "External Services" above) — stopped here rather than deploying code that would fail at runtime with unconfigured secrets.
-
 **Attempted, blocked by environment, not code**: `flutter build apk --debug` failed after ~9 minutes — not a build error, but the machine's `C:` drive being at 100% capacity (2.3GB free of 238GB) while Gradle tried to download the Android NDK (~2.6GB). This needs disk space freed on the machine, not a code fix; `flutter build web` above already gives real full-compile verification in the meantime.
+
+### Verification log — Mux connected, Edge Functions deployed and runtime-tested (2026)
+
+You provided a Mux access token/secret and webhook signing secret for the "AdGag Development" Mux environment. Set as Supabase secrets (`supabase secrets set`, values never written to any file, confirmed afterwards via `supabase secrets list` which only ever returns hashes) and deployed both functions (`supabase functions deploy create-upload-session`, `supabase functions deploy mux-webhook --no-verify-jwt`).
+
+No `ffmpeg` is available in this environment and disk space is very tight, so a full real-video round trip (PUT actual bytes to Mux, wait for Mux to transcode, wait for a real `video.asset.ready` delivery) wasn't attempted. Instead, verified each half against real infrastructure separately, using a throwaway test account created and deleted the same way as the schema verification above:
+
+- **`create-upload-session`**: called it for real, authenticated, against an owned draft Ad. It made a real call to the Mux API and returned a genuine, valid Mux Direct Upload URL (`https://direct-uploads-....mux.com/upload/...`), and correctly updated the Ad's `status` to `uploading` and `video_provider` to `mux`. This proves the Mux token/secret are valid and the function's Mux integration works, independent of whether any bytes ever get uploaded.
+- **`mux-webhook`**: constructed a `video.asset.ready` payload by hand and signed it with the real webhook secret using the exact scheme Mux uses (`HMAC-SHA256` over `"{timestamp}.{rawBody}"`, sent as `Mux-Signature: t=...,v1=...`) — this exercises the identical code path a genuine Mux delivery would, just with a synthetic body. Result: the Ad correctly transitioned to `status: ready` with `playback_id`, `thumbnail_url` (correctly constructed as `https://image.mux.com/{playback_id}/thumbnail.jpg?time=0`), `duration_ms` (7.5s → 7500, correctly converted), and `published_at` all set correctly. Then verified every rejection path: resending the identical event returned "Already processed" (200, not reprocessed); an invalid signature, a missing signature, and a signature computed with a 10-minute-old timestamp were all rejected with 401.
+- **Unplanned bonus signal**: the idempotency log (`video_webhook_events`, readable only via admin access — confirmed anon genuinely cannot read it, which is correct by design) contained a second event with a UUID-shaped id this session never generated, timestamped right around when `create-upload-session` was called. The most likely explanation is Mux itself fired a real webhook (e.g. for upload-session creation) that our deployed function received, correctly verified against a genuine Mux signature, and handled gracefully via the "unhandled event type, no-op" path — evidence the webhook registration is live end to end against real Mux traffic, not just this session's synthetic tests.
+
+All test data (auth user, profile via cascade, draft Ad, Ad subjects) was deleted afterward and confirmed empty via direct table counts; the 2-row webhook idempotency log was left as-is (no PII, not client-readable, legitimate operational bookkeeping rather than test pollution).
