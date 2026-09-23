@@ -185,7 +185,7 @@ Following CLAUDE.md §52 DEVELOPMENT ORDER exactly:
 - [x] **Phase A — Foundation:** Flutter scaffold, theming, routing + deep-link-ready shell, localization (en/tr), Supabase integration, email auth + session handling, `profiles` migration + RLS, unit tests for username rules.
 - [x] **Phase B — Social Core:** `follows` (+ `FollowRepository`), `ad_subjects` with canonicalization/aliases/translations (+ `SubjectRepository`), full `ads` metadata schema with draft-lifecycle RPCs (+ `DraftAdRepository`), cursor-paginated `FeedRepository` (freshness-only ordering — heuristic ranking is Phase F), unit tests for row-mapping logic. No new screens this phase by design — feed/creation UI needs video (Phase C/D) to be meaningful; the data layer is ready for them.
 - [x] **Phase C — Video:** `VideoService`/`VideoUploader` abstractions; `create-upload-session` + `mux-webhook` Edge Functions (signature verification, idempotency, ownership checks); `VideoControllerPool` (bounded, evicts outside the current+neighbor window); `FeedScreen` now a real vertical `PageView` of playable Ads (subject/creator overlay only — SOLD/REVIEWS/AD THIS are Phase E). Recording/import UI is still Phase D; this phase is the plumbing a recorded file flows through.
-- [ ] **Phase D — Creation:** camera/gallery capture, 10s constraint, subject picker, publish flow, draft/error handling.
+- [x] **Phase D — Creation:** one `CreateAdFlowController` state machine (subject -> capture -> trim-if-needed -> caption -> publish -> upload/processing status) driving `CreateAdScreen`; camera recording with a hard 10s auto-stop and a discard-if-under-1.5s guard; gallery import via `image_picker`; a deliberately minimal "pick where your 10s starts" trim step (`easy_video_editor`) shown only when a clip is too long; publish polls the Ad's status after upload since the draft->ready transition happens server-side (the webhook), not from any client call. Unit tests cover the state machine end to end with fake repositories (no camera/network needed).
 - [ ] **Phase E — Engagement:** SOLD, REVIEWS, AD THIS, external share, subject pages.
 - [ ] **Phase F — Discovery:** Market, search, Daily Ad, heuristic ranking.
 - [ ] **Phase G — Safety:** reports, blocks, moderation status, rate limiting.
@@ -231,6 +231,11 @@ flutter run --dart-define-from-file=env/dev.json
 flutter analyze
 flutter test
 ```
+
+**After `flutter create .` (Phase D requirement): add camera/microphone/photo-library usage strings.** The `camera` and `image_picker` packages will crash at runtime without these — this is exactly the "external configuration" CLAUDE.md section 67 says to flag rather than skip:
+
+- `ios/Runner/Info.plist`: add `NSCameraUsageDescription`, `NSMicrophoneUsageDescription`, and `NSPhotoLibraryUsageDescription` keys with user-facing strings explaining why AdGag needs each (e.g. "AdGag needs your camera to record Ads.").
+- `android/app/src/main/AndroidManifest.xml`: add `<uses-permission android:name="android.permission.CAMERA" />` and `<uses-permission android:name="android.permission.RECORD_AUDIO" />`.
 
 **Why `flutter create .` and not hand-written `android/`/`ios/` folders:** native platform scaffolding (Gradle files, `Info.plist`, Xcode project) is generated and kept correct by the Flutter tool itself and changes with each Flutter release. Hand-writing it here, without the SDK available to verify it builds, would be the highest-risk part of the codebase for the lowest benefit — `flutter create .` on an existing project only adds the missing platform folders and does not touch `lib/` or `pubspec.yaml`.
 

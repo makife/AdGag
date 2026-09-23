@@ -47,4 +47,10 @@ final class DraftAdRepositoryImpl implements DraftAdRepository {
       throw app_error.ValidationException(e.message, e);
     }
   }
+
+  @override
+  Future<Ad> getById(String adId) async {
+    final Map<String, dynamic> row = await _client.from("ads").select().eq("id", adId).single();
+    return Ad.fromRow(row);
+  }
 }
