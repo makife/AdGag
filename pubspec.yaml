@@ -1,0 +1,88 @@
+name: adgag
+description: >
+  AdGag — the social network where everything is an ad.
+  "See it. Ad it. Go." Internal codename: everything_is_an_ad.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+
+# ---------------------------------------------------------------------------
+# Dependency notes (see README.md "Technology Choices" for full reasoning):
+#
+# - State management: flutter_riverpod WITHOUT the riverpod_generator/
+#   riverpod_annotation codegen path. Providers are hand-written
+#   (NotifierProvider / AsyncNotifierProvider). This avoids a build_runner
+#   dependency for the MVP and keeps `flutter run` working with zero
+#   code-generation step. Codegen can be introduced later without a rewrite.
+# - Models: hand-written immutable classes (manual fromJson/toJson/copyWith)
+#   instead of freezed/json_serializable, for the same build_runner-free
+#   reason. Revisit once the model count grows past what's comfortable by
+#   hand.
+# - Routing: go_router — Flutter-team maintained, supports deep links,
+#   ShellRoute for the bottom-nav shell, and typed path/query params.
+# - Backend: supabase_flutter — official Supabase Flutter SDK.
+# - Video capture/playback: camera + video_player (both Flutter-team
+#   maintained, first-party-adjacent). Trimming: easy_video_editor (native
+#   trim/merge without an FFmpeg dependency, actively maintained).
+# - Video delivery: NOT a Flutter dependency at all — see
+#   lib/core/video/video_service.dart abstraction. The chosen MVP provider
+#   (Mux) is only ever called from Supabase Edge Functions, never from the
+#   client, per CLAUDE.md #18/#42.
+# ---------------------------------------------------------------------------
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.6.1
+
+  # Routing / deep links
+  go_router: ^14.8.1
+
+  # Backend
+  supabase_flutter: ^2.9.1
+
+  # Localization
+  intl: ^0.19.0
+
+  # Media: capture, playback, gallery import, trimming
+  camera: ^0.11.0+2
+  video_player: ^2.9.5
+  image_picker: ^1.1.2
+  easy_video_editor: ^1.1.0
+
+  # Media delivery / rendering
+  cached_network_image: ^3.4.1
+
+  # Permissions (camera, microphone, photo library)
+  permission_handler: ^11.3.1
+
+  # Native share sheet (section 33 — external viral loop)
+  share_plus: ^10.1.4
+
+  # Filesystem paths for local drafts/cache (section 39/40)
+  path_provider: ^2.1.5
+
+  # IDs for idempotency keys (uploads, client-generated draft ids)
+  uuid: ^4.5.1
+
+  # Structured logging (section 55) — thin wrapper, no vendor lock-in
+  logging: ^1.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  generate: true # drives flutter gen-l10n from l10n.yaml
+
+  # assets:
+  #   - assets/images/
+  #   - assets/icons/

@@ -1,0 +1,6 @@
+{
+  "APP_ENV": "development",
+  "SUPABASE_URL": "https://YOUR-DEV-PROJECT.supabase.co",
+  "SUPABASE_ANON_KEY": "YOUR-DEV-ANON-KEY",
+  "APP_LINK_HOST": "dev.adgag.app"
+}

@@ -1,0 +1,32 @@
+import "package:flutter/widgets.dart";
+import "package:go_router/go_router.dart";
+
+/// Centralized route paths/names. Screens navigate via these constants (or
+/// the [BuildContext] helpers below) rather than hand-typed strings, so a
+/// path can change in one place. Deep links (section 33/54) resolve to
+/// these same paths.
+abstract final class RoutePaths {
+  static const String onboarding = "/onboarding";
+  static const String signIn = "/sign-in";
+  static const String signUp = "/sign-up";
+
+  static const String home = "/home";
+  static const String market = "/market";
+  static const String create = "/create";
+  static const String activity = "/activity";
+  static const String profile = "/profile";
+
+  static const String subject = "/subjects/:subjectId";
+  static String subjectOf(String subjectId) => "/subjects/$subjectId";
+
+  static const String dailyAd = "/daily-ad";
+
+  static const String userProfile = "/u/:username";
+  static String userProfileOf(String username) => "/u/$username";
+}
+
+extension AppNavigation on BuildContext {
+  void goTo(String path) => GoRouter.of(this).go(path);
+  Future<T?> pushTo<T>(String path) => GoRouter.of(this).push<T>(path);
+  void pushReplacementTo(String path) => GoRouter.of(this).pushReplacement(path);
+}

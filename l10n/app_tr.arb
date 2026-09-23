@@ -1,0 +1,77 @@
+{
+  "@@locale": "tr",
+
+  "appName": "AdGag",
+  "appTagline": "Her şeyin reklam olduğu sosyal ağ.",
+  "appTaglineShort": "Gör. Reklamını yap. Git.",
+
+  "navHome": "Ana Sayfa",
+  "navMarket": "Pazar",
+  "navAd": "REKLAM",
+  "navActivity": "Aktivite",
+  "navProfile": "Profil",
+
+  "actionSold": "SATILDI",
+  "actionSoldCount": "{count} SATILDI",
+  "actionReviews": "YORUMLAR",
+  "actionShare": "PAYLAŞ",
+  "actionAdThis": "BUNU REKLAM ET",
+  "actionFollow": "TAKİP ET",
+  "actionFollowing": "TAKİPTE",
+
+  "onboardingSlogan": "Her şeyin reklam olduğu sosyal ağ.",
+  "onboardingPickAnything": "Bir şey seç.",
+  "onboardingSellIt": "10 saniyede sat.",
+  "onboardingSeeItAdIt": "Gör. Reklamını yap. Git.",
+  "onboardingGetStarted": "Başla",
+  "onboardingSkip": "Geç",
+
+  "authSignInWithApple": "Apple ile devam et",
+  "authSignInWithGoogle": "Google ile devam et",
+  "authSignInWithEmail": "E-posta ile devam et",
+  "authEmailLabel": "E-posta",
+  "authPasswordLabel": "Şifre",
+  "authUsernameLabel": "Kullanıcı adı",
+  "authSignIn": "Giriş yap",
+  "authSignUp": "Hesap oluştur",
+  "authGenericError": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
+
+  "emptySubjectFeed": "Bunu henüz kimse satmadı.",
+  "emptySubjectFeedCta": "Reklamını yapan ilk kişi ol.",
+  "emptyProfileAds": "Henüz satılık bir şey yok.",
+  "draftFailed": "Bu kampanyaya giremedi.",
+
+  "createChooseSubject": "Bugün ne satıyorsun?",
+  "createRecord": "Kaydet",
+  "createImport": "Galeriden içe aktar",
+  "createCaptionHint": "Bir başlık ekle…",
+  "createPublish": "Yayınla",
+  "createUploading": "Yükleniyor…",
+  "createProcessing": "İşleniyor…",
+
+  "dailyAdTitle": "Günün Reklamı",
+  "dailyAdJoin": "Katıl",
+  "dailyAdParticipants": "{count} katılımcı",
+
+  "subjectAdCount": "{count} Reklam",
+  "subjectAdThis": "BU KONUYU REKLAM ET",
+  "subjectTabTrending": "Trend",
+  "subjectTabTop": "En İyi",
+  "subjectTabNew": "Yeni",
+
+  "reportAd": "Bildir",
+  "blockUser": "Engelle",
+  "reportReasonNudity": "Müstehcen içerik",
+  "reportReasonViolence": "Şiddet",
+  "reportReasonHate": "Nefret söylemi veya taciz",
+  "reportReasonBullying": "Zorbalık",
+  "reportReasonDangerous": "Tehlikeli eylem",
+  "reportReasonSpam": "Spam veya dolandırıcılık",
+  "reportReasonCopyright": "Telif hakkı",
+  "reportReasonImpersonation": "Kimlik taklidi",
+  "reportReasonOther": "Diğer",
+
+  "genericRetry": "Tekrar dene",
+  "genericCancel": "İptal",
+  "genericOffline": "Çevrimdışısınız. Bazı içerikler kullanılamayabilir."
+}

@@ -1,0 +1,42 @@
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.g.dart
+*.freezed.dart
+**/generated_plugin_registrant.dart
+
+# Platform folders (generated via `flutter create .` — see README)
+/android/
+/ios/
+/macos/
+/windows/
+/linux/
+/web/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Secrets / environment
+env/*.json
+!env/*.example.json
+.env
+.env.*
+!.env.example
+
+# Supabase local dev
+supabase/.branches/
+supabase/.temp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/

@@ -1,0 +1,89 @@
+{
+  "@@locale": "en",
+
+  "appName": "AdGag",
+  "@appName": { "description": "Brand name shown on splash/onboarding. Replace globally if the brand changes (see CLAUDE.md section 65)." },
+
+  "appTagline": "The social network where everything is an ad.",
+  "appTaglineShort": "See it. Ad it. Go.",
+
+  "navHome": "Home",
+  "navMarket": "Market",
+  "navAd": "AD",
+  "navActivity": "Activity",
+  "navProfile": "Profile",
+
+  "actionSold": "SOLD",
+  "actionSoldCount": "{count} SOLD",
+  "@actionSoldCount": {
+    "description": "Sold count label under a video",
+    "placeholders": { "count": { "type": "String" } }
+  },
+  "actionReviews": "REVIEWS",
+  "actionShare": "SHARE",
+  "actionAdThis": "AD THIS",
+  "actionFollow": "FOLLOW",
+  "actionFollowing": "FOLLOWING",
+
+  "onboardingSlogan": "The social network where everything is an ad.",
+  "onboardingPickAnything": "Pick anything.",
+  "onboardingSellIt": "Sell it in 10 seconds.",
+  "onboardingSeeItAdIt": "See it. Ad it. Go.",
+  "onboardingGetStarted": "Get started",
+  "onboardingSkip": "Skip",
+
+  "authSignInWithApple": "Continue with Apple",
+  "authSignInWithGoogle": "Continue with Google",
+  "authSignInWithEmail": "Continue with email",
+  "authEmailLabel": "Email",
+  "authPasswordLabel": "Password",
+  "authUsernameLabel": "Username",
+  "authSignIn": "Sign in",
+  "authSignUp": "Create account",
+  "authGenericError": "Something went wrong. Please try again.",
+
+  "emptySubjectFeed": "No one's sold this yet.",
+  "emptySubjectFeedCta": "Be the first to advertise it.",
+  "emptyProfileAds": "Nothing for sale yet.",
+  "draftFailed": "This one didn't make the campaign.",
+
+  "createChooseSubject": "What are you selling today?",
+  "createRecord": "Record",
+  "createImport": "Import from gallery",
+  "createCaptionHint": "Add a caption…",
+  "createPublish": "Publish",
+  "createUploading": "Uploading…",
+  "createProcessing": "Processing…",
+
+  "dailyAdTitle": "Today's Ad",
+  "dailyAdJoin": "Join",
+  "dailyAdParticipants": "{count} participating",
+  "@dailyAdParticipants": {
+    "placeholders": { "count": { "type": "String" } }
+  },
+
+  "subjectAdCount": "{count} Ads",
+  "@subjectAdCount": {
+    "placeholders": { "count": { "type": "String" } }
+  },
+  "subjectAdThis": "AD THIS SUBJECT",
+  "subjectTabTrending": "Trending",
+  "subjectTabTop": "Top",
+  "subjectTabNew": "New",
+
+  "reportAd": "Report",
+  "blockUser": "Block",
+  "reportReasonNudity": "Nudity or sexual content",
+  "reportReasonViolence": "Violence",
+  "reportReasonHate": "Hate or harassment",
+  "reportReasonBullying": "Bullying",
+  "reportReasonDangerous": "Dangerous activity",
+  "reportReasonSpam": "Spam or scam",
+  "reportReasonCopyright": "Copyright",
+  "reportReasonImpersonation": "Impersonation",
+  "reportReasonOther": "Other",
+
+  "genericRetry": "Retry",
+  "genericCancel": "Cancel",
+  "genericOffline": "You're offline. Some content may be unavailable."
+}
