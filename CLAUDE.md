@@ -1435,3 +1435,42 @@ The ultimate product promise is:
 ## The social network where everything is an ad.
 
 ### Pick something. Sell it in 10 seconds.
+
+---
+
+# IMPLEMENTATION CHECKPOINT (2026-09-23)
+
+**This section is a living status record, appended after the product spec above — it does not modify sections 1-72.** Future sessions: update *this* section going forward rather than adding a new one; check it against actual repo/infra state (`git log`, `supabase migration list --linked`, `flutter test`) before trusting it, since it can drift out of date.
+
+Repo: `C:\Users\LENOVO10OCT2020\Desktop\makifbilgisayar\AdGag`, brand name **AdGag** (codename `everything_is_an_ad` retired — the real name was decided). 14 commits, 124 `lib/` files, 14 test files (59 test cases), 17 SQL migrations, 2 Supabase Edge Functions. Full narrative detail for all of this lives in `README.md` (architecture, ER model, RLS plan, tech choices, and — most importantly — the "Verification log" entries, which are the authoritative record of what's actually been proven against real infrastructure vs. only written).
+
+## Status: all 8 development-order phases (section 52) implemented
+
+Phases A through H are done — auth, social graph, video pipeline, creation flow, engagement (SOLD/REVIEWS/AD THIS/share/subject pages), discovery/ranking, safety (reports/blocks/rate-limiting), and polish (notifications/deep-link target/analytics/onboarding hint). See the per-phase git commits and README's "Implementation Milestones" section for what shipped in each.
+
+## What's been verified against REAL infrastructure (not just written/statically checked)
+
+- **Supabase project is real and connected**: project `AdGag`, ref `diwxzyhwmcajyjbcfwhe`, eu-west-1, Postgres 17.6. All 17 migrations applied via `supabase db push`. `env/dev.json` (gitignored, already configured — don't need to redo) points the Flutter app at it using the `sb_publishable_...` key.
+- **Two real bugs were found and fixed by actually running the schema against live Postgres** (static review had missed both):
+  1. `CREATE OR REPLACE FUNCTION` does **not** collapse into one object when a parameter is added, even with a default — it creates a new overload. `create_draft_ad` ended up with 3 coexisting overloads across migrations 0005/0009/0011, breaking PostgREST's RPC resolution. Fixed in `0016_fix_create_draft_ad_overload.sql`. **Lesson for any future migration that changes an RPC's parameter list: either match the existing signature exactly, or explicitly `DROP FUNCTION` the old signature.**
+  2. **PostgreSQL grants `EXECUTE` to `PUBLIC` by default on every new function.** Every RPC's `grant ... to authenticated` was purely additive and never actually restricted anon access — confirmed live, an anonymous caller reached `create_draft_ad`'s body. Fixed in `0017_fix_public_execute_grants.sql` (explicit `REVOKE ... FROM PUBLIC` + an `auth.uid() is null` guard on every authenticated-required RPC). **Lesson: every future `SECURITY DEFINER` RPC must explicitly revoke `PUBLIC` execute, or it's accessible to anon by default — this is not optional cleanup, it's the actual access control.**
+- **Both Edge Functions are deployed and runtime-verified against real Mux** (Mux "AdGag Development" environment; `MUX_TOKEN_ID`/`MUX_TOKEN_SECRET`/`MUX_WEBHOOK_SIGNING_SECRET` are already set as Supabase secrets — don't need to re-request unless rotated):
+  - `create-upload-session`: called for real, got back a genuine Mux Direct Upload URL, correctly marked the Ad `uploading`.
+  - `mux-webhook`: a hand-signed (real secret, Mux's exact HMAC scheme) `video.asset.ready` payload was processed correctly end to end — Ad transitioned to `ready` with correct `playback_id`/`thumbnail_url`/`duration_ms`. Idempotency, invalid signature, missing signature, and replayed old timestamp were all verified to reject correctly. A second, unplanned event with a UUID this session never generated also showed up in the idempotency log — very likely a real Mux-originated webhook call that was correctly verified and handled.
+  - **What this does NOT cover**: no actual video file has ever been PUT to a Mux upload URL and transcoded — the **hook → Supabase status ready → playback in AdGag feed** chain has only been proven with a synthetic signed payload standing in for the "Mux transcoded a real video" step, not a real video round trip. No `ffmpeg` and very little disk space in this dev environment to generate/hold a test file — this is the single biggest remaining gap in verifying the video pipeline.
+- **Real builds now succeed**: `flutter build web` (full dart2js compile) and `flutter build apk --debug` (`build\app\outputs\flutter-apk\app-debug.apk`, ~166MB) both complete against the real Supabase config. `flutter analyze`: 0 issues. `flutter test`: 59/59.
+- **App icon and branding are real**: `assets/branding/AdGagIkon.png` generates actual Android/iOS/web/Windows/macOS launcher icons via `flutter_launcher_icons`; `assets/branding/AdGag.png` (full lockup) is shown as a real image on the splash screen and onboarding's brand slide, not recreated with text/gradients.
+
+## Known TODOs, risks, and temporary decisions the next session must know about
+
+- **No real video has ever flowed through the pipeline** (record → upload → Mux transcode → real webhook → ready → playback). See above — this is the top verification priority once `ffmpeg`/disk space allow it.
+- **The built APK has never been installed or launched** on a device or emulator — only compiled. `camera_record_view.dart` and anything touching platform channels (camera, video_player, permission_handler) have never executed on real hardware.
+- **iOS is completely unverified** — no Mac/Xcode in this environment. The `ios/` folder exists (`flutter create .`) but has never been built.
+- **No widget tests exist**, only pure-Dart logic tests. A screen can pass every current check and still throw at first real render.
+- **Block filtering is incomplete by design, not oversight**: `is_blocked_either_way()` is only applied to the main feed (`get_feed_page`) and REVIEWS visibility — not subject pages, Market's Fresh Ads, profile Ads grids, or search. Documented in `0012_reports_and_blocks.sql`'s own comments.
+- **Apple/Google OAuth are not configured.** `auth_repository_impl.dart`'s `signInWithApple`/`signInWithGoogle` use Supabase's hosted OAuth web flow as an MVP stand-in — before App Store submission this needs to become native `sign_in_with_apple` + `signInWithIdToken` (Apple's actual requirement when other social logins are offered).
+- **Push notification dispatch is not implemented.** `notifications`/`device_tokens` tables and the in-app ACTIVITY list work today; there is no Edge Function that actually sends an FCM/APNs push. Needs a Firebase project + APNs key (see README "External Services").
+- **Deep links are not platform-wired.** `/ad/:id`, `/u/:username`, `/subjects/:id` resolve correctly once the OS hands the app a URL, but the `apple-app-site-association`/`assetlinks.json` files that make that actually happen aren't hosted anywhere yet — needs a real Apple Team ID and Android signing cert fingerprint.
+- **This dev machine's disk is chronically tight.** Free space hit 0.00GB during Android build attempts. The approved-safe cleanup (Gradle caches/wrapper/daemon, npm-cache, Pub cache, Deno cache — nothing touching source/personal files/Android SDK) recovers ~11GB if builds start failing on space again; see README's disk-usage inspection and verification log for the full breakdown, including what's deliberately excluded (Android SDK system-images/AVDs, ~29.7GB, per explicit instruction not to touch SDK components).
+- **Test-data pattern for any further live Supabase/Mux testing**: create a throwaway auth user via the signup endpoint, confirm its email via the Admin API (service-role key, used transiently, never stored in a file), exercise whatever needs testing, then delete the user (cascades to profile) and any orphaned rows (e.g. `ad_subjects` aren't user-owned and cascade-deleted, so subjects made during testing need manual cleanup). Always verify empty afterward with direct table counts.
+- **Package version pins have burned us before** (`easy_video_editor` was pinned to a version that never existed; `intl` was incompatible with the installed Flutter SDK). Both fixed, but a reminder: verify any *new* package pin against pub.dev's actual API before committing to it, not from memory.
