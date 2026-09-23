@@ -11,18 +11,19 @@ import "../../../../core/theme/app_spacing.dart";
 import "../../domain/local_video_draft.dart";
 import "../../domain/video_constraints.dart";
 import "../providers/create_ad_flow_controller.dart";
+import "../screens/video_editor_screen.dart";
 
-/// The creation flow's editing step (CLAUDE.md section 4/38). Deliberately
-/// still a fixed, small toolset — trim, speed, rotate, flip, remove-audio —
-/// each backed by `easy_video_editor`'s native export, chained into one
-/// pass rather than N intermediate re-encodes. Always shown after capture,
-/// even for a clip already within [VideoConstraints], since these tools
-/// are useful regardless of whether trimming is actually needed.
+/// The creation flow's editing step (CLAUDE.md section 4/38): the fast,
+/// default toolset — trim, speed, rotate, flip, remove-audio — each backed
+/// by `easy_video_editor`'s native export, chained into one pass rather
+/// than N intermediate re-encodes. Always shown after capture, even for a
+/// clip already within [VideoConstraints], since these tools are useful
+/// regardless of whether trimming is actually needed.
 ///
-/// What this does NOT do: burn text/stickers/GIFs into the video. See
-/// EasyVideoEditorService's doc comment for why that's separate, larger
-/// work with its own licensing decision (ffmpeg-class tooling), not
-/// something to bolt on here.
+/// For speed *zones* (only part of the clip), background music, or
+/// text/sticker overlays, "Advanced editor" hands off to
+/// [VideoEditorScreen] — a heavier, FFmpeg-backed path kept separate so
+/// the common case (most Ads need none of that) never pays for it.
 class TrimStep extends ConsumerStatefulWidget {
   const TrimStep({super.key});
 
@@ -103,6 +104,18 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     ref.read(createAdFlowControllerProvider.notifier).retake();
   }
 
+  void _openAdvancedEditor() {
+    final LocalVideoDraft? draft = ref.read(createAdFlowControllerProvider).capturedDraft;
+    if (draft == null) {
+      return;
+    }
+    unawaited(
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => VideoEditorScreen(draft: draft)),
+      ),
+    );
+  }
+
   /// Undoes every edit made on this screen — back to the untouched
   /// capture, still on this screen (unlike Retake, which discards the
   /// capture itself and goes back to record/import).
@@ -180,6 +193,10 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       appBar: AppBar(
         title: const Text("Edit your Ad"),
         actions: <Widget>[
+          TextButton(
+            onPressed: (!ready || _exporting) ? null : _openAdvancedEditor,
+            child: const Text("Advanced"),
+          ),
           TextButton(
             onPressed: _exporting ? null : _reset,
             child: const Text("Reset"),
