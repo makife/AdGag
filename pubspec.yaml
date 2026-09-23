@@ -63,7 +63,7 @@ dependencies:
   permission_handler: ^11.3.1
 
   # Native share sheet (section 33 — external viral loop)
-  share_plus: ^10.1.4
+  share_plus: ^12.0.2
 
   # Filesystem paths for local drafts/cache (section 39/40)
   path_provider: ^2.1.5

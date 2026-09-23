@@ -8,12 +8,13 @@ import "../../../../core/theme/app_colors.dart";
 import "../../../../core/theme/app_spacing.dart";
 import "../../../../core/video/video_controller_pool.dart";
 import "../../../../core/video/video_service.dart";
+import "../../../../shared/widgets/creator_header.dart";
+import "../../../../shared/widgets/subject_badge.dart";
 import "../../domain/ad.dart";
+import "feed_action_rail.dart";
 
-/// One fullscreen feed item (CLAUDE.md section 6). Deliberately minimal
-/// this phase: subject + creator overlay only. SOLD/REVIEWS/AD THIS/FOLLOW
-/// actions are Phase E — adding their buttons here now would mean shipping
-/// dead taps, which is worse than not having them yet.
+/// One fullscreen feed item (CLAUDE.md section 6): subject badge, creator
+/// + FOLLOW, caption, and the SOLD/REVIEWS/AD THIS/SHARE action rail.
 class AdVideoCard extends StatefulWidget {
   const AdVideoCard({
     required this.ad,
@@ -112,8 +113,14 @@ class _AdVideoCardState extends State<AdVideoCard> {
             const Center(child: CircularProgressIndicator()),
 
           Positioned(
+            right: AppSpacing.md,
+            bottom: AppSpacing.xxxl,
+            child: FeedActionRail(ad: widget.ad),
+          ),
+
+          Positioned(
             left: AppSpacing.lg,
-            right: AppSpacing.lg,
+            right: 88, // keep clear of the action rail
             bottom: AppSpacing.xxxl,
             child: _Overlay(ad: widget.ad),
           ),
@@ -135,16 +142,9 @@ class _Overlay extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         if (ad.subjectDisplayName != null)
-          Text(
-            "${ad.subjectDisplayName!.toUpperCase()}™",
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
-          ),
+          SubjectBadge(subjectId: ad.subjectId, displayName: ad.subjectDisplayName!),
         const SizedBox(height: AppSpacing.xs),
-        if (ad.creatorUsername != null)
-          Text("@${ad.creatorUsername}", style: const TextStyle(color: Colors.white70)),
+        CreatorHeader(userId: ad.userId, username: ad.creatorUsername),
         if (ad.caption != null && ad.caption!.isNotEmpty) ...<Widget>[
           const SizedBox(height: AppSpacing.xs),
           Text(ad.caption!, style: const TextStyle(color: Colors.white)),

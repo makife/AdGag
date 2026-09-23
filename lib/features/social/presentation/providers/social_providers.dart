@@ -19,3 +19,32 @@ final FutureProvider<int> followerCountProvider = FutureProvider.family<int, Str
 final FutureProvider<int> followingCountProvider = FutureProvider.family<int, String>(
   (ref, userId) => ref.watch(followRepositoryProvider).followingCount(userId),
 );
+
+/// Optimistic follow/unfollow toggle, keyed by the target user's id.
+/// [isFollowingProvider] above is a one-shot read (fine for a profile
+/// page); this is for a tappable FOLLOW button that needs to flip
+/// instantly and revert on failure (CLAUDE.md section 41).
+final class FollowController extends FamilyAsyncNotifier<bool, String> {
+  @override
+  Future<bool> build(String userId) {
+    return ref.read(followRepositoryProvider).isFollowing(userId);
+  }
+
+  Future<void> toggle() async {
+    final bool previous = state.valueOrNull ?? false;
+    state = AsyncData<bool>(!previous);
+    try {
+      if (previous) {
+        await ref.read(followRepositoryProvider).unfollow(arg);
+      } else {
+        await ref.read(followRepositoryProvider).follow(arg);
+      }
+    } catch (_) {
+      state = AsyncData<bool>(previous);
+      rethrow;
+    }
+  }
+}
+
+final AsyncNotifierProviderFamily<FollowController, bool, String> followControllerProvider =
+    AsyncNotifierProvider.family<FollowController, bool, String>(FollowController.new);

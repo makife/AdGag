@@ -14,6 +14,7 @@ import "package:adgag/features/create_ad/presentation/providers/draft_ad_provide
 import "package:adgag/features/feed/domain/ad.dart";
 import "package:adgag/features/feed/domain/ad_status.dart";
 import "package:adgag/features/subjects/domain/ad_subject.dart";
+import "package:adgag/features/subjects/domain/subject_ads_sort.dart";
 import "package:adgag/features/subjects/domain/subject_repository.dart";
 import "package:adgag/features/subjects/presentation/providers/subject_providers.dart";
 
@@ -25,6 +26,14 @@ class _FakeSubjectRepository implements SubjectRepository {
 
   @override
   Future<AdSubject?> getSubjectById(String id) async => null;
+
+  @override
+  Future<List<Ad>> fetchAdsForSubject({
+    required String subjectId,
+    required SubjectAdsSort sort,
+    int limit = 30,
+  }) async =>
+      <Ad>[];
 }
 
 class _FakeDraftAdRepository implements DraftAdRepository {
@@ -51,7 +60,11 @@ class _FakeDraftAdRepository implements DraftAdRepository {
       };
 
   @override
-  Future<Ad> createDraft({required String subjectId, String? caption}) async {
+  Future<Ad> createDraft({
+    required String subjectId,
+    String? caption,
+    String? inspiredByAdId,
+  }) async {
     return Ad.fromRow(_row(id: "ad1", status: AdStatus.draft));
   }
 

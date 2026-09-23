@@ -10,11 +10,19 @@ final class DraftAdRepositoryImpl implements DraftAdRepository {
   final supa.SupabaseClient _client;
 
   @override
-  Future<Ad> createDraft({required String subjectId, String? caption}) async {
+  Future<Ad> createDraft({
+    required String subjectId,
+    String? caption,
+    String? inspiredByAdId,
+  }) async {
     try {
       final Map<String, dynamic> row = await _client.rpc<Map<String, dynamic>>(
         "create_draft_ad",
-        params: <String, dynamic>{"p_subject_id": subjectId, "p_caption": caption},
+        params: <String, dynamic>{
+          "p_subject_id": subjectId,
+          "p_caption": caption,
+          "p_inspired_by_ad_id": inspiredByAdId,
+        },
       );
       return Ad.fromRow(row);
     } on supa.PostgrestException catch (e) {

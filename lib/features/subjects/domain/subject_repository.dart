@@ -1,4 +1,6 @@
+import "../../feed/domain/ad.dart";
 import "ad_subject.dart";
+import "subject_ads_sort.dart";
 
 /// Abstraction over subject lookup/creation. Canonicalization
 /// (normalization + alias resolution) happens server-side
@@ -11,4 +13,14 @@ abstract interface class SubjectRepository {
   Future<AdSubject> getOrCreateSubject(String text, {String locale = "en"});
 
   Future<AdSubject?> getSubjectById(String id);
+
+  /// Ads for the AdSubject page's Trending/Top/New tabs (section 10).
+  /// Unlike [FeedRepository], this is a single bounded page (no cursor
+  /// pagination yet) — acceptable for a secondary surface today; revisit
+  /// if a subject regularly needs more than [limit] results browsable.
+  Future<List<Ad>> fetchAdsForSubject({
+    required String subjectId,
+    required SubjectAdsSort sort,
+    int limit = 30,
+  });
 }

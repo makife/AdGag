@@ -13,6 +13,7 @@ final class CreateAdFlowState {
     this.adId,
     this.errorMessage,
     this.processingStillPending = false,
+    this.inspiredByAdId,
   });
 
   final CreateAdStep step;
@@ -37,6 +38,10 @@ final class CreateAdFlowState {
   /// it" outcome, not a failure (CLAUDE.md section 19/39).
   final bool processingStillPending;
 
+  /// Set when this flow was started via AD THIS (CLAUDE.md section 9) —
+  /// the id of the Ad being remixed. Null for an ordinary creation flow.
+  final String? inspiredByAdId;
+
   CreateAdFlowState copyWith({
     CreateAdStep? step,
     AdSubject? subject,
@@ -47,6 +52,7 @@ final class CreateAdFlowState {
     String? adId,
     String? errorMessage,
     bool? processingStillPending,
+    String? inspiredByAdId,
   }) {
     return CreateAdFlowState(
       step: step ?? this.step,
@@ -58,6 +64,7 @@ final class CreateAdFlowState {
       adId: adId ?? this.adId,
       errorMessage: errorMessage ?? this.errorMessage,
       processingStillPending: processingStillPending ?? this.processingStillPending,
+      inspiredByAdId: inspiredByAdId ?? this.inspiredByAdId,
     );
   }
 }
