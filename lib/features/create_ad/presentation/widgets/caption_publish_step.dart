@@ -51,7 +51,15 @@ class _CaptionPublishStepState extends ConsumerState<CaptionPublishStep> {
     final bool previewReady = preview != null && preview.value.isInitialized;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Preview & publish")),
+      appBar: AppBar(
+        title: const Text("Preview & publish"),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => ref.read(createAdFlowControllerProvider.notifier).retake(),
+            child: const Text("Retake"),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),

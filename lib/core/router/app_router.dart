@@ -12,6 +12,7 @@ import "../../features/feed/presentation/screens/ad_detail_screen.dart";
 import "../../features/feed/presentation/screens/feed_screen.dart";
 import "../../features/market/presentation/screens/market_screen.dart";
 import "../../features/notifications/presentation/activity_screen.dart";
+import "../../features/profile/presentation/screens/edit_profile_screen.dart";
 import "../../features/profile/presentation/screens/profile_screen.dart";
 import "../../features/profile/presentation/screens/public_profile_screen.dart";
 import "../../features/subjects/presentation/screens/subject_screen.dart";
@@ -82,6 +83,10 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.userProfile,
         builder: (BuildContext context, GoRouterState state) =>
             PublicProfileScreen(username: state.pathParameters["username"]!),
+      ),
+      GoRoute(
+        path: RoutePaths.editProfile,
+        builder: (BuildContext context, GoRouterState state) => const EditProfileScreen(),
       ),
       GoRoute(
         path: RoutePaths.adDetail,

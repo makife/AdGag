@@ -52,20 +52,22 @@ final class CreateAdFlowController extends Notifier<CreateAdFlowState> {
     );
   }
 
-  /// Called once a recording/import produces a local file. Skips the trim
-  /// step entirely when the clip is already within
-  /// [VideoConstraints] — "Editing must remain intentionally lightweight"
-  /// (section 4).
+  /// Called once a recording/import produces a local file. Always routes
+  /// through the edit step (trim/speed/rotate/flip/audio) — even a clip
+  /// already within [VideoConstraints] may still want those tools, not
+  /// just ones that need trimming down.
   void onVideoCaptured(LocalVideoDraft draft) {
-    if (draft.isWithinConstraints) {
-      state = state.copyWith(finalDraft: draft, step: CreateAdStep.caption);
-    } else {
-      state = state.copyWith(capturedDraft: draft, step: CreateAdStep.trim);
-    }
+    state = state.copyWith(capturedDraft: draft, step: CreateAdStep.trim);
   }
 
   void onVideoTrimmed(LocalVideoDraft trimmed) {
     state = state.copyWith(finalDraft: trimmed, step: CreateAdStep.caption);
+  }
+
+  /// Discards the current capture and returns to record/import (the edit
+  /// step's "Retake" action).
+  void retake() {
+    state = state.copyWith(step: CreateAdStep.capture);
   }
 
   void setCaption(String caption) {

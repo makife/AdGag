@@ -122,7 +122,7 @@ void main() {
 
   tearDown(() => container.dispose());
 
-  test("subject -> capture -> caption -> publish reaches success", () async {
+  test("subject -> capture -> edit -> caption -> publish reaches success", () async {
     final CreateAdFlowController controller = container.read(createAdFlowControllerProvider.notifier);
 
     await controller.selectSubjectText("Sock");
@@ -131,6 +131,11 @@ void main() {
 
     controller.onVideoCaptured(
       const LocalVideoDraft(filePath: "/tmp/clip.mp4", duration: Duration(seconds: 5)),
+    );
+    expect(container.read(createAdFlowControllerProvider).step, CreateAdStep.trim);
+
+    controller.onVideoTrimmed(
+      const LocalVideoDraft(filePath: "/tmp/clip-edited.mp4", duration: Duration(seconds: 5)),
     );
     expect(container.read(createAdFlowControllerProvider).step, CreateAdStep.caption);
 
@@ -143,7 +148,7 @@ void main() {
     expect(state.processingStillPending, isFalse);
   });
 
-  test("a clip longer than the max duration routes to the trim step", () {
+  test("every captured clip routes to the edit step, not just ones needing a trim", () {
     final CreateAdFlowController controller = container.read(createAdFlowControllerProvider.notifier);
 
     controller.onVideoCaptured(
@@ -154,6 +159,18 @@ void main() {
     expect(state.step, CreateAdStep.trim);
     expect(state.capturedDraft, isNotNull);
     expect(state.finalDraft, isNull);
+  });
+
+  test("retake discards the edit step and returns to capture", () {
+    final CreateAdFlowController controller = container.read(createAdFlowControllerProvider.notifier);
+
+    controller.onVideoCaptured(
+      const LocalVideoDraft(filePath: "/tmp/clip.mp4", duration: Duration(seconds: 5)),
+    );
+    expect(container.read(createAdFlowControllerProvider).step, CreateAdStep.trim);
+
+    controller.retake();
+    expect(container.read(createAdFlowControllerProvider).step, CreateAdStep.capture);
   });
 
   test("publishing without a subject/video fails fast without a network call", () async {
