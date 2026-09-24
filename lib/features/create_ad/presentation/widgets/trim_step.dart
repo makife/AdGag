@@ -1225,6 +1225,37 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                                   flip: project.flip,
                                   colorFilter: project.colorFilter,
                                 ),
+                                // On-device diagnostic (this round): shows
+                                // the existing debug counters live, on
+                                // screen, so the exact same physical-device
+                                // stutter test that already proved raw/
+                                // standalone smooth vs. normal-mode
+                                // stuttering can also show WHICH counter (if
+                                // any) climbs during that stutter — without
+                                // needing adb/logcat access. Reuses
+                                // _transport's own notifyListeners (already
+                                // firing ~10x/sec) rather than adding a new
+                                // timer, so this doesn't add a new
+                                // per-tick cost of its own beyond one small
+                                // Text rebuild.
+                                if (kDebugMode)
+                                  Positioned(
+                                    top: 4,
+                                    left: 4,
+                                    child: AnimatedBuilder(
+                                      animation: _transport!,
+                                      builder: (BuildContext context, Widget? child) => Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                        color: Colors.black54,
+                                        child: Text(
+                                          "seek=$_dbgSeekCount play=$_dbgPlayCount pause=$_dbgPauseCount\n"
+                                          "speed=$_dbgSpeedChangeCount mute=$_dbgMuteChangeCount\n"
+                                          "tl=$_dbgTimelineUpdateCount rebuild=$_dbgEditorRebuildCount",
+                                          style: const TextStyle(color: Colors.greenAccent, fontSize: 10),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 for (final VideoOverlay overlay in project.overlays)
                                   // BUG 7 fix, now transport-driven
                                   // (videoeditor6.txt section 8):
