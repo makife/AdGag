@@ -374,7 +374,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       return;
     }
     switch (choice) {
-      case _StickerSymbolChoice(:final String symbol):
+      case _StickerSymbolChoice(:final String symbol, :final double fontSize):
         final _TimeRange? range = await showDialog<_TimeRange>(
           context: context,
           builder: (BuildContext context) => _TimeRangeDialog(maxDuration: _trimmedDuration),
@@ -390,7 +390,8 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                 startSec: range.start,
                 duration: range.end - range.start,
                 text: symbol,
-                fontSize: 64,
+                fontSize: fontSize,
+                hasOutline: true,
               ),
             );
       case _StickerGalleryChoice():
@@ -1964,8 +1965,9 @@ sealed class _StickerChoice {
 }
 
 final class _StickerSymbolChoice extends _StickerChoice {
-  const _StickerSymbolChoice(this.symbol);
+  const _StickerSymbolChoice(this.symbol, this.fontSize);
   final String symbol;
+  final double fontSize;
 }
 
 final class _StickerGalleryChoice extends _StickerChoice {
@@ -1975,11 +1977,54 @@ final class _StickerGalleryChoice extends _StickerChoice {
 /// Preset sticker glyphs, rendered through the same drawtext/font
 /// pipeline as a text overlay (not a new image-compositing path) — kept
 /// to plain symbol characters within Roboto's own glyph coverage rather
-/// than color emoji, which a bundled non-emoji TTF can't render.
-const List<String> _stickerSymbols = <String>["★", "♥", "✓", "✗", "➤", "‼", "●", "▲", "✦", "☆"];
+/// than color emoji, which a bundled non-emoji TTF can't render (a
+/// missing-glyph is a soft failure — the symbol just doesn't draw — but
+/// a whole category of stickers that silently don't render would be a
+/// worse experience than not offering it; a real emoji/reaction category
+/// needs either image sprites or accepting that render risk, not
+/// pretending plain symbols are equivalent).
+const List<String> _stickerGraphics = <String>["★", "♥", "✓", "✗", "➤", "‼", "●", "▲", "✦", "☆"];
+
+/// AdGag's own "everything is an ad" bit (CLAUDE.md sections 1/2) as a
+/// curated sticker set — the ad-commerce parody vocabulary the whole
+/// product's tone is built on, not a generic sticker pack.
+const List<String> _stickerAdParody = <String>[
+  "SALE", "NEW!", "WOW!", "HOT", "SOLD", "LIMITED", "99%", "BUY IT", "BUT WAIT!", "BEST EVER",
+];
 
 class _StickerPickerDialog extends StatelessWidget {
   const _StickerPickerDialog();
+
+  Widget _grid(BuildContext context, List<String> items, double fontSize) {
+    return GridView.count(
+      crossAxisCount: 4,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      childAspectRatio: 1.4,
+      children: <Widget>[
+        for (final String item in items)
+          InkWell(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            onTap: () => Navigator.of(context).pop(_StickerSymbolChoice(item, fontSize)),
+            child: Container(
+              margin: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                item,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: fontSize > 40 ? 28 : 13, fontWeight: FontWeight.w800),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1987,30 +2032,26 @@ class _StickerPickerDialog extends StatelessWidget {
       title: const Text("Add a sticker"),
       content: SizedBox(
         width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            GridView.count(
-              crossAxisCount: 5,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              children: <Widget>[
-                for (final String symbol in _stickerSymbols)
-                  InkWell(
-                    borderRadius: BorderRadius.circular(AppRadius.md),
-                    onTap: () => Navigator.of(context).pop(_StickerSymbolChoice(symbol)),
-                    child: Center(child: Text(symbol, style: const TextStyle(fontSize: 28))),
-                  ),
-              ],
-            ),
-            const Divider(height: AppSpacing.xl),
-            TextButton.icon(
-              onPressed: () => Navigator.of(context).pop(const _StickerGalleryChoice()),
-              icon: const Icon(Icons.image_outlined),
-              label: const Text("Choose an image from gallery instead"),
-            ),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text("Ad parody", style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height: AppSpacing.xs),
+              _grid(context, _stickerAdParody, 28),
+              const SizedBox(height: AppSpacing.md),
+              Text("Graphics", style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height: AppSpacing.xs),
+              _grid(context, _stickerGraphics, 64),
+              const Divider(height: AppSpacing.xl),
+              TextButton.icon(
+                onPressed: () => Navigator.of(context).pop(const _StickerGalleryChoice()),
+                icon: const Icon(Icons.image_outlined),
+                label: const Text("Choose an image from gallery instead"),
+              ),
+            ],
+          ),
         ),
       ),
       actions: <Widget>[
