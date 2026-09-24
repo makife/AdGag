@@ -289,6 +289,15 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     });
   }
 
+  void _onResizeOverlay(VideoOverlay oldOverlay, VideoOverlay updated) {
+    setState(() {
+      final int index = _overlays.indexWhere((VideoOverlay o) => o.id == oldOverlay.id);
+      if (index != -1) {
+        _overlays[index] = updated;
+      }
+    });
+  }
+
   Future<void> _addTextOverlay() async {
     final TextOverlay? overlay = await showDialog<TextOverlay>(
       context: context,
@@ -761,6 +770,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
 
                 const SizedBox(height: AppSpacing.md),
                 _Timeline(
+                  controller: controller,
                   originalDuration: controller.value.duration,
                   trimStartSeconds: _startSeconds,
                   maxTrimStartSeconds: _maxStartSeconds,
@@ -776,6 +786,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                   onResizeZone: _onResizeZone,
                   onRemoveOverlay: (String id) =>
                       setState(() => _overlays.removeWhere((VideoOverlay o) => o.id == id)),
+                  onResizeOverlay: _onResizeOverlay,
                   onResizeMusic: (BackgroundAudio updated) => unawaited(_setBgAudio(updated)),
                   onRemoveMusic: () => unawaited(_setBgAudio(null)),
                 ),
@@ -872,16 +883,34 @@ class _ToolButton extends StatelessWidget {
 /// each lane ("Clip", "Speed", "Music", "Text") and, to the right, a
 /// time-mapped track area per lane — a lane's background is drawn even
 /// when it's empty, so it's clear that's the region a slow-mo zone or
-/// music clip would occupy, not an arbitrary gap (this used to be a
-/// single unlabeled Stack, which is what made added chips look like they
-/// were floating in empty space with no visible boundary).
+/// music clip would occupy, not an arbitrary gap.
 ///
-/// Speed-zone and music-lane items are directly drag-resizable from their
-/// own left/right edge handles, in addition to tap-to-remove on the body
-/// of the chip/bar. The trim window itself is still drag-to-move, as
-/// before.
+/// A ruler row on top shows a tick + number for every second (this
+/// format tops out at 10s per CLAUDE.md section 4, so unlike a
+/// general-purpose NLE timeline there's never a reason to zoom — one
+/// fixed-width view of the whole clip is enough) and doubles as a
+/// scrub surface: tap or drag anywhere on it to seek, live, the same
+/// controller the preview above is playing — CapCut/img.ly's own
+/// published timeline-design writeup describes exactly this as the
+/// standard mobile pattern (a scrub surface plus a live playhead), not
+/// "drag a 4px marker precisely." A vertical playhead line spans the
+/// full height of every lane, always at the controller's current
+/// position — it moves on its own during normal playback and jumps
+/// instantly to wherever you scrub, and it's read-only (`IgnorePointer`)
+/// so it never competes with the lanes underneath for touches.
+///
+/// Speed-zone, music, and overlay items are all directly drag-resizable
+/// from their own left/right edge handles (a visibly larger grip than a
+/// plain body tap, with a hit area roughly twice the visual size — the
+/// same "why is this so hard to grab" fix already applied once to the
+/// trim-window handle, now applied consistently everywhere something
+/// has a start/end), in addition to tap-to-remove on the body of the
+/// chip/bar. Every chip also prints its own start–end time under its
+/// label, so placement doesn't rely on eyeballing position against the
+/// ruler alone.
 class _Timeline extends StatelessWidget {
   const _Timeline({
+    required this.controller,
     required this.originalDuration,
     required this.trimStartSeconds,
     required this.maxTrimStartSeconds,
@@ -893,10 +922,12 @@ class _Timeline extends StatelessWidget {
     required this.onRemoveZone,
     required this.onResizeZone,
     required this.onRemoveOverlay,
+    required this.onResizeOverlay,
     required this.onResizeMusic,
     required this.onRemoveMusic,
   });
 
+  final VideoPlayerController controller;
   final Duration originalDuration;
   final double trimStartSeconds;
   final double maxTrimStartSeconds;
@@ -908,14 +939,18 @@ class _Timeline extends StatelessWidget {
   final void Function(SpeedZone) onRemoveZone;
   final void Function(SpeedZone oldZone, SpeedZone updated) onResizeZone;
   final void Function(String) onRemoveOverlay;
+  final void Function(VideoOverlay oldOverlay, VideoOverlay updated) onResizeOverlay;
   final void Function(BackgroundAudio updated) onResizeMusic;
   final VoidCallback onRemoveMusic;
 
   static const double _labelWidth = 52;
+  static const double _rulerHeight = 22;
   static const double _trimLaneHeight = 44;
-  static const double _laneHeight = 32;
+  static const double _laneHeight = 40;
   static const double _laneGap = 6;
   static const Duration _minZoneDuration = Duration(milliseconds: 300);
+
+  static String _fmt(Duration d) => "${(d.inMilliseconds / 1000.0).toStringAsFixed(1)}s";
 
   Future<void> _confirmRemoveZone(BuildContext context, SpeedZone zone) async {
     final bool? confirmed = await showDialog<bool>(
@@ -981,9 +1016,14 @@ class _Timeline extends StatelessWidget {
         ),
       );
 
-  /// A small draggable grip at a lane item's edge — `onDeltaSeconds`
-  /// receives the drag delta already converted from pixels to seconds of
-  /// *timeline* time, so callers never touch pixels.
+  /// A draggable grip at a lane item's edge — `onDeltaSeconds` receives
+  /// the drag delta already converted from pixels to seconds of
+  /// *timeline* time, so callers never touch pixels. Hit area (32dp) is
+  /// roughly twice the visual grip's own size, per the same
+  /// touch-target research already applied once to the trim-window
+  /// handle (16dp visual / 44dp hit area) — a too-small hit target,
+  /// not a logic bug, was the most likely reason this kept feeling
+  /// broken.
   Widget _edgeHandle({
     required double left,
     required double top,
@@ -993,23 +1033,98 @@ class _Timeline extends StatelessWidget {
     required ValueChanged<double> onDeltaSeconds,
   }) {
     return Positioned(
-      left: left - 11,
+      left: left - 16,
       top: top,
-      width: 22,
+      width: 32,
       height: height,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onHorizontalDragUpdate: (DragUpdateDetails d) => onDeltaSeconds(d.delta.dx / trackWidth * totalSec),
         child: Center(
           child: Container(
-            width: 4,
-            height: height * 0.6,
+            width: 8,
+            height: height * 0.7,
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(2),
-              boxShadow: const <BoxShadow>[BoxShadow(color: Colors.black38, blurRadius: 2)],
+              borderRadius: BorderRadius.circular(3),
+              border: Border.all(color: Colors.black26),
+              boxShadow: const <BoxShadow>[BoxShadow(color: Colors.black45, blurRadius: 3)],
             ),
+            child: const Icon(Icons.drag_indicator, size: 10, color: Colors.black45),
           ),
+        ),
+      ),
+    );
+  }
+
+  void _scrubTo(double localX, double width, double totalSec) {
+    final double fraction = (localX / width).clamp(0.0, 1.0);
+    unawaited(controller.seekTo(Duration(milliseconds: (fraction * totalSec * 1000).round())));
+  }
+
+  /// The tick+number ruler, also the scrub surface: tap or drag anywhere
+  /// on it to seek the shared preview controller. At this format's
+  /// 10-second ceiling a single fixed-width view with one tick per
+  /// second is enough — no zoom level is needed the way a
+  /// general-purpose editor's arbitrary-length timeline would.
+  Widget _ruler(ColorScheme scheme, double width, double totalSec) {
+    final int lastTick = totalSec.floor();
+    return Positioned(
+      left: 0,
+      top: 0,
+      width: width,
+      height: _rulerHeight,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (TapDownDetails d) => _scrubTo(d.localPosition.dx, width, totalSec),
+        onHorizontalDragUpdate: (DragUpdateDetails d) => _scrubTo(d.localPosition.dx, width, totalSec),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: <Widget>[
+            for (int i = 0; i <= lastTick; i++)
+              Positioned(
+                left: (i / totalSec) * width - 10,
+                top: 0,
+                width: 20,
+                child: Column(
+                  children: <Widget>[
+                    Container(width: 1, height: 5, color: scheme.onSurfaceVariant),
+                    Text(
+                      "${i}s",
+                      style: TextStyle(fontSize: 8, color: scheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The current-position indicator — read-only (`IgnorePointer`, so it
+  /// never intercepts touches meant for the ruler/lanes underneath),
+  /// spanning every lane's full height, and reactive via the
+  /// controller's own [ValueListenableBuilder] rather than a rebuild of
+  /// the whole screen on every playback tick (CLAUDE.md section 41:
+  /// don't rebuild more than what actually changed).
+  Widget _playhead(double width, double totalSec, double timelineHeight) {
+    return Positioned(
+      left: 0,
+      top: 0,
+      width: width,
+      height: timelineHeight,
+      child: IgnorePointer(
+        child: ValueListenableBuilder<VideoPlayerValue>(
+          valueListenable: controller,
+          builder: (BuildContext context, VideoPlayerValue value, Widget? child) {
+            final double sec = (value.position.inMilliseconds / 1000.0).clamp(0.0, totalSec);
+            final double left = (sec / totalSec) * width;
+            return Transform.translate(
+              offset: Offset(left - 1, 0),
+              child: Container(width: 2, color: Colors.redAccent),
+            );
+          },
         ),
       ),
     );
@@ -1025,7 +1140,8 @@ class _Timeline extends StatelessWidget {
     final bool draggable = maxTrimStartSeconds > 0;
     final ColorScheme scheme = Theme.of(context).colorScheme;
 
-    final double speedTop = _trimLaneHeight + _laneGap;
+    final double trimTop = _rulerHeight + _laneGap;
+    final double speedTop = trimTop + _trimLaneHeight + _laneGap;
     final double musicTop = speedTop + _laneHeight + _laneGap;
     final double overlayTop = musicTop + _laneHeight + _laneGap;
     final double totalHeight = overlayTop + _laneHeight;
@@ -1047,6 +1163,23 @@ class _Timeline extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
+                  SizedBox(
+                    height: _rulerHeight,
+                    child: ValueListenableBuilder<VideoPlayerValue>(
+                      valueListenable: controller,
+                      builder: (BuildContext context, VideoPlayerValue value, Widget? child) => InkWell(
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                        onTap: () =>
+                            unawaited(value.isPlaying ? controller.pause() : controller.play()),
+                        child: Icon(
+                          value.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
+                          size: 20,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: _laneGap),
                   SizedBox(height: _trimLaneHeight, child: _LaneLabel("Clip", scheme)),
                   const SizedBox(height: _laneGap),
                   SizedBox(height: _laneHeight, child: _LaneLabel("Speed", scheme)),
@@ -1082,15 +1215,17 @@ class _Timeline extends StatelessWidget {
                       // Lane backgrounds — drawn even when empty, so every
                       // lane's own area is visible rather than only
                       // appearing once something is placed in it.
-                      _lane(scheme, top: 0, height: _trimLaneHeight),
+                      _lane(scheme, top: trimTop, height: _trimLaneHeight),
                       _lane(scheme, top: speedTop, height: _laneHeight),
                       _lane(scheme, top: musicTop, height: _laneHeight),
                       _lane(scheme, top: overlayTop, height: _laneHeight),
 
+                      _ruler(scheme, width, totalSec),
+
                       // Base track — the full original clip, inside the
                       // "Clip" lane.
                       Positioned(
-                        top: 20,
+                        top: trimTop + 20,
                         left: 0,
                         right: 0,
                         child: Container(
@@ -1109,7 +1244,7 @@ class _Timeline extends StatelessWidget {
                       Positioned(
                         left: selLeft,
                         width: selWidth,
-                        top: 0,
+                        top: trimTop,
                         height: _trimLaneHeight,
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
@@ -1146,16 +1281,34 @@ class _Timeline extends StatelessWidget {
                             onTap: () => unawaited(_confirmRemoveZone(context, zone)),
                             child: Container(
                               alignment: Alignment.center,
+                              padding: const EdgeInsets.symmetric(horizontal: 3),
                               decoration: BoxDecoration(
                                 color: scheme.primary,
                                 borderRadius: BorderRadius.circular(AppRadius.sm),
                               ),
-                              child: Text(
-                                "${zone.factor}x slow-mo",
-                                style:
-                                    const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
-                                overflow: TextOverflow.clip,
-                                softWrap: false,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: <Widget>[
+                                  Text(
+                                    "${zone.factor}x slow-mo",
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                    overflow: TextOverflow.clip,
+                                    softWrap: false,
+                                    maxLines: 1,
+                                  ),
+                                  Text(
+                                    "${_fmt(zone.start)}–${_fmt(zone.end)}",
+                                    style: const TextStyle(color: Colors.white70, fontSize: 8),
+                                    overflow: TextOverflow.clip,
+                                    softWrap: false,
+                                    maxLines: 1,
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -1202,18 +1355,36 @@ class _Timeline extends StatelessWidget {
                             onTap: () => unawaited(_confirmRemoveMusic(context)),
                             child: Container(
                               alignment: Alignment.center,
+                              padding: const EdgeInsets.symmetric(horizontal: 3),
                               decoration: BoxDecoration(
                                 color: scheme.tertiary,
                                 borderRadius: BorderRadius.circular(AppRadius.sm),
                               ),
-                              child: const Row(
+                              child: Column(
                                 mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: <Widget>[
-                                  Icon(Icons.music_note, size: 14, color: Colors.white),
-                                  SizedBox(width: 3),
+                                  const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      Icon(Icons.music_note, size: 12, color: Colors.white),
+                                      SizedBox(width: 2),
+                                      Text(
+                                        "music",
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                   Text(
-                                    "music",
-                                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                                    "${_fmt(musicStart)}–${_fmt(musicEnd)}",
+                                    style: const TextStyle(color: Colors.white70, fontSize: 8),
+                                    overflow: TextOverflow.clip,
+                                    softWrap: false,
+                                    maxLines: 1,
                                   ),
                                 ],
                               ),
@@ -1269,47 +1440,103 @@ class _Timeline extends StatelessWidget {
                       ],
 
                       // Overlay markers — a labeled chip (the actual
-                      // text, or "sticker"), not a bare small icon with
-                      // no context.
-                      for (final VideoOverlay overlay in overlays)
+                      // text, or "sticker"), sized/positioned by real
+                      // duration like a speed zone or music clip (not
+                      // auto-sized to its label) so its edge handles
+                      // land on its actual start/end.
+                      for (final VideoOverlay overlay in overlays) ...<Widget>[
                         Positioned(
                           left: ((overlay.startSec.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
+                          width: ((overlay.duration.inMilliseconds / 1000.0 / totalSec) * width).clamp(40.0, 140.0),
                           top: overlayTop,
                           height: _laneHeight,
                           child: GestureDetector(
                             onTap: () => unawaited(_confirmRemoveOverlay(context, overlay)),
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 110),
-                              child: Container(
-                                alignment: Alignment.center,
-                                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-                                decoration: BoxDecoration(
-                                  color: scheme.secondary,
-                                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[
-                                    Icon(
-                                      overlay is TextOverlay ? Icons.text_fields : Icons.emoji_emotions_outlined,
-                                      size: 14,
-                                      color: Colors.white,
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Flexible(
-                                      child: Text(
-                                        overlay is TextOverlay ? overlay.text : "sticker",
-                                        style: const TextStyle(color: Colors.white, fontSize: 11),
-                                        overflow: TextOverflow.ellipsis,
-                                        maxLines: 1,
+                            child: Container(
+                              alignment: Alignment.center,
+                              padding: const EdgeInsets.symmetric(horizontal: 3),
+                              decoration: BoxDecoration(
+                                color: scheme.secondary,
+                                borderRadius: BorderRadius.circular(AppRadius.sm),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: <Widget>[
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      Icon(
+                                        overlay is TextOverlay ? Icons.text_fields : Icons.emoji_emotions_outlined,
+                                        size: 12,
+                                        color: Colors.white,
                                       ),
-                                    ),
-                                  ],
-                                ),
+                                      const SizedBox(width: 2),
+                                      Flexible(
+                                        child: Text(
+                                          overlay is TextOverlay ? overlay.text : "sticker",
+                                          style: const TextStyle(color: Colors.white, fontSize: 10),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Text(
+                                    "${_fmt(overlay.startSec)}–${_fmt(overlay.endSec)}",
+                                    style: const TextStyle(color: Colors.white70, fontSize: 8),
+                                    overflow: TextOverflow.clip,
+                                    softWrap: false,
+                                    maxLines: 1,
+                                  ),
+                                ],
                               ),
                             ),
                           ),
                         ),
+                        _edgeHandle(
+                          left: ((overlay.startSec.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
+                          top: overlayTop,
+                          height: _laneHeight,
+                          trackWidth: width,
+                          totalSec: totalSec,
+                          onDeltaSeconds: (double deltaSec) {
+                            final Duration next =
+                                overlay.startSec + Duration(milliseconds: (deltaSec * 1000).round());
+                            final Duration clamped = next < Duration.zero
+                                ? Duration.zero
+                                : (next > overlay.endSec - _minZoneDuration
+                                    ? overlay.endSec - _minZoneDuration
+                                    : next);
+                            onResizeOverlay(
+                              overlay,
+                              _withOverlayTiming(overlay, clamped, overlay.endSec - clamped),
+                            );
+                          },
+                        ),
+                        _edgeHandle(
+                          left: ((overlay.endSec.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
+                          top: overlayTop,
+                          height: _laneHeight,
+                          trackWidth: width,
+                          totalSec: totalSec,
+                          onDeltaSeconds: (double deltaSec) {
+                            final Duration next =
+                                overlay.endSec + Duration(milliseconds: (deltaSec * 1000).round());
+                            final Duration clamped = next > trimmedDuration
+                                ? trimmedDuration
+                                : (next < overlay.startSec + _minZoneDuration
+                                    ? overlay.startSec + _minZoneDuration
+                                    : next);
+                            onResizeOverlay(
+                              overlay,
+                              _withOverlayTiming(overlay, overlay.startSec, clamped - overlay.startSec),
+                            );
+                          },
+                        ),
+                      ],
+
+                      _playhead(width, totalSec, totalHeight),
                     ],
                   );
                 },
@@ -1320,6 +1547,38 @@ class _Timeline extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Rebuilds [overlay] with a new [start]/[duration], preserving every
+/// other field — a plain top-level function rather than a method on the
+/// sealed [VideoOverlay] hierarchy itself, since the domain model
+/// (`video_project.dart`) is deliberately kept free of anything
+/// UI-specific and this is only ever called from the timeline's resize
+/// handles.
+VideoOverlay _withOverlayTiming(VideoOverlay overlay, Duration start, Duration duration) {
+  return switch (overlay) {
+    TextOverlay() => TextOverlay(
+        id: overlay.id,
+        xPercent: overlay.xPercent,
+        yPercent: overlay.yPercent,
+        startSec: start,
+        duration: duration,
+        text: overlay.text,
+        argbColor: overlay.argbColor,
+        fontSize: overlay.fontSize,
+        animation: overlay.animation,
+      ),
+    ImageOverlay() => ImageOverlay(
+        id: overlay.id,
+        xPercent: overlay.xPercent,
+        yPercent: overlay.yPercent,
+        startSec: start,
+        duration: duration,
+        assetPath: overlay.assetPath,
+        widthPercent: overlay.widthPercent,
+        rotationDegrees: overlay.rotationDegrees,
+      ),
+  };
 }
 
 class _LaneLabel extends StatelessWidget {
