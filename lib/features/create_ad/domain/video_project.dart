@@ -201,6 +201,7 @@ final class VideoProject {
   Duration get trimmedDuration => trimEnd - trimStart;
 
   bool get hasAnyEdit =>
+      trimStart > Duration.zero ||
       speedZones.isNotEmpty ||
       bgAudio != null ||
       overlays.isNotEmpty ||
@@ -235,6 +236,22 @@ final class VideoProject {
     return _copyWith(speedZones: speedZones.where((SpeedZone z) => z != zone).toList(growable: false));
   }
 
+  /// Replaces [oldZone] with [updated] in place, without the overlap
+  /// check [withSpeedZone] applies — used for dragging an existing
+  /// zone's own edge, where "does this still fit next to its siblings"
+  /// is deliberately left unenforced (see [_Timeline]'s own doc comment:
+  /// resize collision-avoidance against other zones is out of scope).
+  /// A no-op if [oldZone] isn't found.
+  VideoProject replaceSpeedZone(SpeedZone oldZone, SpeedZone updated) {
+    final int index = speedZones.indexOf(oldZone);
+    if (index == -1) {
+      return this;
+    }
+    final List<SpeedZone> next = List<SpeedZone>.of(speedZones);
+    next[index] = updated;
+    return _copyWith(speedZones: next);
+  }
+
   VideoProject withBgAudio(BackgroundAudio? audio) => _copyWith(bgAudio: audio, clearBgAudio: audio == null);
 
   VideoProject withOverlay(VideoOverlay overlay) {
@@ -243,6 +260,20 @@ final class VideoProject {
 
   VideoProject withoutOverlay(String overlayId) {
     return _copyWith(overlays: overlays.where((VideoOverlay o) => o.id != overlayId).toList(growable: false));
+  }
+
+  /// Replaces the overlay with [updated]'s `id` in place — used for
+  /// drag/pinch/rotate and timeline edge-resize, both of which mutate an
+  /// *existing* overlay rather than adding a new one. A no-op if no
+  /// overlay with that id exists.
+  VideoProject updateOverlay(VideoOverlay updated) {
+    final int index = overlays.indexWhere((VideoOverlay o) => o.id == updated.id);
+    if (index == -1) {
+      return this;
+    }
+    final List<VideoOverlay> next = List<VideoOverlay>.of(overlays);
+    next[index] = updated;
+    return _copyWith(overlays: next);
   }
 
   VideoProject _copyWith({

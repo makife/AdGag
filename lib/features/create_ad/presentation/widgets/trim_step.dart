@@ -18,6 +18,7 @@ import "../../domain/local_video_draft.dart";
 import "../../domain/video_constraints.dart";
 import "../../domain/video_project.dart";
 import "../providers/create_ad_flow_controller.dart";
+import "../providers/editor_controller.dart";
 
 /// The creation flow's one editing step (CLAUDE.md section 4/38): trim,
 /// rotate, flip, mute, a color filter, background music, slow-motion
@@ -45,14 +46,11 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   static const Uuid _uuid = Uuid();
 
   VideoPlayerController? _controller;
-  double _startSeconds = 0;
-  AppVideoRotation _rotation = AppVideoRotation.none;
-  AppFlipDirection _flip = AppFlipDirection.none;
-  bool _removeAudio = false;
-  AppColorFilter _colorFilter = AppColorFilter.none;
-  BackgroundAudio? _bgAudio;
-  final List<SpeedZone> _speedZones = <SpeedZone>[];
-  final List<VideoOverlay> _overlays = <VideoOverlay>[];
+
+  // The trim window's *end* the first time this screen loads a clip —
+  // needed by both EditorController.init() and Reset (which restores
+  // this exact untouched window, not an empty/zero one).
+  Duration _initialTrimEnd = Duration.zero;
 
   bool _processing = false;
   double _progress = 0;
@@ -79,6 +77,8 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   // — a missing filmstrip should never block editing.
   List<String> _thumbnailPaths = <String>[];
 
+  bool _showFilterStrip = false;
+
   @override
   void initState() {
     super.initState();
@@ -89,6 +89,14 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       unawaited(
         controller.initialize().then((_) {
           if (mounted) {
+            final Duration total = controller.value.duration;
+            _initialTrimEnd = total > VideoConstraints.max ? VideoConstraints.max : total;
+            // VideoProject becomes the single source of truth from this
+            // point on — the preview below reads it directly, not a
+            // parallel copy of these fields kept in widget state.
+            ref.read(editorControllerProvider.notifier).init(
+                  VideoProject(videoPath: draft.filePath, trimStart: Duration.zero, trimEnd: _initialTrimEnd),
+                );
             setState(() {});
             unawaited(controller.setLooping(true));
             unawaited(controller.play());
@@ -137,13 +145,15 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   /// filters (`ColorFilter.matrix` vs. FFmpeg's `eq`/`hue`).
   void _syncLivePreview() {
     final VideoPlayerController? controller = _controller;
-    if (controller == null || !controller.value.isInitialized) {
+    final VideoProject? project = ref.read(editorControllerProvider);
+    if (controller == null || !controller.value.isInitialized || project == null) {
       return;
     }
-    final double elapsedInTrim = controller.value.position.inMilliseconds / 1000.0 - _startSeconds;
+    final double startSeconds = project.trimStart.inMilliseconds / 1000.0;
+    final double elapsedInTrim = controller.value.position.inMilliseconds / 1000.0 - startSeconds;
 
     double desiredSpeed = 1.0;
-    for (final SpeedZone zone in _speedZones) {
+    for (final SpeedZone zone in project.speedZones) {
       final double zoneStart = zone.start.inMilliseconds / 1000.0;
       final double zoneEnd = zone.end.inMilliseconds / 1000.0;
       if (elapsedInTrim >= zoneStart && elapsedInTrim < zoneEnd) {
@@ -157,13 +167,13 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     }
 
     final VideoPlayerController? music = _musicController;
-    final BackgroundAudio? bg = _bgAudio;
+    final BackgroundAudio? bg = project.bgAudio;
     if (music == null || bg == null || !music.value.isInitialized) {
       return;
     }
     final double musicStart = bg.startSec.inMilliseconds / 1000.0;
     final double musicDuration =
-        (bg.duration ?? (_trimmedDuration - bg.startSec)).inMilliseconds / 1000.0;
+        (bg.duration ?? (project.trimmedDuration - bg.startSec)).inMilliseconds / 1000.0;
     final bool inMusicWindow = elapsedInTrim >= musicStart && elapsedInTrim < musicStart + musicDuration;
     if (inMusicWindow) {
       if (!music.value.isPlaying) {
@@ -176,15 +186,16 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     }
   }
 
-  /// Creates/replaces/tears down `_musicController` to match [audio] —
-  /// the single place `_bgAudio` should be written from, so the preview
-  /// player never drifts out of sync with what's actually selected
-  /// (direct `setState(() => _bgAudio = ...)` calls used to be scattered
-  /// across the music-picker dialog and the timeline's resize/remove
-  /// callbacks with no controller lifecycle attached to any of them).
+  /// Creates/replaces/tears down `_musicController` to match [audio], and
+  /// writes [audio] into [VideoProject] via [EditorController] — the
+  /// single place background music should be written from, so the
+  /// preview player never drifts out of sync with the composition (the
+  /// timeline's resize/remove callbacks and the music-picker dialog both
+  /// go through this instead of writing the composition directly).
   Future<void> _setBgAudio(BackgroundAudio? audio) async {
-    final bool sourceChanged = _bgAudio?.filePath != audio?.filePath;
-    setState(() => _bgAudio = audio);
+    final EditorController notifier = ref.read(editorControllerProvider.notifier);
+    final bool sourceChanged = ref.read(editorControllerProvider)?.bgAudio?.filePath != audio?.filePath;
+    notifier.setBgAudio(audio);
     if (!sourceChanged) {
       if (audio != null) {
         unawaited(_musicController?.setVolume(audio.volume));
@@ -219,16 +230,6 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     }
   }
 
-  bool get _hasAnyEdit =>
-      _startSeconds > 0 ||
-      _rotation != AppVideoRotation.none ||
-      _flip != AppFlipDirection.none ||
-      _removeAudio ||
-      _colorFilter != AppColorFilter.none ||
-      _bgAudio != null ||
-      _speedZones.isNotEmpty ||
-      _overlays.isNotEmpty;
-
   double get _maxStartSeconds {
     final Duration? total = _controller?.value.duration;
     if (total == null) {
@@ -240,35 +241,46 @@ class _TrimStepState extends ConsumerState<TrimStep> {
 
   Duration get _trimmedDuration {
     final Duration? total = _controller?.value.duration;
-    if (total == null) {
+    final Duration? start = ref.read(editorControllerProvider)?.trimStart;
+    if (total == null || start == null) {
       return Duration.zero;
     }
-    final Duration start = Duration(milliseconds: (_startSeconds * 1000).round());
     final Duration end = start + VideoConstraints.max > total ? total : start + VideoConstraints.max;
     return end - start;
   }
 
+  void _applyTrimStart(double startSeconds) {
+    final Duration? total = _controller?.value.duration;
+    if (total == null) {
+      return;
+    }
+    final Duration start = Duration(milliseconds: (startSeconds * 1000).round());
+    final Duration end = start + VideoConstraints.max > total ? total : start + VideoConstraints.max;
+    ref.read(editorControllerProvider.notifier).setTrim(start: start, end: end);
+    unawaited(_controller?.seekTo(start));
+  }
+
   void _cycleRotation() {
-    setState(() {
-      _rotation = switch (_rotation) {
-        AppVideoRotation.none => AppVideoRotation.degrees90,
-        AppVideoRotation.degrees90 => AppVideoRotation.degrees180,
-        AppVideoRotation.degrees180 => AppVideoRotation.degrees270,
-        AppVideoRotation.degrees270 => AppVideoRotation.none,
-      };
-    });
+    final AppVideoRotation current = ref.read(editorControllerProvider)?.rotation ?? AppVideoRotation.none;
+    final AppVideoRotation next = switch (current) {
+      AppVideoRotation.none => AppVideoRotation.degrees90,
+      AppVideoRotation.degrees90 => AppVideoRotation.degrees180,
+      AppVideoRotation.degrees180 => AppVideoRotation.degrees270,
+      AppVideoRotation.degrees270 => AppVideoRotation.none,
+    };
+    ref.read(editorControllerProvider.notifier).setRotation(next);
   }
 
   void _toggleFlip(AppFlipDirection direction) {
-    setState(() => _flip = _flip == direction ? AppFlipDirection.none : direction);
+    final AppFlipDirection current = ref.read(editorControllerProvider)?.flip ?? AppFlipDirection.none;
+    ref.read(editorControllerProvider.notifier).setFlip(current == direction ? AppFlipDirection.none : direction);
   }
 
   void _toggleRemoveAudio() {
-    setState(() => _removeAudio = !_removeAudio);
-    unawaited(_controller?.setVolume(_removeAudio ? 0 : 1));
+    final bool current = ref.read(editorControllerProvider)?.removeAudio ?? false;
+    ref.read(editorControllerProvider.notifier).setRemoveAudio(!current);
+    unawaited(_controller?.setVolume(!current ? 0 : 1));
   }
-
-  bool _showFilterStrip = false;
 
   void _toggleFilterStrip() {
     setState(() => _showFilterStrip = !_showFilterStrip);
@@ -282,11 +294,12 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     if (zone == null) {
       return;
     }
-    if (_speedZones.any((SpeedZone z) => z.overlaps(zone))) {
+    final List<SpeedZone> existing = ref.read(editorControllerProvider)?.speedZones ?? const <SpeedZone>[];
+    if (existing.any((SpeedZone z) => z.overlaps(zone))) {
       _showSnack("That overlaps an existing speed zone.");
       return;
     }
-    setState(() => _speedZones.add(zone));
+    ref.read(editorControllerProvider.notifier).addSpeedZone(zone);
   }
 
   /// Drag-resize from the timeline's own edge handles (see [_Timeline]) —
@@ -297,21 +310,11 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   /// against every sibling on every drag frame isn't worth the
   /// complexity yet).
   void _onResizeZone(SpeedZone oldZone, SpeedZone updated) {
-    setState(() {
-      final int index = _speedZones.indexOf(oldZone);
-      if (index != -1) {
-        _speedZones[index] = updated;
-      }
-    });
+    ref.read(editorControllerProvider.notifier).resizeSpeedZone(oldZone, updated);
   }
 
   void _onResizeOverlay(VideoOverlay oldOverlay, VideoOverlay updated) {
-    setState(() {
-      final int index = _overlays.indexWhere((VideoOverlay o) => o.id == oldOverlay.id);
-      if (index != -1) {
-        _overlays[index] = updated;
-      }
-    });
+    ref.read(editorControllerProvider.notifier).updateOverlay(updated);
   }
 
   Future<void> _addTextOverlay() async {
@@ -320,7 +323,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       builder: (BuildContext context) => _TextOverlayDialog(id: _uuid.v4(), maxDuration: _trimmedDuration),
     );
     if (overlay != null) {
-      setState(() => _overlays.add(overlay));
+      ref.read(editorControllerProvider.notifier).addOverlay(overlay);
     }
   }
 
@@ -347,19 +350,17 @@ class _TrimStepState extends ConsumerState<TrimStep> {
         if (range == null || !mounted) {
           return;
         }
-        setState(
-          () => _overlays.add(
-            TextOverlay(
-              id: _uuid.v4(),
-              xPercent: 0.4,
-              yPercent: 0.3,
-              startSec: range.start,
-              duration: range.end - range.start,
-              text: symbol,
-              fontSize: 64,
-            ),
-          ),
-        );
+        ref.read(editorControllerProvider.notifier).addOverlay(
+              TextOverlay(
+                id: _uuid.v4(),
+                xPercent: 0.4,
+                yPercent: 0.3,
+                startSec: range.start,
+                duration: range.end - range.start,
+                text: symbol,
+                fontSize: 64,
+              ),
+            );
       case _StickerGalleryChoice():
         await _addImageOverlayFromGallery();
     }
@@ -377,18 +378,16 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     if (range == null) {
       return;
     }
-    setState(
-      () => _overlays.add(
-        ImageOverlay(
-          id: _uuid.v4(),
-          xPercent: 0.35,
-          yPercent: 0.35,
-          startSec: range.start,
-          duration: range.end - range.start,
-          assetPath: file.path,
-        ),
-      ),
-    );
+    ref.read(editorControllerProvider.notifier).addOverlay(
+          ImageOverlay(
+            id: _uuid.v4(),
+            xPercent: 0.35,
+            yPercent: 0.35,
+            startSec: range.start,
+            duration: range.end - range.start,
+            assetPath: file.path,
+          ),
+        );
   }
 
   Future<void> _pickMusic() async {
@@ -465,12 +464,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
           rotationDegrees: _gestureBaseRotationDegrees + details.rotation * 180 / pi,
         ),
     };
-    setState(() {
-      final int index = _overlays.indexWhere((VideoOverlay o) => o.id == overlay.id);
-      if (index != -1) {
-        _overlays[index] = updated;
-      }
-    });
+    ref.read(editorControllerProvider.notifier).updateOverlay(updated);
   }
 
   void _showSnack(String message) {
@@ -489,17 +483,11 @@ class _TrimStepState extends ConsumerState<TrimStep> {
 
   /// Undoes every edit made on this screen — back to the untouched
   /// capture, still on this screen (unlike Retake, which discards the
-  /// capture itself and goes back to record/import).
+  /// capture itself and goes back to record/import). Itself one more
+  /// undo-able step (routed through EditorController, not a bypass of
+  /// it), so hitting Reset by mistake can still be undone.
   void _reset() {
-    setState(() {
-      _startSeconds = 0;
-      _rotation = AppVideoRotation.none;
-      _flip = AppFlipDirection.none;
-      _removeAudio = false;
-      _colorFilter = AppColorFilter.none;
-      _speedZones.clear();
-      _overlays.clear();
-    });
+    ref.read(editorControllerProvider.notifier).resetToDefaults(_initialTrimEnd);
     unawaited(_controller?.setVolume(1));
     unawaited(_controller?.seekTo(Duration.zero));
     unawaited(_setBgAudio(null));
@@ -507,7 +495,8 @@ class _TrimStepState extends ConsumerState<TrimStep> {
 
   Future<void> _confirm() async {
     final LocalVideoDraft? draft = ref.read(createAdFlowControllerProvider).capturedDraft;
-    if (draft == null) {
+    final VideoProject? project = ref.read(editorControllerProvider);
+    if (draft == null || project == null) {
       return;
     }
     setState(() {
@@ -517,21 +506,17 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     });
 
     try {
-      final Duration start = Duration(milliseconds: (_startSeconds * 1000).round());
-      final Duration end = start + VideoConstraints.max > draft.duration
-          ? draft.duration
-          : start + VideoConstraints.max;
-      final bool needsTrim = start > Duration.zero || end < draft.duration;
-      final bool hasSimpleEdit = _rotation != AppVideoRotation.none ||
-          _flip != AppFlipDirection.none ||
-          _removeAudio;
+      final bool needsTrim = project.trimStart > Duration.zero || project.trimEnd < draft.duration;
+      final bool hasSimpleEdit = project.rotation != AppVideoRotation.none ||
+          project.flip != AppFlipDirection.none ||
+          project.removeAudio;
       // Color grading has no equivalent in the fast easy_video_editor
       // pipeline (no color-filter support there), so it forces the FFmpeg
       // path the same way a speed zone or overlay does.
-      final bool hasAdvancedEdit = _speedZones.isNotEmpty ||
-          _overlays.isNotEmpty ||
-          _colorFilter != AppColorFilter.none ||
-          _bgAudio != null;
+      final bool hasAdvancedEdit = project.speedZones.isNotEmpty ||
+          project.overlays.isNotEmpty ||
+          project.colorFilter != AppColorFilter.none ||
+          project.bgAudio != null;
 
       final LocalVideoDraft finalDraft;
       if (!needsTrim && !hasSimpleEdit && !hasAdvancedEdit) {
@@ -539,18 +524,9 @@ class _TrimStepState extends ConsumerState<TrimStep> {
         // than paying for a no-op re-encode.
         finalDraft = draft;
       } else if (hasAdvancedEdit) {
-        final VideoProject project = VideoProject(
-          videoPath: draft.filePath,
-          trimStart: start,
-          trimEnd: end,
-          speedZones: _speedZones,
-          overlays: _overlays,
-          rotation: _rotation,
-          flip: _flip,
-          removeAudio: _removeAudio,
-          colorFilter: _colorFilter,
-          bgAudio: _bgAudio,
-        );
+        // project IS the composition being exported — no separate
+        // reconstruction from scattered fields; preview and export read
+        // the exact same object.
         final VideoExportService service = ref.read(videoExportServiceProvider);
         _progressSub = service.progress.listen((double p) {
           if (mounted) {
@@ -563,11 +539,11 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       } else {
         final VideoEditRequest request = VideoEditRequest(
           sourcePath: draft.filePath,
-          trimStart: start,
-          trimEnd: end,
-          rotation: _rotation,
-          flip: _flip,
-          removeAudio: _removeAudio,
+          trimStart: project.trimStart,
+          trimEnd: project.trimEnd,
+          rotation: project.rotation,
+          flip: project.flip,
+          removeAudio: project.removeAudio,
         );
         final String outputPath = await ref.read(videoEditorServiceProvider).apply(
               request,
@@ -595,9 +571,10 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   @override
   Widget build(BuildContext context) {
     final VideoPlayerController? controller = _controller;
-    final bool ready = controller != null && controller.value.isInitialized;
+    final VideoProject? project = ref.watch(editorControllerProvider);
+    final bool ready = controller != null && controller.value.isInitialized && project != null;
 
-    final bool hasEdits = _hasAnyEdit;
+    final bool hasEdits = project?.hasAnyEdit ?? false;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final StateController<bool> flag = ref.read(hasUnsavedCreateEditsProvider.notifier);
       if (flag.state != hasEdits) {
@@ -622,10 +599,22 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       }
     });
 
+    final EditorController editorNotifier = ref.read(editorControllerProvider.notifier);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Edit your Ad"),
         actions: <Widget>[
+          IconButton(
+            icon: const Icon(Icons.undo),
+            tooltip: "Undo",
+            onPressed: (_processing || !editorNotifier.canUndo) ? null : editorNotifier.undo,
+          ),
+          IconButton(
+            icon: const Icon(Icons.redo),
+            tooltip: "Redo",
+            onPressed: (_processing || !editorNotifier.canRedo) ? null : editorNotifier.redo,
+          ),
           TextButton(
             onPressed: _processing ? null : _reset,
             child: const Text("Reset"),
@@ -654,14 +643,14 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                               children: <Widget>[
                                 Center(
                                   child: ColorFiltered(
-                                    colorFilter: _colorFilter.previewFilter,
+                                    colorFilter: project.colorFilter.previewFilter,
                                     child: RotatedBox(
-                                      quarterTurns: _rotation.quarterTurns,
+                                      quarterTurns: project.rotation.quarterTurns,
                                       child: Transform(
                                         alignment: Alignment.center,
                                         transform: Matrix4.diagonal3Values(
-                                          _flip == AppFlipDirection.horizontal ? -1 : 1,
-                                          _flip == AppFlipDirection.vertical ? -1 : 1,
+                                          project.flip == AppFlipDirection.horizontal ? -1 : 1,
+                                          project.flip == AppFlipDirection.vertical ? -1 : 1,
                                           1,
                                         ),
                                         child: AspectRatio(
@@ -672,7 +661,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                                     ),
                                   ),
                                 ),
-                                for (final VideoOverlay overlay in _overlays)
+                                for (final VideoOverlay overlay in project.overlays)
                                   Positioned(
                                     left: overlay.xPercent * previewSize.width,
                                     top: overlay.yPercent * previewSize.height,
@@ -696,9 +685,9 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                                             right: -10,
                                             top: -10,
                                             child: GestureDetector(
-                                              onTap: () => setState(
-                                                () => _overlays.removeWhere((VideoOverlay o) => o.id == overlay.id),
-                                              ),
+                                              onTap: () => ref
+                                                  .read(editorControllerProvider.notifier)
+                                                  .removeOverlay(overlay.id),
                                               child: Container(
                                                 width: 22,
                                                 height: 22,
@@ -734,39 +723,39 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                     children: <Widget>[
                       _ToolButton(
                         icon: Icons.rotate_90_degrees_cw_outlined,
-                        label: _rotation == AppVideoRotation.none ? "Rotate" : "${_rotation.value}°",
-                        selected: _rotation != AppVideoRotation.none,
+                        label: project.rotation == AppVideoRotation.none ? "Rotate" : "${project.rotation.value}°",
+                        selected: project.rotation != AppVideoRotation.none,
                         onTap: _cycleRotation,
                       ),
                       _ToolButton(
                         icon: Icons.flip,
                         label: "Flip H",
-                        selected: _flip == AppFlipDirection.horizontal,
+                        selected: project.flip == AppFlipDirection.horizontal,
                         onTap: () => _toggleFlip(AppFlipDirection.horizontal),
                       ),
                       _ToolButton(
                         icon: Icons.flip,
                         label: "Flip V",
-                        selected: _flip == AppFlipDirection.vertical,
+                        selected: project.flip == AppFlipDirection.vertical,
                         onTap: () => _toggleFlip(AppFlipDirection.vertical),
                         iconTurns: 1,
                       ),
                       _ToolButton(
-                        icon: _removeAudio ? Icons.volume_off : Icons.volume_up,
+                        icon: project.removeAudio ? Icons.volume_off : Icons.volume_up,
                         label: "Mute",
-                        selected: _removeAudio,
+                        selected: project.removeAudio,
                         onTap: _toggleRemoveAudio,
                       ),
                       _ToolButton(
                         icon: Icons.palette_outlined,
-                        label: _colorFilter.label,
-                        selected: _colorFilter != AppColorFilter.none || _showFilterStrip,
+                        label: project.colorFilter.label,
+                        selected: project.colorFilter != AppColorFilter.none || _showFilterStrip,
                         onTap: _toggleFilterStrip,
                       ),
                       _ToolButton(
                         icon: Icons.music_note_outlined,
                         label: "Music",
-                        selected: _bgAudio != null,
+                        selected: project.bgAudio != null,
                         onTap: () => unawaited(_pickMusic()),
                       ),
                       _ToolButton(
@@ -799,8 +788,8 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                           _FilterPreviewChip(
                             filter: filter,
                             thumbnailPath: _thumbnailPaths.isNotEmpty ? _thumbnailPaths.first : null,
-                            selected: _colorFilter == filter,
-                            onTap: () => setState(() => _colorFilter = filter),
+                            selected: project.colorFilter == filter,
+                            onTap: () => ref.read(editorControllerProvider.notifier).setColorFilter(filter),
                           ),
                       ],
                     ),
@@ -812,20 +801,16 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                   controller: controller,
                   thumbnailPaths: _thumbnailPaths,
                   originalDuration: controller.value.duration,
-                  trimStartSeconds: _startSeconds,
+                  trimStartSeconds: project.trimStart.inMilliseconds / 1000.0,
                   maxTrimStartSeconds: _maxStartSeconds,
                   trimmedDuration: _trimmedDuration,
-                  onTrimStartChanged: (double v) {
-                    setState(() => _startSeconds = v);
-                    unawaited(controller.seekTo(Duration(milliseconds: (v * 1000).round())));
-                  },
-                  speedZones: _speedZones,
-                  overlays: _overlays,
-                  bgAudio: _bgAudio,
-                  onRemoveZone: (SpeedZone z) => setState(() => _speedZones.remove(z)),
+                  onTrimStartChanged: _applyTrimStart,
+                  speedZones: project.speedZones,
+                  overlays: project.overlays,
+                  bgAudio: project.bgAudio,
+                  onRemoveZone: (SpeedZone z) => ref.read(editorControllerProvider.notifier).removeSpeedZone(z),
                   onResizeZone: _onResizeZone,
-                  onRemoveOverlay: (String id) =>
-                      setState(() => _overlays.removeWhere((VideoOverlay o) => o.id == id)),
+                  onRemoveOverlay: (String id) => ref.read(editorControllerProvider.notifier).removeOverlay(id),
                   onResizeOverlay: _onResizeOverlay,
                   onResizeMusic: (BackgroundAudio updated) => unawaited(_setBgAudio(updated)),
                   onRemoveMusic: () => unawaited(_setBgAudio(null)),
