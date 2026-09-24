@@ -340,13 +340,25 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     // Routed through the transport, not controller.play() directly, so
     // isPlaying has exactly one owner from the very first frame.
     transport.play();
-    // Thumbnail generation deliberately does not block `ready` above —
-    // it fills in progressively (see _generateThumbnails' own doc
-    // comment on the filmstrip's best-effort fallback), never gating
-    // editor startup on it.
-    unawaited(_generateThumbnails(draft));
+    // videoeditor11.txt: TEMPORARY isolation-test disablement. The call
+    // below is deliberately never made — not started-then-cancelled,
+    // not merely hidden from the UI — to test whether the background
+    // FFmpeg thumbnail-generation session (a real, separate native
+    // decode pass over the same source file, previously only cancelled
+    // in dispose(), so still running throughout a raw-preview A/B test)
+    // is the actual source of reported editor playback stutter. Revert
+    // by restoring `unawaited(_generateThumbnails(draft));` once this
+    // diagnostic round is resolved.
+    // unawaited(_generateThumbnails(draft));
+    if (kDebugMode) {
+      _log.info("THUMBNAIL_FFMPEG_STARTED=0 (disabled for videoeditor11.txt isolation test)");
+    }
   }
 
+  // videoeditor11.txt: kept intact, deliberately unused, for this
+  // isolation round — the call site above is commented out, not this
+  // method, so restoring the round is a one-line revert.
+  // ignore: unused_element
   Future<void> _generateThumbnails(LocalVideoDraft draft) async {
     final List<String> paths = await ref.read(videoThumbnailServiceProvider).generateThumbnails(
           videoPath: draft.filePath,
