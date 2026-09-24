@@ -3,6 +3,7 @@ import "dart:io";
 import "dart:math" show max, pi;
 
 import "package:file_picker/file_picker.dart";
+import "package:flutter/foundation.dart" show kDebugMode;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:image_picker/image_picker.dart";
@@ -14,6 +15,7 @@ import "../../../../core/router/app_shell.dart";
 import "../../../../core/media/video_editor_service.dart";
 import "../../../../core/media/video_export_service.dart";
 import "../../../../core/theme/app_spacing.dart";
+import "../../../../core/utils/app_logger.dart";
 import "../../domain/local_video_draft.dart";
 import "../../domain/video_constraints.dart";
 import "../../domain/video_project.dart";
@@ -78,6 +80,24 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   VideoPlayerController? _musicController;
   double? _lastAppliedPreviewSpeed;
   bool? _lastAppliedMute;
+
+  // videoeditor7.txt section 5/6: whether the music player is currently
+  // considered "inside" its region by the last tick this widget itself
+  // processed — owned here, never derived from `music.value.isPlaying`
+  // (which can transiently read false during a native buffering stall,
+  // the exact conflation that caused repeated seek+play cycles/"free
+  // running" before this round). Reset to false on any scrub begin, a
+  // music-source change, or leaving the editor, so the next relevant
+  // tick is always treated as a fresh entry needing exactly one seek.
+  bool _musicInRegion = false;
+
+  // Bumped on any event that invalidates an in-flight async music
+  // seek/play chain (scrub begin, pause, region exit, source change,
+  // dispose) so a slow, stale seek/play completion can never apply
+  // itself after the fact — section 6's generation-token requirement.
+  int _audioSyncGeneration = 0;
+
+  final _log = AppLogger.named("TrimStepPlayback");
 
   // Real decoded frames for the timeline's Clip lane (not a placeholder
   // bar — see the video-editor spec this round implements). Generated
@@ -201,6 +221,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     _controller?.dispose().ignore();
     _transport?.removeListener(_onTransportChanged);
     _transport?.dispose();
+    _audioSyncGeneration++; // invalidate any in-flight music seek/play chain
     _musicController?.dispose().ignore();
     // Stops an in-flight thumbnail generation and deletes whatever it
     // had already written — leaving the editor before generation
@@ -260,8 +281,10 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     }
 
     if (transport.isPlaying && !controller.value.isPlaying) {
+      if (kDebugMode) _log.fine("VIDEO_PLAY");
       unawaited(controller.play());
     } else if (!transport.isPlaying && controller.value.isPlaying) {
+      if (kDebugMode) _log.fine("VIDEO_PAUSE");
       unawaited(controller.pause());
     }
 
@@ -278,37 +301,88 @@ class _TrimStepState extends ConsumerState<TrimStep> {
 
     final VideoPlayerController? music = _musicController;
     final BackgroundAudio? bg = project.bgAudio;
-    if (music == null || bg == null || !music.value.isInitialized) {
+    if (music == null || !music.value.isInitialized) {
       return;
     }
-    final Duration? localMusicTime =
-        EditorTransport.musicLocalTimeAt(bg, transport.currentTime, project.trimmedDuration);
-    if (localMusicTime == null) {
+    if (bg == null) {
+      _musicInRegion = false;
       if (music.value.isPlaying) {
+        if (kDebugMode) _log.fine("MUSIC_PAUSE reason=NO_MUSIC");
         unawaited(music.pause());
       }
       return;
     }
-    if (transport.isPlaying) {
-      if (!music.value.isPlaying) {
-        unawaited(music.seekTo(localMusicTime));
-        unawaited(music.play());
+
+    // The ONE decision point (videoeditor7.txt section 5/8: "Transport
+    // should not be a second media player" — this widget is the only
+    // place that ever calls seekTo/play/pause on the music controller;
+    // EditorTransport and decideMusicSync only ever say what SHOULD
+    // happen). See decideMusicSync's own doc comment for why
+    // `_musicInRegion` — not `music.value.isPlaying` — is what tracks
+    // "have we already entered this region."
+    final bool wasInRegion = _musicInRegion;
+    final MusicSyncDecision decision = EditorTransport.decideMusicSync(
+      bg: bg,
+      currentTime: transport.currentTime,
+      trimmedDuration: project.trimmedDuration,
+      isPlaying: transport.isPlaying,
+      isScrubbing: transport.isScrubbing,
+      wasInRegion: wasInRegion,
+      musicPlayerPosition: music.value.position,
+    );
+    // While actively scrubbing, "in region" is always reported as false
+    // going forward, so the tick right after scrub-end is treated as a
+    // fresh entry (forcing exactly one corrective seek) — matches
+    // section 5's "on scrub end: seek music ONCE to the final correct
+    // position."
+    _musicInRegion = !transport.isScrubbing &&
+        EditorTransport.musicLocalTimeAt(bg, transport.currentTime, project.trimmedDuration) != null;
+
+    // Section 7 debug invariant: music must never be observed playing
+    // while the decision says it shouldn't be.
+    if (kDebugMode && music.value.isPlaying && decision.playback == MusicPlaybackIntent.paused) {
+      _log.warning(
+        "INVARIANT VIOLATION: music was playing but decision says paused "
+        "(t=${transport.currentTime}, isPlaying=${transport.isPlaying}, "
+        "isScrubbing=${transport.isScrubbing}) — forcing pause",
+      );
+      unawaited(music.pause());
+    }
+
+    if (decision.seekTarget != null) {
+      final Duration target = decision.seekTarget!;
+      final bool playAfter = decision.playback == MusicPlaybackIntent.playing;
+      final int generation = ++_audioSyncGeneration;
+      if (kDebugMode) {
+        _log.fine("MUSIC_SEEK target=$target reason=${wasInRegion ? 'DRIFT' : 'ENTER_REGION'}");
       }
+      // Fire-and-forget on purpose (section 6): video playback and
+      // transport updates must never wait on this. The generation check
+      // after the await is what stops a slow/stale seek from applying
+      // itself once a newer tick has already moved on (e.g. the user
+      // scrubbed again, or left the region, before this one finished).
+      unawaited(() async {
+        await music.seekTo(target);
+        if (!mounted || _musicController != music || generation != _audioSyncGeneration) {
+          return;
+        }
+        if (playAfter) {
+          if (kDebugMode) _log.fine("MUSIC_PLAY reason=POST_SEEK");
+          await music.play();
+        } else if (music.value.isPlaying) {
+          await music.pause();
+        }
+      }());
     } else {
-      // Paused or mid-scrub: no free-running audio, and per spec section
-      // 6 ("if user scrubs backward/forward, music follows") the
-      // position must still track exactly, so it's correct whenever
-      // playback (or the next scrub frame) resumes. Unlike the main
-      // video seek, this isn't routed through a coalescing queue — a
-      // plain audio-only seekTo on a short (<=10s-window) clip is cheap
-      // enough on this player that per-frame calls during a drag are not
-      // the same cost class as a full decoder seek; worth revisiting if
-      // real-device testing shows audible stutter during aggressive
-      // scrubbing with music attached.
-      if (music.value.isPlaying) {
+      if (decision.playback == MusicPlaybackIntent.playing) {
+        if (!music.value.isPlaying) {
+          if (kDebugMode) _log.fine("MUSIC_PLAY reason=RESUME");
+          unawaited(music.play());
+        }
+      } else if (music.value.isPlaying) {
+        if (kDebugMode) _log.fine("MUSIC_PAUSE reason=${transport.isScrubbing ? 'SCRUB' : 'OUT_OF_REGION'}");
         unawaited(music.pause());
       }
-      unawaited(music.seekTo(localMusicTime));
     }
   }
 
@@ -330,6 +404,8 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     }
     final VideoPlayerController? old = _musicController;
     _musicController = null;
+    _musicInRegion = false;
+    _audioSyncGeneration++; // invalidates any in-flight seek/play chain on `old`
     await old?.pause();
     await old?.dispose();
     if (audio == null) {
@@ -391,6 +467,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       start = maxStart;
     }
     ref.read(editorControllerProvider.notifier).setTrim(start: start, end: end);
+    if (kDebugMode) _log.fine("VIDEO_SEEK_REQUEST target=$start reason=TRIM_EDGE");
     unawaited(_controller?.seekTo(start));
     // The trim window's own length is the transport's duration (project
     // time 0 = trimStart) — this direct controller.seekTo above isn't
@@ -702,6 +779,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     _lastAppliedMute = null;
     _lastAppliedPreviewSpeed = null;
     _transport?.updateDuration(_initialTrimEnd);
+    if (kDebugMode) _log.fine("VIDEO_SEEK_REQUEST target=0:00 reason=RESET");
     unawaited(_controller?.seekTo(Duration.zero));
     unawaited(_setBgAudio(null));
     _onTransportChanged();
@@ -1322,6 +1400,22 @@ class _TimelineState extends State<_Timeline> {
   /// this round's CLAUDE.md entry.
   bool _gestureLockScroll = false;
 
+  /// Coalesces auto-scroll follows to at most once per rendered frame
+  /// (videoeditor7.txt section 2/4/12: "pointer/position event -> update
+  /// UI immediately... never block" and "do not let timeline auto-scroll
+  /// interfere with video playback"). Without this, every single
+  /// transport position report (the native player reports roughly every
+  /// 100ms while playing, but undo/redo/other transport writes can also
+  /// notify in bursts) would run a synchronous `jumpTo` — and therefore a
+  /// full scroll Start/Update/End notification cycle plus a Scrollable
+  /// relayout — on the very same call stack as the video's own position
+  /// callback, competing with it for the same UI-thread frame budget.
+  /// Deferring to a post-frame callback, and reading
+  /// `transport.currentTime` only when that callback actually runs
+  /// (never the value captured at schedule time), means a burst of ticks
+  /// between frames collapses into exactly one `jumpTo`.
+  bool _autoScrollScheduled = false;
+
   @override
   void initState() {
     super.initState();
@@ -1350,17 +1444,33 @@ class _TimelineState extends State<_Timeline> {
   /// for a frame). This is the transport-generalized version of the
   /// exact same feedback-loop-prevention this screen already had.
   void _onTransportPositionChanged() {
-    if (_isUserScrubbing || !mounted || !_scrollController.hasClients) {
+    if (_isUserScrubbing || !mounted || _autoScrollScheduled) {
       return;
     }
-    // Timeline content is laid out in SOURCE time (0 = start of the
-    // original clip); transport.currentTime is PROJECT time (0 =
-    // trimStart) — convert at this one boundary.
-    final double projectSec = widget.transport.currentTime.inMilliseconds / 1000.0;
-    final double sourceSec = widget.trimStartSeconds + projectSec;
-    final double target = TimelineGeometry.scrollOffsetForTime(sourceSec, _pixelsPerSecond);
-    final ScrollPosition position = _scrollController.position;
-    _scrollController.jumpTo(target.clamp(position.minScrollExtent, position.maxScrollExtent));
+    _autoScrollScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoScrollScheduled = false;
+      if (_isUserScrubbing || !mounted || !_scrollController.hasClients) {
+        return;
+      }
+      // Timeline content is laid out in SOURCE time (0 = start of the
+      // original clip); transport.currentTime is PROJECT time (0 =
+      // trimStart) — convert at this one boundary. Read fresh here
+      // (not captured when this callback was scheduled), so whatever
+      // the transport's latest position is by the time the frame
+      // actually runs is what gets applied.
+      final double projectSec = widget.transport.currentTime.inMilliseconds / 1000.0;
+      final double sourceSec = widget.trimStartSeconds + projectSec;
+      final double target = TimelineGeometry.scrollOffsetForTime(sourceSec, _pixelsPerSecond);
+      final ScrollPosition position = _scrollController.position;
+      final double clamped = target.clamp(position.minScrollExtent, position.maxScrollExtent);
+      // Skip a jump too small to be visible — avoids paying for a full
+      // scroll-notification cycle when nothing would actually move.
+      if ((clamped - position.pixels).abs() < 0.5) {
+        return;
+      }
+      _scrollController.jumpTo(clamped);
+    });
   }
 
   void _setGestureLock(bool locked) {

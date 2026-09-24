@@ -1,6 +1,6 @@
 import "dart:async" show unawaited;
 
-import "package:flutter/foundation.dart" show ChangeNotifier;
+import "package:flutter/foundation.dart" show ChangeNotifier, kDebugMode, debugPrint;
 
 import "../../domain/video_project.dart";
 
@@ -85,6 +85,18 @@ final class EditorTransport extends ChangeNotifier {
   Duration _currentTime = Duration.zero;
   Duration get currentTime => _currentTime;
 
+  // videoeditor7.txt section 11: concise, rate-limited debug-only
+  // telemetry — never compiled into a release build's hot path (guarded
+  // by kDebugMode at every call site, not just here), so it costs
+  // nothing once this round's physical-device behavior is confirmed.
+  static void _log(String event) {
+    if (kDebugMode) {
+      debugPrint("[EditorTransport] $event");
+    }
+  }
+
+  DateTime? _lastPositionLogAt;
+
   bool _isPlaying = false;
   bool get isPlaying => _isPlaying;
 
@@ -107,6 +119,7 @@ final class EditorTransport extends ChangeNotifier {
       return;
     }
     _isPlaying = true;
+    _log("TRANSPORT_PLAY");
     notifyListeners();
   }
 
@@ -115,6 +128,7 @@ final class EditorTransport extends ChangeNotifier {
       return;
     }
     _isPlaying = false;
+    _log("TRANSPORT_PAUSE");
     notifyListeners();
   }
 
@@ -131,11 +145,20 @@ final class EditorTransport extends ChangeNotifier {
       return;
     }
     _currentTime = clamped;
+    // Rate-limited per section 11 ("do not log every frame forever") —
+    // the native player reports position roughly every 100ms during
+    // playback, far too often to log unconditionally.
+    final DateTime now = DateTime.now();
+    if (_lastPositionLogAt == null || now.difference(_lastPositionLogAt!) >= const Duration(seconds: 1)) {
+      _lastPositionLogAt = now;
+      _log("PLAYER_POSITION_REPORT t=$_currentTime");
+    }
     notifyListeners();
   }
 
   void beginScrub() {
     _isScrubbing = true;
+    _log("USER_SCRUB_BEGIN t=$_currentTime");
     notifyListeners();
   }
 
@@ -158,6 +181,7 @@ final class EditorTransport extends ChangeNotifier {
       _currentTime = clamped;
       notifyListeners();
     }
+    _log("VIDEO_SEEK_REQUEST target=$clamped");
     _pendingSeek = clamped;
     if (_seekInFlight) {
       return;
@@ -171,7 +195,9 @@ final class EditorTransport extends ChangeNotifier {
       while (_pendingSeek != null) {
         final Duration target = _pendingSeek!;
         _pendingSeek = null;
+        _log("VIDEO_SEEK_BEGIN target=$target");
         await _onSeek(target);
+        _log("VIDEO_SEEK_END target=$target");
         // If requestSeek() was called again while the line above was
         // awaited, _pendingSeek is non-null again and the loop repeats
         // for the newest position instead of stopping here — that's the
@@ -187,6 +213,7 @@ final class EditorTransport extends ChangeNotifier {
   /// perform one exact final synchronization."
   void endScrub(Duration finalTime) {
     _isScrubbing = false;
+    _log("USER_SCRUB_END t=$finalTime");
     requestSeek(finalTime);
   }
 
@@ -252,4 +279,92 @@ final class EditorTransport extends ChangeNotifier {
     }
     return time - bg.startSec;
   }
+
+  /// Default resync threshold for [decideMusicSync] (videoeditor7.txt
+  /// section 5: "start with something reasonable such as 100-150ms").
+  /// Below this, drift is left alone rather than triggering a seek —
+  /// "for small drift: DO NOTHING."
+  static const Duration defaultDriftThreshold = Duration(milliseconds: 150);
+
+  /// The music-sync POLICY (videoeditor7.txt section 5), as one pure,
+  /// side-effect-free decision function — independently testable without
+  /// a real `VideoPlayerController`. The caller (trim_step.dart's
+  /// `_onTransportChanged`) is the only place that ever actually calls
+  /// `music.seekTo`/`play`/`pause`; this function only says what should
+  /// happen, never performs it. Splitting "what" from "how" is what
+  /// makes the entry/drift/scrub rules in section 5 unit-testable at
+  /// all, since the physical `VideoPlayerController` behavior itself can
+  /// only be confirmed on a real device.
+  ///
+  /// The critical rule this enforces: a music-region **re-entry check**
+  /// (`wasInRegion` false → seek once and start) is structurally
+  /// distinct from an already-inside-the-region **drift check** (seek
+  /// only if actual measured drift exceeds [driftThreshold]) — conflating
+  /// the two (e.g. "seek+play whenever the player's own isPlaying flag
+  /// happens to read false") is exactly the bug this round fixes: a
+  /// transient buffering stall can make `VideoPlayerController.isPlaying`
+  /// read false for a tick even though playback never really stopped,
+  /// and treating that as "not started yet" reseeks+replays on every
+  /// such tick — the free-running/stalling symptom videoeditor7.txt
+  /// reported. `wasInRegion` is state the CALLER owns and updates only
+  /// once per genuine entry/exit — never derived from the player's own
+  /// possibly-flickering `isPlaying` value.
+  static MusicSyncDecision decideMusicSync({
+    required BackgroundAudio? bg,
+    required Duration currentTime,
+    required Duration trimmedDuration,
+    required bool isPlaying,
+    required bool isScrubbing,
+    required bool wasInRegion,
+    required Duration musicPlayerPosition,
+    Duration driftThreshold = defaultDriftThreshold,
+  }) {
+    // Section: "USER SCRUB — PAUSE music during active scrub... do NOT
+    // hammer the audio player with seek calls" for every intermediate
+    // pointer movement. No seek target at all while actively scrubbing —
+    // the eventual scrub-end tick (isScrubbing already false by then)
+    // naturally produces one corrective seek via the drift/re-entry
+    // check below, since the caller resets wasInRegion to false the
+    // moment a scrub begins (see trim_step.dart).
+    if (isScrubbing || bg == null) {
+      return const MusicSyncDecision(playback: MusicPlaybackIntent.paused);
+    }
+    final Duration? local = musicLocalTimeAt(bg, currentTime, trimmedDuration);
+    if (local == null) {
+      return const MusicSyncDecision(playback: MusicPlaybackIntent.paused);
+    }
+    final Duration drift = (musicPlayerPosition - local).abs();
+    final bool needsSeek = !wasInRegion || drift > driftThreshold;
+    return MusicSyncDecision(
+      playback: isPlaying ? MusicPlaybackIntent.playing : MusicPlaybackIntent.paused,
+      seekTarget: needsSeek ? local : null,
+    );
+  }
+}
+
+/// What [EditorTransport.decideMusicSync] wants the music player's
+/// play/pause state to be.
+enum MusicPlaybackIntent { paused, playing }
+
+/// The result of [EditorTransport.decideMusicSync] — what the wiring
+/// layer should do to the real music player this tick. [seekTarget] is
+/// non-null only when a seek is actually warranted (a fresh region
+/// entry, a scrub-end correction, or drift beyond the threshold) — most
+/// ticks during steady in-sync playback produce a `null` target, meaning
+/// "do nothing but ensure play/pause matches [playback]."
+final class MusicSyncDecision {
+  const MusicSyncDecision({required this.playback, this.seekTarget});
+
+  final MusicPlaybackIntent playback;
+  final Duration? seekTarget;
+
+  @override
+  bool operator ==(Object other) =>
+      other is MusicSyncDecision && other.playback == playback && other.seekTarget == seekTarget;
+
+  @override
+  int get hashCode => Object.hash(playback, seekTarget);
+
+  @override
+  String toString() => "MusicSyncDecision(playback: $playback, seekTarget: $seekTarget)";
 }
