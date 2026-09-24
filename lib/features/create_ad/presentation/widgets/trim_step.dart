@@ -1,4 +1,4 @@
-import "dart:async" show StreamSubscription, unawaited;
+import "dart:async" show StreamSubscription, Timer, unawaited;
 import "dart:io";
 import "dart:math" show max, pi;
 
@@ -78,8 +78,15 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   // share_plus, ffmpeg_kit) is full of new-native-dependency Kotlin/AGP
   // conflicts worth avoiding when an already-vetted package can do it.
   VideoPlayerController? _musicController;
-  double? _lastAppliedPreviewSpeed;
-  bool? _lastAppliedMute;
+  // Initialized to the native player's own real defaults (volume=1.0,
+  // playbackSpeed=1.0 — see VideoPlayerValue's own defaults), not null,
+  // so a freshly-loaded zero-edit clip never issues an "establish
+  // baseline" setVolume(1)/setPlaybackSpeed(1.0) call on its first tick
+  // — there is genuinely nothing to change yet (videoeditor8.txt
+  // section 10: "VIDEO speed changes = 0 / VIDEO mute changes = 0"
+  // during zero-edit playback).
+  double _lastAppliedPreviewSpeed = 1.0;
+  bool _lastAppliedMute = false;
 
   // videoeditor7.txt section 5/6: whether the music player is currently
   // considered "inside" its region by the last tick this widget itself
@@ -98,6 +105,40 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   int _audioSyncGeneration = 0;
 
   final _log = AppLogger.named("TrimStepPlayback");
+
+  // videoeditor8.txt section 10: debug-only counters, summarized every
+  // 10s while a clip is loaded (see _startDebugInstrumentation). During
+  // zero-edit playback, seek/play/pause/speed/mute should all read 0
+  // after the initial play — these exist to make that a directly
+  // observable fact during physical-device testing, not a claim.
+  int _dbgSeekCount = 0;
+  int _dbgPlayCount = 0;
+  int _dbgPauseCount = 0;
+  int _dbgSpeedChangeCount = 0;
+  int _dbgMuteChangeCount = 0;
+  int _dbgTimelineUpdateCount = 0;
+  int _dbgEditorRebuildCount = 0;
+  Timer? _dbgReportTimer;
+
+  void _startDebugInstrumentation() {
+    if (!kDebugMode) {
+      return;
+    }
+    _dbgReportTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _log.info(
+        "10s window: seekTo=$_dbgSeekCount play=$_dbgPlayCount pause=$_dbgPauseCount "
+        "speedChanges=$_dbgSpeedChangeCount muteChanges=$_dbgMuteChangeCount "
+        "timelineUpdates=$_dbgTimelineUpdateCount editorRebuilds=$_dbgEditorRebuildCount",
+      );
+      _dbgSeekCount = 0;
+      _dbgPlayCount = 0;
+      _dbgPauseCount = 0;
+      _dbgSpeedChangeCount = 0;
+      _dbgMuteChangeCount = 0;
+      _dbgTimelineUpdateCount = 0;
+      _dbgEditorRebuildCount = 0;
+    });
+  }
 
   // Real decoded frames for the timeline's Clip lane (not a placeholder
   // bar — see the video-editor spec this round implements). Generated
@@ -137,8 +178,9 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     _controller?.dispose().ignore();
     _transport?.removeListener(_onTransportChanged);
     _transport?.dispose();
-    _lastAppliedMute = null;
-    _lastAppliedPreviewSpeed = null;
+    _dbgReportTimer?.cancel();
+    _lastAppliedMute = false;
+    _lastAppliedPreviewSpeed = 1.0;
     setState(() {
       _initError = null;
       _controller = null;
@@ -182,11 +224,13 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       duration: _initialTrimEnd,
       onSeek: (Duration projectTime) async {
         final Duration trimStart = ref.read(editorControllerProvider)?.trimStart ?? Duration.zero;
+        if (kDebugMode) _dbgSeekCount++;
         await controller.seekTo(trimStart + projectTime);
       },
     );
     _transport = transport;
     transport.addListener(_onTransportChanged);
+    _startDebugInstrumentation();
 
     setState(() {});
     unawaited(controller.setLooping(true));
@@ -217,6 +261,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   @override
   void dispose() {
     _progressSub?.cancel();
+    _dbgReportTimer?.cancel();
     _controller?.removeListener(_reportPlayerPosition);
     _controller?.dispose().ignore();
     _transport?.removeListener(_onTransportChanged);
@@ -281,21 +326,42 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     }
 
     if (transport.isPlaying && !controller.value.isPlaying) {
-      if (kDebugMode) _log.fine("VIDEO_PLAY");
+      if (kDebugMode) {
+        _log.fine("VIDEO_PLAY");
+        _dbgPlayCount++;
+      }
       unawaited(controller.play());
     } else if (!transport.isPlaying && controller.value.isPlaying) {
-      if (kDebugMode) _log.fine("VIDEO_PAUSE");
+      if (kDebugMode) {
+        _log.fine("VIDEO_PAUSE");
+        _dbgPauseCount++;
+      }
       unawaited(controller.pause());
     }
 
     if (_lastAppliedMute != project.removeAudio) {
       _lastAppliedMute = project.removeAudio;
+      if (kDebugMode) _dbgMuteChangeCount++;
       unawaited(controller.setVolume(project.removeAudio ? 0 : 1));
+    }
+
+    // videoeditor8.txt section 9: the explicit zero-edit fast path. When
+    // the composition has no speed zones and no background music,
+    // nothing below this line has any work to do — overlays are
+    // evaluated independently by their own listeners (see the preview
+    // Stack), not through this method at all, and rotation/flip/filter
+    // are one-shot widget-tree concerns, not per-tick ones. Skipping
+    // this keeps a plain, unedited clip's per-tick cost close to
+    // caption_publish_step.dart's (essentially none), rather than merely
+    // "safe but still doing the checks every tick."
+    if (!project.needsPlaybackCoordination) {
+      return;
     }
 
     final double desiredSpeed = EditorTransport.activeSpeedAt(project.speedZones, transport.currentTime);
     if (_lastAppliedPreviewSpeed != desiredSpeed) {
       _lastAppliedPreviewSpeed = desiredSpeed;
+      if (kDebugMode) _dbgSpeedChangeCount++;
       unawaited(controller.setPlaybackSpeed(desiredSpeed));
     }
 
@@ -467,7 +533,10 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       start = maxStart;
     }
     ref.read(editorControllerProvider.notifier).setTrim(start: start, end: end);
-    if (kDebugMode) _log.fine("VIDEO_SEEK_REQUEST target=$start reason=TRIM_EDGE");
+    if (kDebugMode) {
+      _log.fine("VIDEO_SEEK_REQUEST target=$start reason=TRIM_EDGE");
+      _dbgSeekCount++;
+    }
     unawaited(_controller?.seekTo(start));
     // The trim window's own length is the transport's duration (project
     // time 0 = trimStart) — this direct controller.seekTo above isn't
@@ -773,13 +842,21 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   /// it), so hitting Reset by mistake can still be undone.
   void _reset() {
     ref.read(editorControllerProvider.notifier).resetToDefaults(_initialTrimEnd);
-    // Force-clear the applied-value caches so _onTransportChanged
-    // reapplies mute/speed even if the reset value happens to equal
-    // whatever was last cached (equality-gated, not state-gated).
-    _lastAppliedMute = null;
-    _lastAppliedPreviewSpeed = null;
+    // Reset is a deliberate, rare, one-time action (not hot-path
+    // concern) — applied directly rather than through the cache-gated
+    // path in _onTransportChanged, since the real controller's current
+    // volume/speed may differ from the reset-to defaults (e.g. a speed
+    // zone was active) and the cache must reflect reality afterward, not
+    // just "what the composition's default happens to be."
+    unawaited(_controller?.setVolume(1));
+    unawaited(_controller?.setPlaybackSpeed(1.0));
+    _lastAppliedMute = false;
+    _lastAppliedPreviewSpeed = 1.0;
     _transport?.updateDuration(_initialTrimEnd);
-    if (kDebugMode) _log.fine("VIDEO_SEEK_REQUEST target=0:00 reason=RESET");
+    if (kDebugMode) {
+      _log.fine("VIDEO_SEEK_REQUEST target=0:00 reason=RESET");
+      _dbgSeekCount++;
+    }
     unawaited(_controller?.seekTo(Duration.zero));
     unawaited(_setBgAudio(null));
     _onTransportChanged();
@@ -862,6 +939,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
 
   @override
   Widget build(BuildContext context) {
+    if (kDebugMode) _dbgEditorRebuildCount++;
     final VideoPlayerController? controller = _controller;
     final VideoProject? project = ref.watch(editorControllerProvider);
     final bool ready = controller != null && controller.value.isInitialized && project != null;
@@ -947,25 +1025,11 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                             child: Stack(
                               fit: StackFit.expand,
                               children: <Widget>[
-                                Center(
-                                  child: ColorFiltered(
-                                    colorFilter: project.colorFilter.previewFilter,
-                                    child: RotatedBox(
-                                      quarterTurns: project.rotation.quarterTurns,
-                                      child: Transform(
-                                        alignment: Alignment.center,
-                                        transform: Matrix4.diagonal3Values(
-                                          project.flip == AppFlipDirection.horizontal ? -1 : 1,
-                                          project.flip == AppFlipDirection.vertical ? -1 : 1,
-                                          1,
-                                        ),
-                                        child: AspectRatio(
-                                          aspectRatio: controller.value.aspectRatio,
-                                          child: VideoPlayer(controller),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                                _VideoPreview(
+                                  controller: controller,
+                                  rotation: project.rotation,
+                                  flip: project.flip,
+                                  colorFilter: project.colorFilter,
                                 ),
                                 for (final VideoOverlay overlay in project.overlays)
                                   // BUG 7 fix, now transport-driven
@@ -1166,6 +1230,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                   onResizeOverlay: _onResizeOverlay,
                   onResizeMusic: (BackgroundAudio updated) => unawaited(_setBgAudio(updated)),
                   onRemoveMusic: () => unawaited(_setBgAudio(null)),
+                  onDebugTimelineUpdate: kDebugMode ? () => _dbgTimelineUpdateCount++ : null,
                 ),
                 const SizedBox(height: AppSpacing.lg),
               ],
@@ -1186,6 +1251,60 @@ class _TrimStepState extends ConsumerState<TrimStep> {
         ),
       ),
     );
+  }
+}
+
+/// The video texture and its optional rotate/flip/filter layers, isolated
+/// into their own widget (videoeditor8.txt section 4/9). Two deliberate
+/// differences from the block this replaced: (a) rotation==none,
+/// flip==none, and colorFilter==none each skip building their respective
+/// wrapper widget entirely instead of always constructing an
+/// identity-transform `RotatedBox`/`Transform`/`ColorFiltered` — a
+/// zero-edit clip's preview tree is therefore just
+/// `AspectRatio(child: VideoPlayer(controller))`, the same shape
+/// `caption_publish_step.dart` renders; (b) a `RepaintBoundary` wraps the
+/// whole thing, so the video texture's own per-frame repaints (driven by
+/// the native player, not by Flutter's widget rebuild cycle) don't force
+/// the rest of `TrimStep`'s tree — tool row, timeline, overlays — into
+/// the same repaint pass, matching how the bare `VideoPlayer` on the
+/// Publish screen never does either.
+class _VideoPreview extends StatelessWidget {
+  const _VideoPreview({
+    required this.controller,
+    required this.rotation,
+    required this.flip,
+    required this.colorFilter,
+  });
+
+  final VideoPlayerController controller;
+  final AppVideoRotation rotation;
+  final AppFlipDirection flip;
+  final AppColorFilter colorFilter;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget video = AspectRatio(
+      aspectRatio: controller.value.aspectRatio,
+      child: VideoPlayer(controller),
+    );
+    if (flip != AppFlipDirection.none) {
+      video = Transform(
+        alignment: Alignment.center,
+        transform: Matrix4.diagonal3Values(
+          flip == AppFlipDirection.horizontal ? -1 : 1,
+          flip == AppFlipDirection.vertical ? -1 : 1,
+          1,
+        ),
+        child: video,
+      );
+    }
+    if (rotation != AppVideoRotation.none) {
+      video = RotatedBox(quarterTurns: rotation.quarterTurns, child: video);
+    }
+    if (colorFilter != AppColorFilter.none) {
+      video = ColorFiltered(colorFilter: colorFilter.previewFilter, child: video);
+    }
+    return RepaintBoundary(child: Center(child: video));
   }
 }
 
@@ -1341,6 +1460,7 @@ class _Timeline extends StatefulWidget {
     required this.onResizeOverlay,
     required this.onResizeMusic,
     required this.onRemoveMusic,
+    this.onDebugTimelineUpdate,
   });
 
   final VideoPlayerController controller;
@@ -1360,6 +1480,7 @@ class _Timeline extends StatefulWidget {
   final void Function(VideoOverlay oldOverlay, VideoOverlay updated) onResizeOverlay;
   final void Function(BackgroundAudio updated) onResizeMusic;
   final VoidCallback onRemoveMusic;
+  final VoidCallback? onDebugTimelineUpdate;
 
   static const double _labelWidth = 52;
   static const double _rulerHeight = 22;
@@ -1469,6 +1590,7 @@ class _TimelineState extends State<_Timeline> {
       if ((clamped - position.pixels).abs() < 0.5) {
         return;
       }
+      widget.onDebugTimelineUpdate?.call();
       _scrollController.jumpTo(clamped);
     });
   }

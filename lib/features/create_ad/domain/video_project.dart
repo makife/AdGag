@@ -253,6 +253,18 @@ final class VideoProject {
       removeAudio ||
       colorFilter != AppColorFilter.none;
 
+  /// Whether the preview needs any PER-TICK playback coordination beyond
+  /// "let the native player run" (videoeditor8.txt section 9's "zero-edit
+  /// fast path"). Only speed zones and background music actually require
+  /// watching playback position to decide when to act — rotation, flip,
+  /// mute and the color filter are applied once, only when they change,
+  /// never on a timer/tick; overlays are evaluated independently by their
+  /// own listeners and don't touch this path either. Deliberately
+  /// narrower than [hasAnyEdit], which answers a different question
+  /// ("does export need the FFmpeg path / is there anything to warn about
+  /// losing"), not "does the preview need to do per-tick work."
+  bool get needsPlaybackCoordination => speedZones.isNotEmpty || bgAudio != null;
+
   VideoProject withTrim({required Duration start, required Duration end}) => _copyWith(
         trimStart: start,
         trimEnd: end,

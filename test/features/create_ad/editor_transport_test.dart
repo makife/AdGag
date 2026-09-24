@@ -304,7 +304,7 @@ void main() {
         // instead of testing against a position that only ever moves
         // when a seek happens.
         if (musicPlaying && previousTick != null) {
-          musicPlayerPosition += sec(s - previousTick!);
+          musicPlayerPosition += sec(s - previousTick);
         }
         previousTick = s;
 
