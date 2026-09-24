@@ -2106,7 +2106,27 @@ class _TimelineState extends State<_Timeline> {
                       } else if (notification is ScrollUpdateNotification && _isUserScrubbing) {
                         widget.transport
                             .requestSeek(_projectTimeForScrollOffset(notification.metrics.pixels, totalSec));
-                      } else if (notification is ScrollEndNotification) {
+                      } else if (notification is ScrollEndNotification && _isUserScrubbing) {
+                        // THE root cause found via the on-device counter
+                        // overlay: ScrollPosition.jumpTo() (the
+                        // programmatic auto-follow in
+                        // _onTransportPositionChanged) itself dispatches
+                        // its own ScrollStartNotification/
+                        // ScrollUpdateNotification/ScrollEndNotification
+                        // sequence — the Start/Update legs were already
+                        // correctly ignored (dragDetails == null /
+                        // !_isUserScrubbing), but this End leg was NOT
+                        // gated at all, so every single auto-follow jump
+                        // was also calling endScrub() -> requestSeek() on
+                        // the real video controller. That's a genuine,
+                        // real decoder seek (unlike play()/pause(), which
+                        // don't force a decode-position change) firing at
+                        // roughly the same rate as playback position
+                        // updates themselves — confirmed physically via
+                        // the debug overlay showing `seek` and `tl`
+                        // (timeline update) climbing in lockstep. Gating
+                        // this on `_isUserScrubbing` (only ever true
+                        // between a REAL drag's Start and End) is the fix.
                         _isUserScrubbing = false;
                         widget.transport
                             .endScrub(_projectTimeForScrollOffset(notification.metrics.pixels, totalSec));
