@@ -132,12 +132,31 @@ void main() {
     expect(fc, contains("format=yuv420p"));
   });
 
-  test("E: filter only applies the right eq= expression", () {
+  test("E: filter only applies the right GPL-free expression (no eq=)", () {
     final List<String> args = buildArgs(baseProject(colorFilter: AppColorFilter.vivid));
     final String fc = filterComplexOf(args);
     expectWellFormedGraph(fc);
-    expect(fc, contains("saturation=1.45"));
+    expect(fc, contains("hue=s=1.45"));
+    expect(fc, contains("curves=preset=increase_contrast"));
   });
+
+  test(
+    "no AppColorFilter ever emits the 'eq' filter — real-device confirmed "
+    "GPL-only, absent from this LGPL FFmpeg build ('No such filter: eq')",
+    () {
+      for (final AppColorFilter filter in AppColorFilter.values) {
+        final String fc = filterComplexOf(buildArgs(baseProject(colorFilter: filter)));
+        // Matches "eq=" or "eq:" as a filter name, not e.g. a variable
+        // named requeue — filter names are preceded by [labels] or a
+        // comma/semicolon in this app's own generated graphs.
+        expect(
+          RegExp(r"(^|[,;\]])eq[=:]").hasMatch(fc),
+          isFalse,
+          reason: "$filter emitted the unavailable 'eq' filter: $fc",
+        );
+      }
+    },
+  );
 
   test("F: speed 0.5x (slow motion) uses atempo and setpts on the zone", () {
     final List<String> args = buildArgs(baseProject(speedZones: <SpeedZone>[slowZone]));
@@ -162,7 +181,7 @@ void main() {
     final String fc = filterComplexOf(args);
     expectWellFormedGraph(fc);
     expect(fc, contains("drawtext="));
-    expect(fc, contains("contrast=1.3"));
+    expect(fc, contains("curves=preset=strong_contrast"));
     expect(fc, contains("format=yuv420p"));
   });
 
@@ -188,7 +207,7 @@ void main() {
     expectWellFormedGraph(fc);
     expect(fc, contains("drawtext="));
     expect(fc, contains("atempo=0.5"));
-    expect(fc, contains("gamma_r=1.15"));
+    expect(fc, contains("colortemperature=temperature=4500"));
     expect(fc, contains("format=yuv420p"));
   });
 

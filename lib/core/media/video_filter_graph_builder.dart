@@ -199,24 +199,34 @@ abstract final class VideoFilterGraphBuilder {
       case AppFlipDirection.vertical:
         transformFilters.add("vflip");
     }
+    // BUG 1 fix (real-device error: "[AVFilterGraph] No such filter:
+    // 'eq' / Filter not found"): confirmed via direct research against
+    // FFmpeg's own published GPL-filter list — `eq` is one of ~32
+    // filters that structurally require `--enable-gpl` to build at all;
+    // it cannot exist in ffmpeg_kit_flutter_new_video's `_video` tier,
+    // which is genuinely LGPL-3.0 (this app deliberately chose that tier
+    // over the GPL one for app-store distribution — see this file's own
+    // license history). This was never a "wrong eq expression" bug, so
+    // no eq-based fix was ever going to work — every color filter below
+    // is rebuilt from filters confirmed absent from that GPL list:
+    // `colortemperature` (warm/cool casts), `hue`'s `s=` parameter
+    // (saturation, already used correctly for B&W), and `curves` (preset
+    // contrast/tone curves, including a literal `vintage` preset).
     switch (project.colorFilter) {
       case AppColorFilter.none:
         break;
       case AppColorFilter.warm:
-        transformFilters.add("eq=gamma_r=1.15:gamma_b=0.9:saturation=1.1");
+        transformFilters.addAll(<String>["colortemperature=temperature=4500", "hue=s=1.1"]);
       case AppColorFilter.cool:
-        transformFilters.add("eq=gamma_r=0.9:gamma_b=1.15:saturation=1.05");
+        transformFilters.addAll(<String>["colortemperature=temperature=9000", "hue=s=1.05"]);
       case AppColorFilter.blackAndWhite:
         transformFilters.add("hue=s=0");
       case AppColorFilter.vintage:
-        // Faded contrast + a warm cast + light grain-adjacent desaturation
-        // — the "old film" look without a separate grain/noise filter,
-        // which would add real per-frame render cost for a subtle effect.
-        transformFilters.add("eq=contrast=0.85:saturation=0.75:gamma_r=1.1:brightness=0.02");
+        transformFilters.addAll(<String>["colortemperature=temperature=5000", "curves=preset=vintage", "hue=s=0.8"]);
       case AppColorFilter.vivid:
-        transformFilters.add("eq=saturation=1.45:contrast=1.15");
+        transformFilters.addAll(<String>["hue=s=1.45", "curves=preset=increase_contrast"]);
       case AppColorFilter.dramatic:
-        transformFilters.add("eq=contrast=1.3:brightness=-0.04:saturation=0.9");
+        transformFilters.addAll(<String>["curves=preset=strong_contrast", "hue=s=0.9"]);
     }
     // Always the last video filter, not just when there's a rotation/
     // flip/color transform to chain it onto: drawtext and overlay (used

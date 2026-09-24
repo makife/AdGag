@@ -19,6 +19,7 @@ import "../../domain/video_constraints.dart";
 import "../../domain/video_project.dart";
 import "../providers/create_ad_flow_controller.dart";
 import "../providers/editor_controller.dart";
+import "timeline_geometry.dart";
 
 /// The creation flow's one editing step (CLAUDE.md section 4/38): trim,
 /// rotate, flip, mute, a color filter, background music, slow-motion
@@ -67,6 +68,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   // conflicts worth avoiding when an already-vetted package can do it.
   VideoPlayerController? _musicController;
   double? _lastAppliedPreviewSpeed;
+  bool? _lastAppliedMute;
 
   // Real decoded frames for the timeline's Clip lane (not a placeholder
   // bar — see the video-editor spec this round implements). Generated
@@ -79,33 +81,71 @@ class _TrimStepState extends ConsumerState<TrimStep> {
 
   bool _showFilterStrip = false;
 
+  // BUG 3 fix: controller.initialize() previously had no timeout and no
+  // error handling at all — if it hung (real-device report: "recorded
+  // ~10 seconds, editor remained on a loading spinner indefinitely, had
+  // to close it") or threw, `ready` just stayed false forever with no
+  // way out except leaving the screen. Every async stage here now has
+  // an explicit outcome: success, a bounded timeout, or a caught error
+  // — never silence.
+  String? _initError;
+
   @override
   void initState() {
     super.initState();
+    _startInitialization();
+  }
+
+  void _startInitialization() {
     final LocalVideoDraft? draft = ref.read(createAdFlowControllerProvider).capturedDraft;
-    if (draft != null) {
-      final VideoPlayerController controller = VideoPlayerController.file(File(draft.filePath));
-      _controller = controller;
-      unawaited(
-        controller.initialize().then((_) {
-          if (mounted) {
-            final Duration total = controller.value.duration;
-            _initialTrimEnd = total > VideoConstraints.max ? VideoConstraints.max : total;
-            // VideoProject becomes the single source of truth from this
-            // point on — the preview below reads it directly, not a
-            // parallel copy of these fields kept in widget state.
-            ref.read(editorControllerProvider.notifier).init(
-                  VideoProject(videoPath: draft.filePath, trimStart: Duration.zero, trimEnd: _initialTrimEnd),
-                );
-            setState(() {});
-            unawaited(controller.setLooping(true));
-            unawaited(controller.play());
-            controller.addListener(_syncLivePreview);
-            unawaited(_generateThumbnails(draft));
-          }
-        }),
-      );
+    if (draft == null) {
+      return;
     }
+    // Retrying after a failed/timed-out init (via the "Try again"
+    // button) must not leak the controller from the attempt that just
+    // failed.
+    _controller?.dispose().ignore();
+    setState(() {
+      _initError = null;
+      _controller = null;
+    });
+    final VideoPlayerController controller = VideoPlayerController.file(File(draft.filePath));
+    _controller = controller;
+    unawaited(_initializeController(controller, draft));
+  }
+
+  Future<void> _initializeController(VideoPlayerController controller, LocalVideoDraft draft) async {
+    try {
+      // 12s is generous for a <=10s-source clip on a mid-range phone —
+      // long enough that a legitimately slow device isn't cut off
+      // mid-init, short enough that "indefinitely" never happens again.
+      await controller.initialize().timeout(const Duration(seconds: 12));
+    } catch (e) {
+      if (mounted) {
+        setState(() => _initError = "Couldn't open this video: $e");
+      }
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    final Duration total = controller.value.duration;
+    _initialTrimEnd = total > VideoConstraints.max ? VideoConstraints.max : total;
+    // VideoProject becomes the single source of truth from this point
+    // on — the preview below reads it directly, not a parallel copy of
+    // these fields kept in widget state.
+    ref.read(editorControllerProvider.notifier).init(
+          VideoProject(videoPath: draft.filePath, trimStart: Duration.zero, trimEnd: _initialTrimEnd),
+        );
+    setState(() {});
+    unawaited(controller.setLooping(true));
+    unawaited(controller.play());
+    controller.addListener(_syncLivePreview);
+    // Thumbnail generation deliberately does not block `ready` above —
+    // it fills in progressively (see _generateThumbnails' own doc
+    // comment on the filmstrip's best-effort fallback), never gating
+    // editor startup on it.
+    unawaited(_generateThumbnails(draft));
   }
 
   Future<void> _generateThumbnails(LocalVideoDraft draft) async {
@@ -153,6 +193,20 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     if (controller == null || !controller.value.isInitialized || project == null) {
       return;
     }
+    // BUG 11 fix: mute used to be applied only from the one toolbar
+    // button's own handler — undo/redo/Reset all change
+    // project.removeAudio without going through that handler, so the
+    // actual preview volume could drift out of sync with the
+    // composition's own state ("does not RELIABLY mute"). Re-asserted
+    // here on every position tick instead, so it self-corrects
+    // regardless of which path changed removeAudio — the same
+    // single-source-of-truth contract as everything else VideoProject
+    // drives.
+    if (_lastAppliedMute != project.removeAudio) {
+      _lastAppliedMute = project.removeAudio;
+      unawaited(controller.setVolume(project.removeAudio ? 0 : 1));
+    }
+
     final double startSeconds = project.trimStart.inMilliseconds / 1000.0;
     final double elapsedInTrim = controller.value.position.inMilliseconds / 1000.0 - startSeconds;
 
@@ -349,10 +403,26 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     ref.read(editorControllerProvider.notifier).updateOverlay(updated);
   }
 
+  // BUG 6 fix: on a real device, tapping Text dimmed the screen (the
+  // modal barrier opened) but showed no visible text-entry UI at all.
+  // The dialog's content had grown tall (preview box, font picker,
+  // style presets, outline/shadow/background toggles, an opacity
+  // slider, entrance-effect chips, a time-range slider) — combined with
+  // the keyboard opening immediately (autofocus:true) on a real phone's
+  // actual screen height, a centered AlertDialog's own intrinsic-sizing
+  // behavior is a known-brittle combination for tall, keyboard-heavy
+  // content; it can end up effectively zero-height/clipped on some
+  // devices while looking fine on a wider emulator. A scroll-controlled
+  // bottom sheet is the standard, robust Flutter pattern for exactly
+  // this case (tall form + keyboard) — it explicitly sizes itself
+  // against the keyboard inset rather than relying on AlertDialog's
+  // intrinsic sizing.
   Future<void> _addTextOverlay() async {
-    final TextOverlay? overlay = await showDialog<TextOverlay>(
+    final TextOverlay? overlay = await showModalBottomSheet<TextOverlay>(
       context: context,
-      builder: (BuildContext context) => _TextOverlayDialog(id: _uuid.v4(), maxDuration: _trimmedDuration),
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (BuildContext context) => _TextOverlaySheet(id: _uuid.v4(), maxDuration: _trimmedDuration),
     );
     if (overlay != null) {
       ref.read(editorControllerProvider.notifier).addOverlay(overlay);
@@ -706,44 +776,73 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                                   ),
                                 ),
                                 for (final VideoOverlay overlay in project.overlays)
-                                  Positioned(
-                                    left: overlay.xPercent * previewSize.width,
-                                    top: overlay.yPercent * previewSize.height,
-                                    child: GestureDetector(
-                                      // onScale (not onPan) so one finger
-                                      // moves it, two fingers pinch to
-                                      // resize and rotate (images) — all
-                                      // through the same callback pair,
-                                      // since a GestureDetector can't mix
-                                      // onPanUpdate and onScaleUpdate
-                                      // without them fighting over the
-                                      // gesture arena.
-                                      onScaleStart: (ScaleStartDetails d) => _onOverlayScaleStart(overlay, d),
-                                      onScaleUpdate: (ScaleUpdateDetails d) =>
-                                          _onOverlayScaleUpdate(overlay, d, previewSize),
-                                      child: Stack(
-                                        clipBehavior: Clip.none,
-                                        children: <Widget>[
-                                          _OverlayPreview(overlay: overlay, previewWidth: previewSize.width),
-                                          Positioned(
-                                            right: -10,
-                                            top: -10,
-                                            child: GestureDetector(
-                                              onTap: () => ref
-                                                  .read(editorControllerProvider.notifier)
-                                                  .removeOverlay(overlay.id),
-                                              child: Container(
-                                                width: 22,
-                                                height: 22,
-                                                decoration: const BoxDecoration(
-                                                  color: Colors.black87,
-                                                  shape: BoxShape.circle,
+                                  // BUG 7 fix: an overlay used to render
+                                  // unconditionally regardless of
+                                  // playback position — timeline data
+                                  // and preview rendering were
+                                  // disconnected. Visibility is now a
+                                  // pure function of the controller's own
+                                  // current position vs. this overlay's
+                                  // [startSec, endSec) window (relative
+                                  // to the trim start, the same
+                                  // convention the timeline itself uses),
+                                  // reactive via ValueListenableBuilder
+                                  // so only this one overlay's visibility
+                                  // rebuilds per tick, not the full
+                                  // preview tree.
+                                  ValueListenableBuilder<VideoPlayerValue>(
+                                    valueListenable: controller,
+                                    builder: (BuildContext context, VideoPlayerValue value, Widget? child) {
+                                      final double elapsed = value.position.inMilliseconds / 1000.0 -
+                                          project.trimStart.inMilliseconds / 1000.0;
+                                      final double start = overlay.startSec.inMilliseconds / 1000.0;
+                                      final double end = overlay.endSec.inMilliseconds / 1000.0;
+                                      final bool visible = elapsed >= start && elapsed < end;
+                                      if (!visible) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      return child!;
+                                    },
+                                    child: Positioned(
+                                      left: overlay.xPercent * previewSize.width,
+                                      top: overlay.yPercent * previewSize.height,
+                                      child: GestureDetector(
+                                        // onScale (not onPan) so one
+                                        // finger moves it, two fingers
+                                        // pinch to resize and rotate
+                                        // (images) — all through the same
+                                        // callback pair, since a
+                                        // GestureDetector can't mix
+                                        // onPanUpdate and onScaleUpdate
+                                        // without them fighting over the
+                                        // gesture arena.
+                                        onScaleStart: (ScaleStartDetails d) => _onOverlayScaleStart(overlay, d),
+                                        onScaleUpdate: (ScaleUpdateDetails d) =>
+                                            _onOverlayScaleUpdate(overlay, d, previewSize),
+                                        child: Stack(
+                                          clipBehavior: Clip.none,
+                                          children: <Widget>[
+                                            _OverlayPreview(overlay: overlay, previewWidth: previewSize.width),
+                                            Positioned(
+                                              right: -10,
+                                              top: -10,
+                                              child: GestureDetector(
+                                                onTap: () => ref
+                                                    .read(editorControllerProvider.notifier)
+                                                    .removeOverlay(overlay.id),
+                                                child: Container(
+                                                  width: 22,
+                                                  height: 22,
+                                                  decoration: const BoxDecoration(
+                                                    color: Colors.black87,
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                  child: const Icon(Icons.close, size: 14, color: Colors.white),
                                                 ),
-                                                child: const Icon(Icons.close, size: 14, color: Colors.white),
                                               ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -752,9 +851,28 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                           );
                         },
                       )
-                    : const ColoredBox(
+                    : ColoredBox(
                         color: Colors.black12,
-                        child: Center(child: CircularProgressIndicator()),
+                        child: Center(
+                          child: _initError == null
+                              ? const CircularProgressIndicator()
+                              : Padding(
+                                  padding: const EdgeInsets.all(AppSpacing.lg),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      const Icon(Icons.error_outline, size: 32),
+                                      const SizedBox(height: AppSpacing.sm),
+                                      Text(_initError!, textAlign: TextAlign.center),
+                                      const SizedBox(height: AppSpacing.md),
+                                      FilledButton(
+                                        onPressed: _startInitialization,
+                                        child: const Text("Try again"),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                        ),
                       ),
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -1109,7 +1227,7 @@ class _TimelineState extends State<_Timeline> {
       return;
     }
     final double sec = widget.controller.value.position.inMilliseconds / 1000.0;
-    final double target = sec * _pixelsPerSecond;
+    final double target = TimelineGeometry.scrollOffsetForTime(sec, _pixelsPerSecond);
     final ScrollPosition position = _scrollController.position;
     _scrollController.jumpTo(target.clamp(position.minScrollExtent, position.maxScrollExtent));
   }
@@ -1118,6 +1236,40 @@ class _TimelineState extends State<_Timeline> {
     if (_gestureLockScroll != locked) {
       setState(() => _gestureLockScroll = locked);
     }
+  }
+
+  // BUG 9 fix: rapid scrubbing used to call controller.seekTo() on
+  // every single ScrollUpdateNotification — a violent left/right/left
+  // flick can fire dozens of these in under a second, launching that
+  // many overlapping async seeks with no ordering guarantee about which
+  // finishes last, a real contributor to "the editor falls apart" and
+  // the frame-stall symptom in bug 10. Latest-seek-wins coalescing
+  // instead: a scroll update only ever *records* the latest requested
+  // position; a single in-flight drain loop performs the actual
+  // decoder seek, and if a newer position was requested while that
+  // seek was still running, it immediately seeks again to whatever's
+  // now latest — never queuing up every intermediate position. Visual
+  // timeline movement (native scrolling) is completely unaffected by
+  // this; only the expensive media seek is throttled.
+  Duration? _pendingSeek;
+  bool _seekInFlight = false;
+
+  void _requestSeek(Duration target) {
+    _pendingSeek = target;
+    if (_seekInFlight) {
+      return;
+    }
+    unawaited(_drainPendingSeeks());
+  }
+
+  Future<void> _drainPendingSeeks() async {
+    _seekInFlight = true;
+    while (_pendingSeek != null) {
+      final Duration target = _pendingSeek!;
+      _pendingSeek = null;
+      await widget.controller.seekTo(target);
+    }
+    _seekInFlight = false;
   }
 
   Future<void> _confirmRemoveZone(BuildContext context, SpeedZone zone) async {
@@ -1375,8 +1527,9 @@ class _TimelineState extends State<_Timeline> {
                       if (notification is ScrollStartNotification && notification.dragDetails != null) {
                         _isUserScrubbing = true;
                       } else if (notification is ScrollUpdateNotification && _isUserScrubbing) {
-                        final double sec = (notification.metrics.pixels / _pixelsPerSecond).clamp(0.0, totalSec);
-                        unawaited(widget.controller.seekTo(Duration(milliseconds: (sec * 1000).round())));
+                        final double sec = TimelineGeometry.timeForScrollOffset(notification.metrics.pixels, _pixelsPerSecond)
+                            .clamp(0.0, totalSec);
+                        _requestSeek(Duration(milliseconds: (sec * 1000).round()));
                       } else if (notification is ScrollEndNotification) {
                         _isUserScrubbing = false;
                       }
@@ -2165,13 +2318,13 @@ class _SpeedZoneDialogState extends State<_SpeedZoneDialog> {
   }
 }
 
-class _TextOverlayDialog extends StatefulWidget {
-  const _TextOverlayDialog({required this.id, required this.maxDuration});
+class _TextOverlaySheet extends StatefulWidget {
+  const _TextOverlaySheet({required this.id, required this.maxDuration});
   final String id;
   final Duration maxDuration;
 
   @override
-  State<_TextOverlayDialog> createState() => _TextOverlayDialogState();
+  State<_TextOverlaySheet> createState() => _TextOverlaySheetState();
 }
 
 class _TextStyle {
@@ -2191,7 +2344,7 @@ const List<_TextStyle> _textStyles = <_TextStyle>[
   _TextStyle("Small", 20, 0xFFFFFFFF, FontWeight.w600),
 ];
 
-class _TextOverlayDialogState extends State<_TextOverlayDialog> {
+class _TextOverlaySheetState extends State<_TextOverlaySheet> {
   final TextEditingController _textController = TextEditingController();
   late double _start = 0;
   late double _end = widget.maxDuration.inMilliseconds / 1000.0;
@@ -2223,14 +2376,45 @@ class _TextOverlayDialogState extends State<_TextOverlayDialog> {
   Widget build(BuildContext context) {
     final double maxSec = widget.maxDuration.inMilliseconds / 1000.0;
     final _TextStyle style = _textStyles[_styleIndex];
-    return AlertDialog(
-      title: const Text("Add text"),
-      content: SingleChildScrollView(
+    // BUG 6 fix: was a centered AlertDialog, which on a real device
+    // (unlike this dev environment's own checking) rendered invisible —
+    // tapping Text dimmed the screen with no visible form. A
+    // scroll-controlled bottom sheet is the robust, standard Flutter
+    // pattern for a tall form that opens the keyboard immediately
+    // (autofocus:true below): it explicitly pads for the keyboard inset
+    // and caps its own height, rather than relying on AlertDialog's
+    // brittle intrinsic sizing under those conditions.
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.9),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            TextField(controller: _textController, autofocus: true, maxLength: 60),
+            Center(
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: Text("Add text", style: Theme.of(context).textTheme.titleMedium),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    TextField(controller: _textController, autofocus: true, maxLength: 60),
             const SizedBox(height: AppSpacing.sm),
             Container(
               width: double.infinity,
@@ -2359,45 +2543,56 @@ class _TextOverlayDialogState extends State<_TextOverlayDialog> {
                   ),
               ],
             ),
-            const SizedBox(height: AppSpacing.sm),
-            Text("From ${_start.toStringAsFixed(1)}s to ${_end.toStringAsFixed(1)}s"),
-            RangeSlider(
-              values: RangeValues(_start, _end),
-              max: maxSec,
-              onChanged: (RangeValues v) => setState(() {
-                _start = v.start;
-                _end = v.end;
-              }),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text("From ${_start.toStringAsFixed(1)}s to ${_end.toStringAsFixed(1)}s"),
+                    RangeSlider(
+                      values: RangeValues(_start, _end),
+                      max: maxSec,
+                      onChanged: (RangeValues v) => setState(() {
+                        _start = v.start;
+                        _end = v.end;
+                      }),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: <Widget>[
+                  TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text("Cancel")),
+                  const SizedBox(width: AppSpacing.sm),
+                  FilledButton(
+                    onPressed: _textController.text.trim().isEmpty
+                        ? null
+                        : () => Navigator.of(context).pop(
+                              TextOverlay(
+                                id: widget.id,
+                                xPercent: 0.1,
+                                yPercent: 0.1,
+                                startSec: Duration(milliseconds: (_start * 1000).round()),
+                                duration: Duration(milliseconds: ((_end - _start) * 1000).round()),
+                                text: _textController.text.trim(),
+                                argbColor: style.argbColor,
+                                fontSize: style.fontSize,
+                                fontFamily: _fontFamily,
+                                animation: _animation,
+                                opacity: _opacity,
+                                hasOutline: _hasOutline,
+                                hasShadow: _hasShadow,
+                                hasBackground: _hasBackground,
+                              ),
+                            ),
+                    child: const Text("Add"),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       ),
-      actions: <Widget>[
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text("Cancel")),
-        FilledButton(
-          onPressed: _textController.text.trim().isEmpty
-              ? null
-              : () => Navigator.of(context).pop(
-                    TextOverlay(
-                      id: widget.id,
-                      xPercent: 0.1,
-                      yPercent: 0.1,
-                      startSec: Duration(milliseconds: (_start * 1000).round()),
-                      duration: Duration(milliseconds: ((_end - _start) * 1000).round()),
-                      text: _textController.text.trim(),
-                      argbColor: style.argbColor,
-                      fontSize: style.fontSize,
-                      fontFamily: _fontFamily,
-                      animation: _animation,
-                      opacity: _opacity,
-                      hasOutline: _hasOutline,
-                      hasShadow: _hasShadow,
-                      hasBackground: _hasBackground,
-                    ),
-                  ),
-          child: const Text("Add"),
-        ),
-      ],
     );
   }
 }
