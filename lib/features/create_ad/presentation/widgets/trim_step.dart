@@ -6,12 +6,14 @@ import "package:file_picker/file_picker.dart";
 import "package:flutter/foundation.dart" show kDebugMode;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:go_router/go_router.dart";
 import "package:image_picker/image_picker.dart";
 import "package:uuid/uuid.dart";
 import "package:video_player/video_player.dart";
 
 import "../../../../core/media/media_providers.dart";
 import "../../../../core/router/app_shell.dart";
+import "../../../../core/router/route_paths.dart";
 import "../../../../core/media/video_editor_service.dart";
 import "../../../../core/media/video_export_service.dart";
 import "../../../../core/theme/app_spacing.dart";
@@ -218,6 +220,21 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     _rawController = null;
     setState(() => _rawPreviewMode = false);
     _startInitialization();
+  }
+
+  /// videoeditor10.txt's standalone-route experiment: uses
+  /// `pushReplacement`, not `push`, specifically so `CreateAdScreen`
+  /// (and therefore this `TrimStep`, its `EditorTransport`, and its
+  /// thumbnail-service reference) is actually disposed before
+  /// `TemporaryRawPlayerRoute` is built — a `push` would only cover this
+  /// screen, leaving it alive underneath, which would not test the
+  /// lifecycle-isolation question at all.
+  void _openStandaloneRawPlayerRoute() {
+    final LocalVideoDraft? draft = ref.read(createAdFlowControllerProvider).capturedDraft;
+    if (draft == null) {
+      return;
+    }
+    unawaited(GoRouter.of(context).pushReplacement(RoutePaths.debugRawPlayer, extra: draft.filePath));
   }
 
   Widget _buildRawPreview() {
@@ -1124,6 +1141,15 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                 PopupMenuItem<VoidCallback>(
                   value: () => unawaited(_enterRawPreviewMode()),
                   child: const Text("Raw preview mode (debug)"),
+                ),
+              // videoeditor10.txt's standalone-route lifecycle isolation
+              // experiment — debug builds only. Unlike raw preview mode
+              // above (which stays inside this same TrimStep instance),
+              // this genuinely leaves/disposes TrimStep first.
+              if (kDebugMode)
+                PopupMenuItem<VoidCallback>(
+                  value: _openStandaloneRawPlayerRoute,
+                  child: const Text("Standalone route (debug)"),
                 ),
             ],
           ),

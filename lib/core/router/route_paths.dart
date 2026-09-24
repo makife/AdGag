@@ -35,6 +35,12 @@ abstract final class RoutePaths {
   /// needs before an external tap actually opens the app.
   static const String adDetail = "/ad/:adId";
   static String adDetailOf(String adId) => "/ad/$adId";
+
+  /// videoeditor10.txt's standalone-route lifecycle isolation experiment
+  /// — TEMPORARY, debug-menu-reachable only, not a real product surface.
+  /// Remove alongside `TemporaryRawPlayerRoute` once this diagnostic
+  /// round is resolved.
+  static const String debugRawPlayer = "/debug/raw-player";
 }
 
 extension AppNavigation on BuildContext {

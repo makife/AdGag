@@ -8,6 +8,7 @@ import "../../features/auth/presentation/screens/onboarding_screen.dart";
 import "../../features/auth/presentation/screens/sign_in_screen.dart";
 import "../../features/auth/presentation/screens/sign_up_screen.dart";
 import "../../features/create_ad/presentation/screens/create_ad_screen.dart";
+import "../../features/create_ad/presentation/screens/temporary_raw_player_route.dart";
 import "../../features/feed/presentation/screens/ad_detail_screen.dart";
 import "../../features/feed/presentation/screens/feed_screen.dart";
 import "../../features/market/presentation/screens/market_screen.dart";
@@ -92,6 +93,15 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.adDetail,
         builder: (BuildContext context, GoRouterState state) =>
             AdDetailScreen(adId: state.pathParameters["adId"]!),
+      ),
+      // videoeditor10.txt: TEMPORARY standalone-route lifecycle isolation
+      // experiment, reachable only from TrimStep's debug menu. Remove
+      // alongside TemporaryRawPlayerRoute once this diagnostic round is
+      // resolved.
+      GoRoute(
+        path: RoutePaths.debugRawPlayer,
+        builder: (BuildContext context, GoRouterState state) =>
+            TemporaryRawPlayerRoute(videoPath: state.extra! as String),
       ),
       StatefulShellRoute.indexedStack(
         builder: (BuildContext context, GoRouterState state, StatefulNavigationShell shell) {
