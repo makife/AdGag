@@ -47,10 +47,11 @@ class AdVideoCard extends ConsumerStatefulWidget {
 /// itself is opaque, not translucent — so bottom-anchored overlay content
 /// (the action rail, subject/creator text) needs to clear its full height
 /// plus the safe-area inset the bar itself adds, or it renders hidden
-/// behind it instead of above it. A fixed AppSpacing offset alone isn't
-/// enough since the bar's safe-area inset varies by device.
+/// behind it instead of above it. Only a small extra gap (AppSpacing.sm)
+/// on top of that — a larger gap here previously left the action rail
+/// sitting noticeably far above the bar instead of just clear of it.
 double _bottomClearance(BuildContext context) {
-  return AppSpacing.xxxl + AppShell.barHeight + MediaQuery.paddingOf(context).bottom;
+  return AppSpacing.sm + AppShell.barHeight + MediaQuery.paddingOf(context).bottom;
 }
 
 class _AdVideoCardState extends ConsumerState<AdVideoCard> {
@@ -308,7 +309,7 @@ class _Overlay extends StatelessWidget {
       children: <Widget>[
         if (ad.subjectDisplayName != null)
           SubjectBadge(subjectId: ad.subjectId, displayName: ad.subjectDisplayName!),
-        const SizedBox(height: AppSpacing.xs),
+        const SizedBox(height: AppSpacing.sm),
         CreatorHeader(userId: ad.userId, username: ad.creatorUsername),
         if (ad.caption != null && ad.caption!.isNotEmpty) ...<Widget>[
           const SizedBox(height: AppSpacing.xs),

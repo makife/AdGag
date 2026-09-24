@@ -29,9 +29,12 @@ class CreatorHeader extends ConsumerWidget {
           onTap: username == null
               ? null
               : () => unawaited(context.pushTo(RoutePaths.userProfileOf(username!))),
+          // Deliberately plainer than SubjectBadge (no chip background,
+          // dimmer white, smaller) — the two used to be the same white
+          // bold text stacked tightly, easy to mis-tap one for the other.
           child: Text(
             "@${username ?? 'unknown'}",
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w500, fontSize: 13),
           ),
         ),
         if (!isOwnAd && currentUserId != null) ...<Widget>[

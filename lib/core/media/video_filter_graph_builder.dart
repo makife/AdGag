@@ -117,10 +117,20 @@ abstract final class VideoFilterGraphBuilder {
           final String escaped = _escapeDrawtext(overlay.text);
           final String colorHex = _argbToFFmpegHex(overlay.argbColor);
           final String escapedFontPath = _escapeDrawtext(fontFilePath);
+          final String targetX = "(w*${overlay.xPercent})";
+          final String xValue = switch (overlay.animation) {
+            TextAnimation.none => targetX,
+            TextAnimation.slideIn => "'${_slideInXExpr(overlay.startSec, targetX)}'",
+            TextAnimation.popIn => targetX,
+          };
+          final String fontsizeValue = switch (overlay.animation) {
+            TextAnimation.popIn => "'${_popInFontsizeExpr(overlay.startSec, overlay.fontSize.round())}'",
+            TextAnimation.none || TextAnimation.slideIn => "${overlay.fontSize.round()}",
+          };
           parts.add(
             "[$currentVideoLabel]drawtext=fontfile='$escapedFontPath':text='$escaped':fontcolor=$colorHex:"
-            "fontsize=${overlay.fontSize.round()}:"
-            "x=(w*${overlay.xPercent}):y=(h*${overlay.yPercent}):enable='$enable'[$nextLabel]",
+            "fontsize=$fontsizeValue:"
+            "x=$xValue:y=(h*${overlay.yPercent}):enable='$enable'[$nextLabel]",
           );
         case ImageOverlay():
           final int inputIdx = imageOverlayInputIndex[overlay.id]!;
@@ -188,19 +198,35 @@ abstract final class VideoFilterGraphBuilder {
       String currentAudioLabel = aConcatOut;
       if (bgAudioInputIndex != null) {
         final BackgroundAudio bg = project.bgAudio!;
-        final List<String> fadeFilters = <String>[];
+        final Duration musicDuration = bg.duration ?? (project.trimmedDuration - bg.startSec);
+        // Trim the music file to its own window first — fades below are
+        // relative to *this* trimmed clip's start, not the source file's.
+        final List<String> fadeFilters = <String>[
+          "atrim=duration=${_seconds(musicDuration.isNegative ? Duration.zero : musicDuration)}",
+          "asetpts=PTS-STARTPTS",
+        ];
         if (bg.fadeInDuration > Duration.zero) {
           fadeFilters.add("afade=t=in:st=0:d=${_seconds(bg.fadeInDuration)}");
         }
         if (bg.fadeOutDuration > Duration.zero) {
-          final Duration fadeOutStart = project.trimmedDuration - bg.fadeOutDuration;
+          final Duration fadeOutStart = musicDuration - bg.fadeOutDuration;
           fadeFilters.add(
             "afade=t=out:st=${_seconds(fadeOutStart < Duration.zero ? Duration.zero : fadeOutStart)}:"
             "d=${_seconds(bg.fadeOutDuration)}",
           );
         }
         fadeFilters.add("volume=${bg.volume}");
+        if (bg.startSec > Duration.zero) {
+          // Shifts the (already-trimmed) music so it starts at bg.startSec
+          // on the main timeline instead of at t=0 — `all=1` applies the
+          // delay to every audio channel.
+          fadeFilters.add("adelay=${bg.startSec.inMilliseconds}:all=1");
+        }
         parts.add("[$bgAudioInputIndex:a]${fadeFilters.join(',')}[bgfaded]");
+        // duration=first: the mixed output is clamped to the main track's
+        // length regardless of how long the (now delayed+trimmed) music
+        // branch is, so a music window that runs past the clip's end
+        // doesn't extend the export.
         parts.add("[$currentAudioLabel][bgfaded]amix=inputs=2:duration=first:dropout_transition=0[aout]");
         currentAudioLabel = "aout";
       } else {
@@ -212,6 +238,36 @@ abstract final class VideoFilterGraphBuilder {
   }
 
   static String _seconds(Duration d) => (d.inMilliseconds / 1000.0).toStringAsFixed(3);
+
+  static const double _animDuration = 0.35;
+
+  /// Slides in from the right edge of the frame to [targetXExpr] over
+  /// [_animDuration] seconds starting at [start]. `t` is drawtext's own
+  /// per-frame timestamp — already relied on by the existing
+  /// `enable='between(t,start,end)'` clause, so this uses the same
+  /// timebase that's already proven to line up with [start]/[end]. Commas
+  /// inside the expression are backslash-escaped because commas are
+  /// otherwise a filtergraph-level separator, even inside a quoted
+  /// option value — the documented FFmpeg idiom for a timed drawtext
+  /// x/y expression.
+  static String _slideInXExpr(Duration start, String targetXExpr) {
+    final String s = _seconds(start);
+    final double animEnd = start.inMilliseconds / 1000.0 + _animDuration;
+    return "if(lt(t\\,${animEnd.toStringAsFixed(3)})\\,"
+        "w-(w-$targetXExpr)*((t-$s)/$_animDuration)\\,"
+        "$targetXExpr)";
+  }
+
+  /// Grows from 40% of [baseSize] up to full size over a shorter
+  /// (0.25s) ramp — a "pop in" rather than a slide.
+  static String _popInFontsizeExpr(Duration start, int baseSize) {
+    final String s = _seconds(start);
+    const double popDuration = 0.25;
+    final double animEnd = start.inMilliseconds / 1000.0 + popDuration;
+    return "if(lt(t\\,${animEnd.toStringAsFixed(3)})\\,"
+        "$baseSize*(0.4+0.6*((t-$s)/$popDuration))\\,"
+        "$baseSize)";
+  }
 
   /// FFmpeg filtergraph escaping (distinct from shell escaping, which
   /// executeWithArgumentsAsync's arg-list form already avoids): backslash

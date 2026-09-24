@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 
 import "../../core/theme/app_spacing.dart";
 import "../../features/comments/presentation/widgets/reviews_sheet.dart";
+import "action_rail_icon.dart";
 import "count_label.dart";
 
 /// REVIEWS action (CLAUDE.md section 8/64). Opens [ReviewsSheet].
@@ -33,7 +34,7 @@ class ReviewButton extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              const Icon(Icons.chat_bubble_outline, color: Colors.white, size: 26),
+              const ActionRailIcon(icon: Icons.chat_bubble_outline),
               const SizedBox(height: AppSpacing.xs),
               CountLabel(count: commentCount, color: Colors.white),
             ],

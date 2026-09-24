@@ -32,6 +32,8 @@ final class BackgroundAudio {
     this.volume = 1.0,
     this.fadeInDuration = Duration.zero,
     this.fadeOutDuration = Duration.zero,
+    this.startSec = Duration.zero,
+    this.duration,
   });
 
   final String filePath;
@@ -40,6 +42,15 @@ final class BackgroundAudio {
   final double volume;
   final Duration fadeInDuration;
   final Duration fadeOutDuration;
+
+  /// Where on the *trimmed clip's* timeline this music starts (not an
+  /// offset into the music file itself) — draggable on [_Timeline]'s
+  /// music lane the same way a [SpeedZone] is, so a track doesn't have
+  /// to play across the whole clip.
+  final Duration startSec;
+
+  /// Null = plays from [startSec] through the end of the trimmed clip.
+  final Duration? duration;
 }
 
 /// A single overlay element (text or image/sticker) shown from [startSec]
@@ -69,6 +80,14 @@ sealed class VideoOverlay {
   Duration get endSec => startSec + duration;
 }
 
+/// How a [TextOverlay] enters when it first becomes visible at
+/// [VideoOverlay.startSec] — a fixed ~0.35s ramp implemented as an
+/// FFmpeg `drawtext` position/size expression in
+/// [VideoFilterGraphBuilder], not a separate render pass, so it doesn't
+/// add any new export risk beyond drawtext itself (already the one
+/// filter this app had to actually debug against a real font crash).
+enum TextAnimation { none, slideIn, popIn }
+
 final class TextOverlay extends VideoOverlay {
   const TextOverlay({
     required super.id,
@@ -79,6 +98,7 @@ final class TextOverlay extends VideoOverlay {
     required this.text,
     this.argbColor = 0xFFFFFFFF,
     this.fontSize = 32,
+    this.animation = TextAnimation.none,
   });
 
   final String text;
@@ -88,6 +108,7 @@ final class TextOverlay extends VideoOverlay {
   /// "separate presentation, domain, and data").
   final int argbColor;
   final double fontSize;
+  final TextAnimation animation;
 }
 
 /// A static image or a single sticker/GIF *frame* composited as an image

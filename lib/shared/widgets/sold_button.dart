@@ -6,6 +6,7 @@ import "../../core/analytics/analytics_providers.dart";
 import "../../core/theme/app_colors.dart";
 import "../../core/theme/app_spacing.dart";
 import "../../features/feed/presentation/providers/sold_providers.dart";
+import "action_rail_icon.dart";
 import "count_label.dart";
 
 /// SOLD action (CLAUDE.md section 7/64). [baseSoldCount] is the count as
@@ -72,8 +73,8 @@ class _SoldButtonState extends ConsumerState<SoldButton> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Icon(
-                isSold ? Icons.sell : Icons.sell_outlined,
+              ActionRailIcon(
+                icon: isSold ? Icons.sell : Icons.sell_outlined,
                 color: isSold ? AppColors.sold : Colors.white,
                 size: 28,
               ),

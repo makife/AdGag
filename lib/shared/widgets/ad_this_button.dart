@@ -8,6 +8,7 @@ import "../../core/theme/app_colors.dart";
 import "../../core/theme/app_spacing.dart";
 import "../../features/create_ad/presentation/providers/create_ad_flow_controller.dart";
 import "../../features/subjects/domain/ad_subject.dart";
+import "action_rail_icon.dart";
 import "count_label.dart";
 
 /// AD THIS (CLAUDE.md section 9 — "one of the defining mechanics"). Seeds
@@ -58,7 +59,7 @@ class AdThisButton extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              const Icon(Icons.bolt, color: AppColors.gradientOrange, size: 26),
+              const ActionRailIcon(icon: Icons.bolt, color: AppColors.gradientOrange),
               const SizedBox(height: AppSpacing.xs),
               CountLabel(count: adThisCount, color: Colors.white),
             ],

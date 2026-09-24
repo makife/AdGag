@@ -9,6 +9,7 @@ import "../../core/analytics/analytics_providers.dart";
 import "../../core/config/env_config.dart";
 import "../../core/supabase/supabase_providers.dart";
 import "../../core/theme/app_spacing.dart";
+import "action_rail_icon.dart";
 import "count_label.dart";
 
 /// External SHARE (CLAUDE.md section 33). Opens the native share sheet
@@ -44,7 +45,7 @@ class ShareButton extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              const Icon(Icons.reply, color: Colors.white, size: 26),
+              const ActionRailIcon(icon: Icons.reply),
               const SizedBox(height: AppSpacing.xs),
               CountLabel(count: shareCount, color: Colors.white),
             ],

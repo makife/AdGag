@@ -164,6 +164,22 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     setState(() => _speedZones.add(zone));
   }
 
+  /// Drag-resize from the timeline's own edge handles (see [_Timeline]) —
+  /// distinct from `_addSpeedZone`'s overlap check, since a zone shrinking
+  /// or growing against its own previous bounds isn't "overlapping
+  /// itself"; a stray drag past a neighboring zone is left uncorrected on
+  /// purpose (rare with the zone counts this editor sees, and clamping
+  /// against every sibling on every drag frame isn't worth the
+  /// complexity yet).
+  void _onResizeZone(SpeedZone oldZone, SpeedZone updated) {
+    setState(() {
+      final int index = _speedZones.indexOf(oldZone);
+      if (index != -1) {
+        _speedZones[index] = updated;
+      }
+    });
+  }
+
   Future<void> _addTextOverlay() async {
     final TextOverlay? overlay = await showDialog<TextOverlay>(
       context: context,
@@ -174,7 +190,48 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     }
   }
 
-  Future<void> _addImageOverlay() async {
+  /// "Sticker" used to just open the device gallery directly, with no
+  /// actual sticker library — this offers a curated preset set first
+  /// (rendered as [TextOverlay]s, reusing the exact font/drawtext path
+  /// already verified working, rather than a new image-compositing
+  /// route that would need its own verification) with "choose from
+  /// gallery" as an explicit secondary option, not the only one.
+  Future<void> _addSticker() async {
+    final _StickerChoice? choice = await showDialog<_StickerChoice>(
+      context: context,
+      builder: (BuildContext context) => const _StickerPickerDialog(),
+    );
+    if (choice == null || !mounted) {
+      return;
+    }
+    switch (choice) {
+      case _StickerSymbolChoice(:final String symbol):
+        final _TimeRange? range = await showDialog<_TimeRange>(
+          context: context,
+          builder: (BuildContext context) => _TimeRangeDialog(maxDuration: _trimmedDuration),
+        );
+        if (range == null || !mounted) {
+          return;
+        }
+        setState(
+          () => _overlays.add(
+            TextOverlay(
+              id: _uuid.v4(),
+              xPercent: 0.4,
+              yPercent: 0.3,
+              startSec: range.start,
+              duration: range.end - range.start,
+              text: symbol,
+              fontSize: 64,
+            ),
+          ),
+        );
+      case _StickerGalleryChoice():
+        await _addImageOverlayFromGallery();
+    }
+  }
+
+  Future<void> _addImageOverlayFromGallery() async {
     final XFile? file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 90);
     if (file == null || !mounted) {
       return;
@@ -257,6 +314,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
           text: overlay.text,
           argbColor: overlay.argbColor,
           fontSize: (_gestureBaseSize * details.scale).clamp(12.0, 96.0),
+          animation: overlay.animation,
         ),
       ImageOverlay() => ImageOverlay(
           id: overlay.id,
@@ -282,6 +340,12 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   }
 
   void _retake() {
+    // Explicit, not just left to dispose() — dispose() only fires once
+    // this widget is actually torn down, and a rebuild racing the retake
+    // (e.g. the flow controller's state changing step before this
+    // screen unmounts) could otherwise leave the flag stuck true, making
+    // the leave-confirmation dialog fire on a screen with nothing to lose.
+    ref.read(hasUnsavedCreateEditsProvider.notifier).state = false;
     ref.read(createAdFlowControllerProvider.notifier).retake();
   }
 
@@ -580,7 +644,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                       _ToolButton(
                         icon: Icons.emoji_emotions_outlined,
                         label: "Sticker",
-                        onTap: () => unawaited(_addImageOverlay()),
+                        onTap: () => unawaited(_addSticker()),
                       ),
                     ],
                   ),
@@ -598,9 +662,13 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                   },
                   speedZones: _speedZones,
                   overlays: _overlays,
+                  bgAudio: _bgAudio,
                   onRemoveZone: (SpeedZone z) => setState(() => _speedZones.remove(z)),
+                  onResizeZone: _onResizeZone,
                   onRemoveOverlay: (String id) =>
                       setState(() => _overlays.removeWhere((VideoOverlay o) => o.id == id)),
+                  onResizeMusic: (BackgroundAudio updated) => setState(() => _bgAudio = updated),
+                  onRemoveMusic: () => setState(() => _bgAudio = null),
                 ),
                 if (_maxStartSeconds == 0)
                   Padding(
@@ -690,16 +758,19 @@ class _ToolButton extends StatelessWidget {
   }
 }
 
-/// The timeline: a base track spanning the *original* captured clip, a
-/// draggable highlighted window showing which up-to-10s slice is
-/// selected (replaces what used to be a separate "Trim" slider — trim IS
-/// the timeline, not an extra control above it), and — inside that
-/// window — speed zones as colored segments and overlay markers, both
-/// positioned by actual time fraction and tap-to-remove. Deliberately
-/// not resizable-by-dragging-edges for zones/overlays yet — see
-/// TrimStep's own doc comment for that scope note; the trim window
-/// itself IS drag-to-move, which is the piece that used to be a
-/// disconnected slider.
+/// The timeline: a visibly bounded panel (a bordered/tinted [Container],
+/// not empty space) with a fixed-width label column on the left naming
+/// each lane ("Clip", "Speed", "Music", "Text") and, to the right, a
+/// time-mapped track area per lane — a lane's background is drawn even
+/// when it's empty, so it's clear that's the region a slow-mo zone or
+/// music clip would occupy, not an arbitrary gap (this used to be a
+/// single unlabeled Stack, which is what made added chips look like they
+/// were floating in empty space with no visible boundary).
+///
+/// Speed-zone and music-lane items are directly drag-resizable from their
+/// own left/right edge handles, in addition to tap-to-remove on the body
+/// of the chip/bar. The trim window itself is still drag-to-move, as
+/// before.
 class _Timeline extends StatelessWidget {
   const _Timeline({
     required this.originalDuration,
@@ -709,8 +780,12 @@ class _Timeline extends StatelessWidget {
     required this.onTrimStartChanged,
     required this.speedZones,
     required this.overlays,
+    required this.bgAudio,
     required this.onRemoveZone,
+    required this.onResizeZone,
     required this.onRemoveOverlay,
+    required this.onResizeMusic,
+    required this.onRemoveMusic,
   });
 
   final Duration originalDuration;
@@ -720,8 +795,18 @@ class _Timeline extends StatelessWidget {
   final ValueChanged<double> onTrimStartChanged;
   final List<SpeedZone> speedZones;
   final List<VideoOverlay> overlays;
+  final BackgroundAudio? bgAudio;
   final void Function(SpeedZone) onRemoveZone;
+  final void Function(SpeedZone oldZone, SpeedZone updated) onResizeZone;
   final void Function(String) onRemoveOverlay;
+  final void Function(BackgroundAudio updated) onResizeMusic;
+  final VoidCallback onRemoveMusic;
+
+  static const double _labelWidth = 52;
+  static const double _trimLaneHeight = 44;
+  static const double _laneHeight = 32;
+  static const double _laneGap = 6;
+  static const Duration _minZoneDuration = Duration(milliseconds: 300);
 
   Future<void> _confirmRemoveZone(BuildContext context, SpeedZone zone) async {
     final bool? confirmed = await showDialog<bool>(
@@ -758,6 +843,69 @@ class _Timeline extends StatelessWidget {
     }
   }
 
+  Future<void> _confirmRemoveMusic(BuildContext context) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Text("Remove this music?"),
+        actions: <Widget>[
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text("Remove")),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      onRemoveMusic();
+    }
+  }
+
+  Widget _lane(ColorScheme scheme, {required double top, required double height}) => Positioned(
+        left: 0,
+        right: 0,
+        top: top,
+        height: height,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+          ),
+        ),
+      );
+
+  /// A small draggable grip at a lane item's edge — `onDeltaSeconds`
+  /// receives the drag delta already converted from pixels to seconds of
+  /// *timeline* time, so callers never touch pixels.
+  Widget _edgeHandle({
+    required double left,
+    required double top,
+    required double height,
+    required double trackWidth,
+    required double totalSec,
+    required ValueChanged<double> onDeltaSeconds,
+  }) {
+    return Positioned(
+      left: left - 11,
+      top: top,
+      width: 22,
+      height: height,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragUpdate: (DragUpdateDetails d) => onDeltaSeconds(d.delta.dx / trackWidth * totalSec),
+        child: Center(
+          child: Container(
+            width: 4,
+            height: height * 0.6,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(2),
+              boxShadow: const <BoxShadow>[BoxShadow(color: Colors.black38, blurRadius: 2)],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final double totalSec = originalDuration.inMilliseconds / 1000.0;
@@ -768,131 +916,315 @@ class _Timeline extends StatelessWidget {
     final bool draggable = maxTrimStartSeconds > 0;
     final ColorScheme scheme = Theme.of(context).colorScheme;
 
-    return SizedBox(
-      height: 112,
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          final double width = constraints.maxWidth;
-          final double selLeft = (trimStartSeconds / totalSec) * width;
-          final double selWidth = (trimmedSec / totalSec) * width;
+    final double speedTop = _trimLaneHeight + _laneGap;
+    final double musicTop = speedTop + _laneHeight + _laneGap;
+    final double overlayTop = musicTop + _laneHeight + _laneGap;
+    final double totalHeight = overlayTop + _laneHeight;
 
-          return Stack(
-            clipBehavior: Clip.none,
-            children: <Widget>[
-              // Base track — the full original clip.
-              Positioned(
-                top: 20,
-                left: 0,
-                right: 0,
-                child: Container(
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.xs),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: SizedBox(
+        height: totalHeight,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            SizedBox(
+              width: _labelWidth,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  SizedBox(height: _trimLaneHeight, child: _LaneLabel("Clip", scheme)),
+                  const SizedBox(height: _laneGap),
+                  SizedBox(height: _laneHeight, child: _LaneLabel("Speed", scheme)),
+                  const SizedBox(height: _laneGap),
+                  SizedBox(height: _laneHeight, child: _LaneLabel("Music", scheme)),
+                  const SizedBox(height: _laneGap),
+                  SizedBox(height: _laneHeight, child: _LaneLabel("Text", scheme)),
+                ],
               ),
-              // Selection window — drag to move where the up-to-10s clip
-              // starts within the original. The hit area (44dp, per the
-              // platform-minimum touch target) is much taller than the
-              // visible pill (16dp) — the previous version made them the
-              // same size, which was genuinely too small/fiddly to drag
-              // reliably on a real device.
-              Positioned(
-                left: selLeft,
-                width: selWidth,
-                top: 0,
-                height: 44,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onHorizontalDragUpdate: !draggable
-                      ? null
-                      : (DragUpdateDetails d) {
-                          final double deltaSec = d.delta.dx / width * totalSec;
-                          onTrimStartChanged((trimStartSeconds + deltaSec).clamp(0, maxTrimStartSeconds));
-                        },
-                  child: Center(
-                    child: Container(
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: scheme.primary.withValues(alpha: 0.3),
-                        border: Border.all(color: scheme.primary, width: 2),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              // Speed zones, positioned relative to the *original* clip
-              // (zone times are relative to the trim window's own start).
-              // Tapping asks before removing — a bare tap used to delete
-              // instantly, which was far too easy to trigger by accident.
-              for (final SpeedZone zone in speedZones)
-                Positioned(
-                  left: ((zone.start.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
-                  width: ((zone.end - zone.start).inMilliseconds / 1000.0 / totalSec) * width,
-                  top: 52,
-                  child: GestureDetector(
-                    onTap: () => unawaited(_confirmRemoveZone(context, zone)),
-                    child: Container(
-                      height: 28,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: scheme.primary,
-                        borderRadius: BorderRadius.circular(AppRadius.sm),
-                      ),
-                      child: Text(
-                        "${zone.factor}x slow-mo",
-                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
-                        overflow: TextOverflow.clip,
-                        softWrap: false,
-                      ),
-                    ),
-                  ),
-                ),
-              // Overlay markers — a labeled chip (the actual text, or
-              // "sticker"), not a bare small icon with no context.
-              for (final VideoOverlay overlay in overlays)
-                Positioned(
-                  left: ((overlay.startSec.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
-                  top: 84,
-                  child: GestureDetector(
-                    onTap: () => unawaited(_confirmRemoveOverlay(context, overlay)),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 110),
-                      child: Container(
-                        height: 24,
-                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-                        decoration: BoxDecoration(
-                          color: scheme.secondary,
-                          borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints constraints) {
+                  final double width = constraints.maxWidth;
+                  final double selLeft = (trimStartSeconds / totalSec) * width;
+                  final double selWidth = (trimmedSec / totalSec) * width;
+
+                  final BackgroundAudio? music = bgAudio;
+                  double? musicLeft, musicWidth;
+                  Duration musicStart = Duration.zero, musicEnd = Duration.zero;
+                  if (music != null) {
+                    musicStart = music.startSec;
+                    final Duration musicDuration = music.duration ?? (trimmedDuration - music.startSec);
+                    musicEnd = musicStart + musicDuration;
+                    musicLeft = ((musicStart.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width;
+                    musicWidth = (musicDuration.inMilliseconds / 1000.0 / totalSec) * width;
+                  }
+
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: <Widget>[
+                      // Lane backgrounds — drawn even when empty, so every
+                      // lane's own area is visible rather than only
+                      // appearing once something is placed in it.
+                      _lane(scheme, top: 0, height: _trimLaneHeight),
+                      _lane(scheme, top: speedTop, height: _laneHeight),
+                      _lane(scheme, top: musicTop, height: _laneHeight),
+                      _lane(scheme, top: overlayTop, height: _laneHeight),
+
+                      // Base track — the full original clip, inside the
+                      // "Clip" lane.
+                      Positioned(
+                        top: 20,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: scheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            Icon(
-                              overlay is TextOverlay ? Icons.text_fields : Icons.emoji_emotions_outlined,
-                              size: 14,
-                              color: Colors.white,
-                            ),
-                            const SizedBox(width: 3),
-                            Flexible(
-                              child: Text(
-                                overlay is TextOverlay ? overlay.text : "sticker",
-                                style: const TextStyle(color: Colors.white, fontSize: 11),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
+                      ),
+                      // Selection window — drag to move where the
+                      // up-to-10s clip starts within the original. The
+                      // hit area (44dp, per the platform-minimum touch
+                      // target) is much taller than the visible pill
+                      // (16dp).
+                      Positioned(
+                        left: selLeft,
+                        width: selWidth,
+                        top: 0,
+                        height: _trimLaneHeight,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onHorizontalDragUpdate: !draggable
+                              ? null
+                              : (DragUpdateDetails d) {
+                                  final double deltaSec = d.delta.dx / width * totalSec;
+                                  onTrimStartChanged((trimStartSeconds + deltaSec).clamp(0, maxTrimStartSeconds));
+                                },
+                          child: Center(
+                            child: Container(
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: scheme.primary.withValues(alpha: 0.3),
+                                border: Border.all(color: scheme.primary, width: 2),
+                                borderRadius: BorderRadius.circular(4),
                               ),
                             ),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
+
+                      // Speed zones, positioned relative to the
+                      // *original* clip (zone times are relative to the
+                      // trim window's own start). Tapping the body asks
+                      // before removing; the edge handles resize instead.
+                      for (final SpeedZone zone in speedZones) ...<Widget>[
+                        Positioned(
+                          left: ((zone.start.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
+                          width: ((zone.end - zone.start).inMilliseconds / 1000.0 / totalSec) * width,
+                          top: speedTop,
+                          height: _laneHeight,
+                          child: GestureDetector(
+                            onTap: () => unawaited(_confirmRemoveZone(context, zone)),
+                            child: Container(
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: scheme.primary,
+                                borderRadius: BorderRadius.circular(AppRadius.sm),
+                              ),
+                              child: Text(
+                                "${zone.factor}x slow-mo",
+                                style:
+                                    const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                                overflow: TextOverflow.clip,
+                                softWrap: false,
+                              ),
+                            ),
+                          ),
+                        ),
+                        _edgeHandle(
+                          left: ((zone.start.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
+                          top: speedTop,
+                          height: _laneHeight,
+                          trackWidth: width,
+                          totalSec: totalSec,
+                          onDeltaSeconds: (double deltaSec) {
+                            final Duration next = zone.start + Duration(milliseconds: (deltaSec * 1000).round());
+                            final Duration clamped = next < Duration.zero
+                                ? Duration.zero
+                                : (next > zone.end - _minZoneDuration ? zone.end - _minZoneDuration : next);
+                            onResizeZone(zone, SpeedZone(start: clamped, end: zone.end, factor: zone.factor));
+                          },
+                        ),
+                        _edgeHandle(
+                          left: ((zone.end.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
+                          top: speedTop,
+                          height: _laneHeight,
+                          trackWidth: width,
+                          totalSec: totalSec,
+                          onDeltaSeconds: (double deltaSec) {
+                            final Duration next = zone.end + Duration(milliseconds: (deltaSec * 1000).round());
+                            final Duration clamped = next > trimmedDuration
+                                ? trimmedDuration
+                                : (next < zone.start + _minZoneDuration ? zone.start + _minZoneDuration : next);
+                            onResizeZone(zone, SpeedZone(start: zone.start, end: clamped, factor: zone.factor));
+                          },
+                        ),
+                      ],
+
+                      // Music bar — same shape as a speed zone: body taps
+                      // to remove, edges drag to resize its window.
+                      if (music != null && musicLeft != null && musicWidth != null) ...<Widget>[
+                        Positioned(
+                          left: musicLeft,
+                          width: musicWidth,
+                          top: musicTop,
+                          height: _laneHeight,
+                          child: GestureDetector(
+                            onTap: () => unawaited(_confirmRemoveMusic(context)),
+                            child: Container(
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: scheme.tertiary,
+                                borderRadius: BorderRadius.circular(AppRadius.sm),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  Icon(Icons.music_note, size: 14, color: Colors.white),
+                                  SizedBox(width: 3),
+                                  Text(
+                                    "music",
+                                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        _edgeHandle(
+                          left: musicLeft,
+                          top: musicTop,
+                          height: _laneHeight,
+                          trackWidth: width,
+                          totalSec: totalSec,
+                          onDeltaSeconds: (double deltaSec) {
+                            final Duration next = musicStart + Duration(milliseconds: (deltaSec * 1000).round());
+                            final Duration clamped = next < Duration.zero
+                                ? Duration.zero
+                                : (next > musicEnd - _minZoneDuration ? musicEnd - _minZoneDuration : next);
+                            onResizeMusic(
+                              BackgroundAudio(
+                                filePath: music.filePath,
+                                volume: music.volume,
+                                fadeInDuration: music.fadeInDuration,
+                                fadeOutDuration: music.fadeOutDuration,
+                                startSec: clamped,
+                                duration: musicEnd - clamped,
+                              ),
+                            );
+                          },
+                        ),
+                        _edgeHandle(
+                          left: musicLeft + musicWidth,
+                          top: musicTop,
+                          height: _laneHeight,
+                          trackWidth: width,
+                          totalSec: totalSec,
+                          onDeltaSeconds: (double deltaSec) {
+                            final Duration next = musicEnd + Duration(milliseconds: (deltaSec * 1000).round());
+                            final Duration clamped = next > trimmedDuration
+                                ? trimmedDuration
+                                : (next < musicStart + _minZoneDuration ? musicStart + _minZoneDuration : next);
+                            onResizeMusic(
+                              BackgroundAudio(
+                                filePath: music.filePath,
+                                volume: music.volume,
+                                fadeInDuration: music.fadeInDuration,
+                                fadeOutDuration: music.fadeOutDuration,
+                                startSec: musicStart,
+                                duration: clamped - musicStart,
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+
+                      // Overlay markers — a labeled chip (the actual
+                      // text, or "sticker"), not a bare small icon with
+                      // no context.
+                      for (final VideoOverlay overlay in overlays)
+                        Positioned(
+                          left: ((overlay.startSec.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
+                          top: overlayTop,
+                          height: _laneHeight,
+                          child: GestureDetector(
+                            onTap: () => unawaited(_confirmRemoveOverlay(context, overlay)),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 110),
+                              child: Container(
+                                alignment: Alignment.center,
+                                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+                                decoration: BoxDecoration(
+                                  color: scheme.secondary,
+                                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[
+                                    Icon(
+                                      overlay is TextOverlay ? Icons.text_fields : Icons.emoji_emotions_outlined,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Flexible(
+                                      child: Text(
+                                        overlay is TextOverlay ? overlay.text : "sticker",
+                                        style: const TextStyle(color: Colors.white, fontSize: 11),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LaneLabel extends StatelessWidget {
+  const _LaneLabel(this.text, this.scheme);
+  final String text;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: scheme.onSurfaceVariant),
       ),
     );
   }
@@ -924,6 +1256,69 @@ final class _TimeRange {
   const _TimeRange({required this.start, required this.end});
   final Duration start;
   final Duration end;
+}
+
+/// What the sticker picker returned: a preset symbol, or "go pick a real
+/// image from the gallery instead."
+sealed class _StickerChoice {
+  const _StickerChoice();
+}
+
+final class _StickerSymbolChoice extends _StickerChoice {
+  const _StickerSymbolChoice(this.symbol);
+  final String symbol;
+}
+
+final class _StickerGalleryChoice extends _StickerChoice {
+  const _StickerGalleryChoice();
+}
+
+/// Preset sticker glyphs, rendered through the same drawtext/font
+/// pipeline as a text overlay (not a new image-compositing path) — kept
+/// to plain symbol characters within Roboto's own glyph coverage rather
+/// than color emoji, which a bundled non-emoji TTF can't render.
+const List<String> _stickerSymbols = <String>["★", "♥", "✓", "✗", "➤", "‼", "●", "▲", "✦", "☆"];
+
+class _StickerPickerDialog extends StatelessWidget {
+  const _StickerPickerDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text("Add a sticker"),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            GridView.count(
+              crossAxisCount: 5,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              children: <Widget>[
+                for (final String symbol in _stickerSymbols)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    onTap: () => Navigator.of(context).pop(_StickerSymbolChoice(symbol)),
+                    child: Center(child: Text(symbol, style: const TextStyle(fontSize: 28))),
+                  ),
+              ],
+            ),
+            const Divider(height: AppSpacing.xl),
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).pop(const _StickerGalleryChoice()),
+              icon: const Icon(Icons.image_outlined),
+              label: const Text("Choose an image from gallery instead"),
+            ),
+          ],
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text("Cancel")),
+      ],
+    );
+  }
 }
 
 class _TimeRangeDialog extends StatefulWidget {
@@ -1039,10 +1434,39 @@ class _TextOverlayDialog extends StatefulWidget {
   State<_TextOverlayDialog> createState() => _TextOverlayDialogState();
 }
 
+class _TextStyle {
+  const _TextStyle(this.label, this.fontSize, this.argbColor, this.weight);
+  final String label;
+  final double fontSize;
+  final int argbColor;
+  final FontWeight weight;
+}
+
+const List<_TextStyle> _textStyles = <_TextStyle>[
+  _TextStyle("Bold", 32, 0xFFFFFFFF, FontWeight.w900),
+  _TextStyle("Classic", 26, 0xFFFFFFFF, FontWeight.w600),
+  _TextStyle("Big", 44, 0xFFFFFFFF, FontWeight.w800),
+  _TextStyle("Yellow", 30, 0xFFFFD400, FontWeight.w800),
+  _TextStyle("Pink", 30, 0xFFFF2D8C, FontWeight.w800),
+  _TextStyle("Small", 20, 0xFFFFFFFF, FontWeight.w600),
+];
+
 class _TextOverlayDialogState extends State<_TextOverlayDialog> {
   final TextEditingController _textController = TextEditingController();
   late double _start = 0;
   late double _end = widget.maxDuration.inMilliseconds / 1000.0;
+  int _styleIndex = 0;
+  TextAnimation _animation = TextAnimation.none;
+
+  @override
+  void initState() {
+    super.initState();
+    // The Add button's enabled state depends on this text — without a
+    // listener the button never rebuilds when the user types, and only
+    // seemed to "unstick" when something else (the range slider)
+    // happened to trigger a setState first.
+    _textController.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
@@ -1053,22 +1477,75 @@ class _TextOverlayDialogState extends State<_TextOverlayDialog> {
   @override
   Widget build(BuildContext context) {
     final double maxSec = widget.maxDuration.inMilliseconds / 1000.0;
+    final _TextStyle style = _textStyles[_styleIndex];
     return AlertDialog(
       title: const Text("Add text"),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          TextField(controller: _textController, autofocus: true, maxLength: 60),
-          Text("From ${_start.toStringAsFixed(1)}s to ${_end.toStringAsFixed(1)}s"),
-          RangeSlider(
-            values: RangeValues(_start, _end),
-            max: maxSec,
-            onChanged: (RangeValues v) => setState(() {
-              _start = v.start;
-              _end = v.end;
-            }),
-          ),
-        ],
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            TextField(controller: _textController, autofocus: true, maxLength: 60),
+            const SizedBox(height: AppSpacing.sm),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              color: Colors.black,
+              alignment: Alignment.center,
+              child: Text(
+                _textController.text.isEmpty ? "Preview" : _textController.text,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(style.argbColor), fontSize: style.fontSize, fontWeight: style.weight),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            SizedBox(
+              height: 40,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _textStyles.length,
+                itemBuilder: (BuildContext context, int i) => Padding(
+                  padding: const EdgeInsets.only(right: AppSpacing.sm),
+                  child: ChoiceChip(
+                    label: Text(_textStyles[i].label),
+                    selected: _styleIndex == i,
+                    onSelected: (_) => setState(() => _styleIndex = i),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text("Entrance effect", style: Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: AppSpacing.xs),
+            Wrap(
+              spacing: AppSpacing.sm,
+              children: <Widget>[
+                for (final TextAnimation anim in TextAnimation.values)
+                  ChoiceChip(
+                    label: Text(
+                      switch (anim) {
+                        TextAnimation.none => "None",
+                        TextAnimation.slideIn => "Slide in",
+                        TextAnimation.popIn => "Pop in",
+                      },
+                    ),
+                    selected: _animation == anim,
+                    onSelected: (_) => setState(() => _animation = anim),
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text("From ${_start.toStringAsFixed(1)}s to ${_end.toStringAsFixed(1)}s"),
+            RangeSlider(
+              values: RangeValues(_start, _end),
+              max: maxSec,
+              onChanged: (RangeValues v) => setState(() {
+                _start = v.start;
+                _end = v.end;
+              }),
+            ),
+          ],
+        ),
       ),
       actions: <Widget>[
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text("Cancel")),
@@ -1083,6 +1560,9 @@ class _TextOverlayDialogState extends State<_TextOverlayDialog> {
                       startSec: Duration(milliseconds: (_start * 1000).round()),
                       duration: Duration(milliseconds: ((_end - _start) * 1000).round()),
                       text: _textController.text.trim(),
+                      argbColor: style.argbColor,
+                      fontSize: style.fontSize,
+                      animation: _animation,
                     ),
                   ),
           child: const Text("Add"),

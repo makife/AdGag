@@ -11,6 +11,7 @@ import "../../features/moderation/domain/report_target_type.dart";
 import "../../features/moderation/presentation/providers/moderation_providers.dart";
 import "../../features/moderation/presentation/widgets/report_sheet.dart";
 import "../../features/profile/presentation/providers/profile_providers.dart";
+import "action_rail_icon.dart";
 
 /// Report / Block entry point (CLAUDE.md section 30/31) shown on each Ad.
 /// Hides "Block" entirely for your own Ad — blocking yourself isn't a
@@ -34,7 +35,7 @@ class MoreMenuButton extends ConsumerWidget {
         onTap: () => unawaited(_openMenu(context, ref, isOwnAd)),
         child: const Padding(
           padding: EdgeInsets.all(AppSpacing.sm),
-          child: Icon(Icons.more_horiz, color: Colors.white, size: 26),
+          child: ActionRailIcon(icon: Icons.more_horiz),
         ),
       ),
     );

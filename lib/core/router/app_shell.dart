@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
+import "../../features/create_ad/domain/create_ad_step.dart";
 import "../../features/create_ad/presentation/providers/create_ad_flow_controller.dart";
 import "../theme/app_colors.dart";
 import "../theme/app_spacing.dart";
@@ -47,7 +48,14 @@ class AppShell extends ConsumerWidget {
 
   Future<void> _onTabTap(BuildContext context, WidgetRef ref, int index) async {
     final bool leavingCreateTab = navigationShell.currentIndex == _createTabIndex && index != _createTabIndex;
-    if (leavingCreateTab && ref.read(hasUnsavedCreateEditsProvider)) {
+    // Also require the *internal* step to actually be the edit screen —
+    // hasUnsavedCreateEditsProvider is only meaningful while TrimStep is
+    // mounted. Keying the dialog on tab index alone meant a flag that
+    // hadn't yet been reset (or a rebuild ordering edge case) could pop
+    // the "lose your edits" warning on the subject picker, capture, or
+    // caption screen too, where there's nothing to lose.
+    final bool onTrimStep = ref.read(createAdFlowControllerProvider).step == CreateAdStep.trim;
+    if (leavingCreateTab && onTrimStep && ref.read(hasUnsavedCreateEditsProvider)) {
       final bool? leave = await showDialog<bool>(
         context: context,
         builder: (BuildContext dialogContext) => AlertDialog(
@@ -62,6 +70,14 @@ class AppShell extends ConsumerWidget {
       if (leave != true) {
         return;
       }
+    }
+    if (leavingCreateTab) {
+      // Whether or not there were edits to confirm: leaving the AD tab
+      // always starts the flow over from subject selection next time,
+      // rather than resuming wherever it was left (CLAUDE.md creation
+      // flow, section 38 — a half-finished Ad isn't a draft the flow
+      // remembers for you yet).
+      ref.read(createAdFlowControllerProvider.notifier).reset();
     }
     navigationShell.goBranch(index, initialLocation: index == navigationShell.currentIndex);
   }

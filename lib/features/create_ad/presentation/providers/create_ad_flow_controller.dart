@@ -3,6 +3,8 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../../../core/video/video_providers.dart";
 import "../../../feed/domain/ad.dart";
 import "../../../feed/domain/ad_status.dart";
+import "../../../feed/presentation/providers/feed_controller.dart";
+import "../../../market/presentation/providers/market_providers.dart";
 import "../../../subjects/domain/ad_subject.dart";
 import "../../../subjects/presentation/providers/subject_providers.dart";
 import "../../domain/create_ad_step.dart";
@@ -133,6 +135,12 @@ final class CreateAdFlowController extends Notifier<CreateAdFlowState> {
       switch (ad.status) {
         case AdStatus.ready:
           state = state.copyWith(step: CreateAdStep.success, processingStillPending: false);
+          // Without this, a just-published Ad only shows up in Home/Market
+          // after a cold restart happens to refetch these — the providers
+          // otherwise keep serving whatever page they last fetched.
+          ref.invalidate(feedControllerProvider);
+          ref.invalidate(freshAdsProvider);
+          ref.invalidate(trendingSubjectsProvider);
           return;
         case AdStatus.failed:
         case AdStatus.blocked:
