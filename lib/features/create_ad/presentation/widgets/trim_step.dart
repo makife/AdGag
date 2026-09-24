@@ -104,6 +104,28 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   double _lastAppliedPreviewSpeed = 1.0;
   bool _lastAppliedMute = false;
 
+  // The user-reported "play/pause çıkışında 100-200ms geriden başlıyor,
+  // bu sürekli tekrarlanıyor olabilir mi" bug: `_onTransportChanged`'s
+  // video play/pause branch used to compare against
+  // `controller.value.isPlaying`, the SAME kind of value that can
+  // transiently flicker to `false` during a native buffering micro-
+  // stall (exactly the mechanism already fixed for music below). A
+  // stall the player would have recovered from on its own instead got
+  // read as "stopped, needs a fresh play() command" — and every such
+  // command pays the same real native play()-restart latency the user
+  // was seeing, turning a brief, self-resolving stall into a repeating
+  // stutter. This tracks the play/pause state WE ourselves last told
+  // the controller to be in, never what it happens to report back, so
+  // a transient stall is left alone to resolve on its own.
+  bool _lastAppliedIsPlaying = false;
+
+  // Same fix, applied to the music controller (its "no seek needed,
+  // just make sure it's playing" branch had the identical flicker
+  // vulnerability against `music.value.isPlaying`). Nullable — reset to
+  // null on a music-source change so the very next tick re-establishes
+  // it rather than trusting a stale value from a different file.
+  bool? _lastAppliedMusicPlaying;
+
   // videoeditor7.txt section 5/6: whether the music player is currently
   // considered "inside" its region by the last tick this widget itself
   // processed — owned here, never derived from `music.value.isPlaying`
@@ -298,6 +320,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     _dbgReportTimer?.cancel();
     _lastAppliedMute = false;
     _lastAppliedPreviewSpeed = 1.0;
+    _lastAppliedIsPlaying = false;
     setState(() {
       _initError = null;
       _controller = null;
@@ -455,18 +478,28 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       return;
     }
 
-    if (transport.isPlaying && !controller.value.isPlaying) {
-      if (kDebugMode) {
-        _log.fine("VIDEO_PLAY");
-        _dbgPlayCount++;
+    // Gated on transport.isPlaying CHANGING from what we last told the
+    // controller — not on comparing against controller.value.isPlaying
+    // (see _lastAppliedIsPlaying's own doc comment). A transient native
+    // buffering stall that makes the player briefly report isPlaying as
+    // false does NOT get a fresh play() command here; the player
+    // recovers on its own once buffered, since playWhenReady is already
+    // true from the first (and only, per this gate) play() call.
+    if (transport.isPlaying != _lastAppliedIsPlaying) {
+      _lastAppliedIsPlaying = transport.isPlaying;
+      if (transport.isPlaying) {
+        if (kDebugMode) {
+          _log.fine("VIDEO_PLAY");
+          _dbgPlayCount++;
+        }
+        unawaited(controller.play());
+      } else {
+        if (kDebugMode) {
+          _log.fine("VIDEO_PAUSE");
+          _dbgPauseCount++;
+        }
+        unawaited(controller.pause());
       }
-      unawaited(controller.play());
-    } else if (!transport.isPlaying && controller.value.isPlaying) {
-      if (kDebugMode) {
-        _log.fine("VIDEO_PAUSE");
-        _dbgPauseCount++;
-      }
-      unawaited(controller.pause());
     }
 
     if (_lastAppliedMute != project.removeAudio) {
@@ -562,20 +595,30 @@ class _TrimStepState extends ConsumerState<TrimStep> {
         if (!mounted || _musicController != music || generation != _audioSyncGeneration) {
           return;
         }
+        // Same fix as the video side: gated on what WE last told the
+        // music controller, not on music.value.isPlaying — a transient
+        // stall right after this seek must not look like "not playing
+        // yet, needs another play() call."
         if (playAfter) {
-          if (kDebugMode) _log.fine("MUSIC_PLAY reason=POST_SEEK");
-          await music.play();
-        } else if (music.value.isPlaying) {
+          if (_lastAppliedMusicPlaying != true) {
+            _lastAppliedMusicPlaying = true;
+            if (kDebugMode) _log.fine("MUSIC_PLAY reason=POST_SEEK");
+            await music.play();
+          }
+        } else if (_lastAppliedMusicPlaying != false) {
+          _lastAppliedMusicPlaying = false;
           await music.pause();
         }
       }());
     } else {
       if (decision.playback == MusicPlaybackIntent.playing) {
-        if (!music.value.isPlaying) {
+        if (_lastAppliedMusicPlaying != true) {
+          _lastAppliedMusicPlaying = true;
           if (kDebugMode) _log.fine("MUSIC_PLAY reason=RESUME");
           unawaited(music.play());
         }
-      } else if (music.value.isPlaying) {
+      } else if (_lastAppliedMusicPlaying != false) {
+        _lastAppliedMusicPlaying = false;
         if (kDebugMode) _log.fine("MUSIC_PAUSE reason=${transport.isScrubbing ? 'SCRUB' : 'OUT_OF_REGION'}");
         unawaited(music.pause());
       }
@@ -601,6 +644,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     final VideoPlayerController? old = _musicController;
     _musicController = null;
     _musicInRegion = false;
+    _lastAppliedMusicPlaying = null;
     _audioSyncGeneration++; // invalidates any in-flight seek/play chain on `old`
     await old?.pause();
     await old?.dispose();
