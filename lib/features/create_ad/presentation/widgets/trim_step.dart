@@ -59,6 +59,20 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   // editor_transport.dart's own class doc for the full architecture.
   EditorTransport? _transport;
 
+  // videoeditor9.txt: a TEMPORARY, debug-only hard-isolation A/B test.
+  // When true, none of the fields/methods above are constructed or
+  // touched at all — not even the widgets/callbacks that would read
+  // them — and this screen instead renders a second, completely
+  // independent VideoPlayerController with the EXACT SAME minimal
+  // architecture as caption_publish_step.dart: file -> initialize ->
+  // setLooping -> play -> bare AspectRatio(VideoPlayer). No
+  // EditorTransport is constructed, so no player-position listener, no
+  // transport listener, no timeline, no music/speed/overlay
+  // coordination of any kind can run — not gated off, simply never
+  // built. See _enterRawPreviewMode/_exitRawPreviewMode/_buildRawPreview.
+  bool _rawPreviewMode = false;
+  VideoPlayerController? _rawController;
+
   // The trim window's *end* the first time this screen loads a clip —
   // needed by both EditorController.init() and Reset (which restores
   // this exact untouched window, not an empty/zero one).
@@ -138,6 +152,92 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       _dbgTimelineUpdateCount = 0;
       _dbgEditorRebuildCount = 0;
     });
+  }
+
+  /// Tears down EVERY normal-mode playback resource (not gated/early-
+  /// returned — actually disposed and un-listened) and constructs a
+  /// second `VideoPlayerController` whose only operations, anywhere in
+  /// this codebase, are `initialize()`, `setLooping(true)`, `play()`,
+  /// and disposal — the identical set `caption_publish_step.dart` uses.
+  /// No `EditorTransport` is created, so [_reportPlayerPosition] and
+  /// [_onTransportChanged] are never registered as listeners on it
+  /// (they still exist as methods, but nothing ever calls
+  /// `addListener` linking them to this controller); [_Timeline] is not
+  /// built at all while this mode is active, so it cannot call
+  /// `jumpTo` regardless of what this controller does.
+  Future<void> _enterRawPreviewMode() async {
+    final LocalVideoDraft? draft = ref.read(createAdFlowControllerProvider).capturedDraft;
+    if (draft == null) {
+      return;
+    }
+    _dbgReportTimer?.cancel();
+    _controller?.removeListener(_reportPlayerPosition);
+    _controller?.dispose().ignore();
+    _controller = null;
+    _transport?.removeListener(_onTransportChanged);
+    _transport?.dispose();
+    _transport = null;
+    _audioSyncGeneration++; // invalidate any in-flight music seek/play chain
+    _musicController?.dispose().ignore();
+    _musicController = null;
+
+    final VideoPlayerController raw = VideoPlayerController.file(File(draft.filePath));
+    _rawController = raw;
+    setState(() => _rawPreviewMode = true);
+
+    await raw.initialize();
+    if (!mounted || !_rawPreviewMode || _rawController != raw) {
+      return;
+    }
+    setState(() {});
+    // Exactly caption_publish_step.dart's own sequence — nothing else.
+    unawaited(raw.setLooping(true));
+    unawaited(raw.play());
+    if (kDebugMode) {
+      _log.info(
+        "RAW_PREVIEW_MODE entered: controller initialized and playing. "
+        "EditorTransport=NOT CONSTRUCTED, _reportPlayerPosition listener=NOT REGISTERED, "
+        "_onTransportChanged listener=NOT REGISTERED, _Timeline=NOT BUILT. "
+        "Therefore, by construction (not runtime sampling — ChangeNotifier's own "
+        "listener count isn't part of Flutter's public API): "
+        "EditorTransport reports=0, timeline playback updates=0, jumpTo calls=0, "
+        "video seekTo calls=0 (only initialize+play were called), speed calls=0, "
+        "music sync calls=0. The only listener(s) on this controller are whatever "
+        "the VideoPlayer widget itself attaches internally — identical to "
+        "caption_publish_step.dart, which this screen's own code never touches.",
+      );
+    }
+  }
+
+  /// Disposes the raw controller and rebuilds the normal editor pipeline
+  /// from scratch (composition state in [VideoProject]/Riverpod is
+  /// untouched — only this screen's own player/transport/timeline
+  /// widget state is rebuilt).
+  void _exitRawPreviewMode() {
+    _rawController?.dispose().ignore();
+    _rawController = null;
+    setState(() => _rawPreviewMode = false);
+    _startInitialization();
+  }
+
+  Widget _buildRawPreview() {
+    final VideoPlayerController? raw = _rawController;
+    final bool rawReady = raw != null && raw.value.isInitialized;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("RAW PREVIEW MODE (debug)"),
+        actions: <Widget>[
+          TextButton(onPressed: _exitRawPreviewMode, child: const Text("Exit raw mode")),
+        ],
+      ),
+      body: SafeArea(
+        child: Center(
+          child: rawReady
+              ? AspectRatio(aspectRatio: raw.value.aspectRatio, child: VideoPlayer(raw))
+              : const CircularProgressIndicator(),
+        ),
+      ),
+    );
   }
 
   // Real decoded frames for the timeline's Clip lane (not a placeholder
@@ -262,6 +362,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   void dispose() {
     _progressSub?.cancel();
     _dbgReportTimer?.cancel();
+    _rawController?.dispose().ignore();
     _controller?.removeListener(_reportPlayerPosition);
     _controller?.dispose().ignore();
     _transport?.removeListener(_onTransportChanged);
@@ -939,6 +1040,9 @@ class _TrimStepState extends ConsumerState<TrimStep> {
 
   @override
   Widget build(BuildContext context) {
+    if (_rawPreviewMode) {
+      return _buildRawPreview();
+    }
     if (kDebugMode) _dbgEditorRebuildCount++;
     final VideoPlayerController? controller = _controller;
     final VideoProject? project = ref.watch(editorControllerProvider);
@@ -1001,6 +1105,14 @@ class _TrimStepState extends ConsumerState<TrimStep> {
             itemBuilder: (BuildContext context) => <PopupMenuEntry<VoidCallback>>[
               PopupMenuItem<VoidCallback>(value: _reset, child: const Text("Reset edits")),
               PopupMenuItem<VoidCallback>(value: _retake, child: const Text("Retake")),
+              // videoeditor9.txt: temporary hard-isolation A/B test entry
+              // point — debug builds only, never visible/reachable in a
+              // release build.
+              if (kDebugMode)
+                PopupMenuItem<VoidCallback>(
+                  value: () => unawaited(_enterRawPreviewMode()),
+                  child: const Text("Raw preview mode (debug)"),
+                ),
             ],
           ),
           TextButton(
