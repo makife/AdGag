@@ -15,6 +15,9 @@ import "video_thumbnail_service.dart";
 /// pay FFmpeg's process-startup cost N times over for a handful of small
 /// thumbnails.
 final class FfmpegVideoThumbnailService implements VideoThumbnailService {
+  int? _activeSessionId;
+  List<String> _lastRequestedPaths = const <String>[];
+
   @override
   Future<List<String>> generateThumbnails({
     required String videoPath,
@@ -42,25 +45,42 @@ final class FfmpegVideoThumbnailService implements VideoThumbnailService {
       outputPattern,
     ];
 
+    _lastRequestedPaths = <String>[
+      for (int i = 1; i <= count; i++) "${tempDir.path}/${prefix}_${i.toString().padLeft(3, '0')}.jpg",
+    ];
+
     final Completer<List<String>> completer = Completer<List<String>>();
-    unawaited(
-      FFmpegKit.executeWithArgumentsAsync(args, (FFmpegSession session) async {
-        final ReturnCode? code = await session.getReturnCode();
-        if (!ReturnCode.isSuccess(code)) {
-          if (!completer.isCompleted) {
-            completer.complete(const <String>[]);
-          }
-          return;
-        }
-        final List<String> paths = <String>[
-          for (int i = 1; i <= count; i++) "${tempDir.path}/${prefix}_${i.toString().padLeft(3, '0')}.jpg",
-        ];
-        final List<String> existing = paths.where((String p) => File(p).existsSync()).toList();
+    final FFmpegSession session = await FFmpegKit.executeWithArgumentsAsync(args, (FFmpegSession session) async {
+      _activeSessionId = null;
+      final ReturnCode? code = await session.getReturnCode();
+      if (!ReturnCode.isSuccess(code)) {
         if (!completer.isCompleted) {
-          completer.complete(existing);
+          completer.complete(const <String>[]);
         }
-      }),
-    );
+        return;
+      }
+      final List<String> existing = _lastRequestedPaths.where((String p) => File(p).existsSync()).toList();
+      if (!completer.isCompleted) {
+        completer.complete(existing);
+      }
+    });
+    _activeSessionId = session.getSessionId();
     return completer.future;
+  }
+
+  @override
+  Future<void> cancel() async {
+    final int? sessionId = _activeSessionId;
+    if (sessionId != null) {
+      await FFmpegKit.cancel(sessionId);
+      _activeSessionId = null;
+    }
+    for (final String path in _lastRequestedPaths) {
+      final File file = File(path);
+      if (file.existsSync()) {
+        await file.delete();
+      }
+    }
+    _lastRequestedPaths = const <String>[];
   }
 }

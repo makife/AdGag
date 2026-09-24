@@ -1,6 +1,6 @@
 import "dart:async" show StreamSubscription, unawaited;
 import "dart:io";
-import "dart:math" show pi;
+import "dart:math" show max, pi;
 
 import "package:file_picker/file_picker.dart";
 import "package:flutter/material.dart";
@@ -124,6 +124,10 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     _progressSub?.cancel();
     _controller?.dispose().ignore();
     _musicController?.dispose().ignore();
+    // Stops an in-flight thumbnail generation and deletes whatever it
+    // had already written — leaving the editor before generation
+    // finishes shouldn't leak temp JPEGs for the rest of the session.
+    unawaited(ref.read(videoThumbnailServiceProvider).cancel());
     // Whatever happens next (successful Continue, Retake, or the shell
     // itself navigating away after confirmation) means there's nothing
     // left on *this* screen to warn about losing.
@@ -990,7 +994,16 @@ class _FilterPreviewChip extends StatelessWidget {
 /// chip/bar. Every chip also prints its own start–end time under its
 /// label, so placement doesn't rely on eyeballing position against the
 /// ruler alone.
-class _Timeline extends StatelessWidget {
+/// Centered-playhead, horizontally-scrolling timeline (per the tightened
+/// editor spec, section 3: "the playhead should preferably remain
+/// centered while the timeline moves underneath it" — the standard
+/// mobile-editor pattern, distinct from the desktop
+/// drag-a-marker-across-a-fixed-ruler model this widget used before).
+/// Content is laid out at a fixed [_TimelineState._pixelsPerSecond]
+/// scale, not stretched to fit the viewport, so there's always real
+/// horizontal scroll even for this format's short (<=10s) clips — scale
+/// is what makes the ruler/chips legible, not how much content there is.
+class _Timeline extends StatefulWidget {
   const _Timeline({
     required this.controller,
     required this.thumbnailPaths,
@@ -1036,6 +1049,66 @@ class _Timeline extends StatelessWidget {
 
   static String _fmt(Duration d) => "${(d.inMilliseconds / 1000.0).toStringAsFixed(1)}s";
 
+  @override
+  State<_Timeline> createState() => _TimelineState();
+}
+
+class _TimelineState extends State<_Timeline> {
+  /// Fixed regardless of clip length or viewport width — legibility
+  /// (ruler ticks, chip labels) is what sets this, not "does the content
+  /// fit the screen." At 70px/s a 10s clip is 700px wide, comfortably
+  /// scrollable on any phone.
+  static const double _pixelsPerSecond = 70;
+  static const double _textRowGap = 4;
+
+  late final ScrollController _scrollController;
+
+  /// True only while an actual user drag is moving the scroll view —
+  /// distinguishes a user scrubbing (which should drive `seekTo`) from
+  /// this widget's own `jumpTo` calls following normal playback (which
+  /// must NOT feed back into another seek, or forward playback and
+  /// auto-scroll would fight each other every frame).
+  bool _isUserScrubbing = false;
+
+  /// True while a trim-handle or edge-resize drag is in progress, so the
+  /// ScrollView's own physics can be disabled for that gesture — without
+  /// this, a drag that starts on a resize handle is ambiguous with "drag
+  /// to scroll the timeline" and the outer ScrollView tends to win,
+  /// since both are the same axis. Genuinely the single highest-risk
+  /// piece of this widget to get right without a physical device — see
+  /// this round's CLAUDE.md entry.
+  bool _gestureLockScroll = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    widget.controller.addListener(_onPlaybackPositionChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onPlaybackPositionChanged);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onPlaybackPositionChanged() {
+    if (_isUserScrubbing || !mounted || !_scrollController.hasClients) {
+      return;
+    }
+    final double sec = widget.controller.value.position.inMilliseconds / 1000.0;
+    final double target = sec * _pixelsPerSecond;
+    final ScrollPosition position = _scrollController.position;
+    _scrollController.jumpTo(target.clamp(position.minScrollExtent, position.maxScrollExtent));
+  }
+
+  void _setGestureLock(bool locked) {
+    if (_gestureLockScroll != locked) {
+      setState(() => _gestureLockScroll = locked);
+    }
+  }
+
   Future<void> _confirmRemoveZone(BuildContext context, SpeedZone zone) async {
     final bool? confirmed = await showDialog<bool>(
       context: context,
@@ -1049,7 +1122,7 @@ class _Timeline extends StatelessWidget {
       ),
     );
     if (confirmed == true) {
-      onRemoveZone(zone);
+      widget.onRemoveZone(zone);
     }
   }
 
@@ -1067,7 +1140,7 @@ class _Timeline extends StatelessWidget {
       ),
     );
     if (confirmed == true) {
-      onRemoveOverlay(overlay.id);
+      widget.onRemoveOverlay(overlay.id);
     }
   }
 
@@ -1083,7 +1156,7 @@ class _Timeline extends StatelessWidget {
       ),
     );
     if (confirmed == true) {
-      onRemoveMusic();
+      widget.onRemoveMusic();
     }
   }
 
@@ -1101,19 +1174,16 @@ class _Timeline extends StatelessWidget {
       );
 
   /// A draggable grip at a lane item's edge — `onDeltaSeconds` receives
-  /// the drag delta already converted from pixels to seconds of
-  /// *timeline* time, so callers never touch pixels. Hit area (32dp) is
-  /// roughly twice the visual grip's own size, per the same
+  /// the drag delta already converted from pixels to seconds. Hit area
+  /// (32dp) is roughly twice the visual grip's own size, per the same
   /// touch-target research already applied once to the trim-window
-  /// handle (16dp visual / 44dp hit area) — a too-small hit target,
-  /// not a logic bug, was the most likely reason this kept feeling
-  /// broken.
+  /// handle. Wrapped in the scroll-gesture lock (see `_gestureLockScroll`
+  /// doc comment) so dragging it resizes instead of scrolling the
+  /// timeline underneath your finger.
   Widget _edgeHandle({
     required double left,
     required double top,
     required double height,
-    required double trackWidth,
-    required double totalSec,
     required ValueChanged<double> onDeltaSeconds,
   }) {
     return Positioned(
@@ -1121,114 +1191,125 @@ class _Timeline extends StatelessWidget {
       top: top,
       width: 32,
       height: height,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onHorizontalDragUpdate: (DragUpdateDetails d) => onDeltaSeconds(d.delta.dx / trackWidth * totalSec),
-        child: Center(
-          child: Container(
-            width: 8,
-            height: height * 0.7,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(3),
-              border: Border.all(color: Colors.black26),
-              boxShadow: const <BoxShadow>[BoxShadow(color: Colors.black45, blurRadius: 3)],
+      child: Listener(
+        onPointerDown: (_) => _setGestureLock(true),
+        onPointerUp: (_) => _setGestureLock(false),
+        onPointerCancel: (_) => _setGestureLock(false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragUpdate: (DragUpdateDetails d) => onDeltaSeconds(d.delta.dx / _pixelsPerSecond),
+          child: Center(
+            child: Container(
+              width: 8,
+              height: height * 0.7,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(color: Colors.black26),
+                boxShadow: const <BoxShadow>[BoxShadow(color: Colors.black45, blurRadius: 3)],
+              ),
+              child: const Icon(Icons.drag_indicator, size: 10, color: Colors.black45),
             ),
-            child: const Icon(Icons.drag_indicator, size: 10, color: Colors.black45),
           ),
         ),
       ),
     );
   }
 
-  void _scrubTo(double localX, double width, double totalSec) {
-    final double fraction = (localX / width).clamp(0.0, 1.0);
-    unawaited(controller.seekTo(Duration(milliseconds: (fraction * totalSec * 1000).round())));
-  }
-
-  /// The tick+number ruler, also the scrub surface: tap or drag anywhere
-  /// on it to seek the shared preview controller. At this format's
-  /// 10-second ceiling a single fixed-width view with one tick per
-  /// second is enough — no zoom level is needed the way a
-  /// general-purpose editor's arbitrary-length timeline would.
-  Widget _ruler(ColorScheme scheme, double width, double totalSec) {
+  /// Purely visual now — the ruler's own tap/drag-to-seek gesture was
+  /// removed; the ScrollView's native scroll (see the `NotificationListener`
+  /// in `build`) is the scrub surface for the *entire* timeline now, not
+  /// just this one lane, matching the centered-playhead model.
+  Widget _ruler(ColorScheme scheme, double totalSec) {
     final int lastTick = totalSec.floor();
     return Positioned(
       left: 0,
       top: 0,
-      width: width,
-      height: _rulerHeight,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (TapDownDetails d) => _scrubTo(d.localPosition.dx, width, totalSec),
-        onHorizontalDragUpdate: (DragUpdateDetails d) => _scrubTo(d.localPosition.dx, width, totalSec),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: <Widget>[
-            for (int i = 0; i <= lastTick; i++)
-              Positioned(
-                left: (i / totalSec) * width - 10,
-                top: 0,
-                width: 20,
-                child: Column(
-                  children: <Widget>[
-                    Container(width: 1, height: 5, color: scheme.onSurfaceVariant),
-                    Text(
-                      "${i}s",
-                      style: TextStyle(fontSize: 8, color: scheme.onSurfaceVariant),
-                    ),
-                  ],
-                ),
+      height: _Timeline._rulerHeight,
+      width: totalSec * _pixelsPerSecond,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          for (int i = 0; i <= lastTick; i++)
+            Positioned(
+              left: i * _pixelsPerSecond - 10,
+              top: 0,
+              width: 20,
+              child: Column(
+                children: <Widget>[
+                  Container(width: 1, height: 5, color: scheme.onSurfaceVariant),
+                  Text("${i}s", style: TextStyle(fontSize: 8, color: scheme.onSurfaceVariant)),
+                ],
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
 
-  /// The current-position indicator — read-only (`IgnorePointer`, so it
-  /// never intercepts touches meant for the ruler/lanes underneath),
-  /// spanning every lane's full height, and reactive via the
-  /// controller's own [ValueListenableBuilder] rather than a rebuild of
-  /// the whole screen on every playback tick (CLAUDE.md section 41:
-  /// don't rebuild more than what actually changed).
-  Widget _playhead(double width, double totalSec, double timelineHeight) {
-    return Positioned(
-      left: 0,
-      top: 0,
-      width: width,
-      height: timelineHeight,
-      child: IgnorePointer(
-        child: ValueListenableBuilder<VideoPlayerValue>(
-          valueListenable: controller,
-          builder: (BuildContext context, VideoPlayerValue value, Widget? child) {
-            final double sec = (value.position.inMilliseconds / 1000.0).clamp(0.0, totalSec);
-            final double left = (sec / totalSec) * width;
-            return Transform.translate(
-              offset: Offset(left - 1, 0),
-              child: Container(width: 2, color: Colors.redAccent),
-            );
-          },
-        ),
-      ),
-    );
+  /// Greedy interval-packing: overlapping text/sticker layers get
+  /// separate rows (per the spec's own ASCII diagram of two text layers
+  /// stacked as distinct tracks) instead of visually colliding in one
+  /// lane. Sorted by start time; an overlay goes in the first row whose
+  /// last-placed item already ended by the time this one starts, else a
+  /// new row.
+  Map<String, int> _packOverlayRows(List<VideoOverlay> overlays) {
+    final List<VideoOverlay> sorted = List<VideoOverlay>.of(overlays)
+      ..sort((VideoOverlay a, VideoOverlay b) => a.startSec.compareTo(b.startSec));
+    final List<Duration> rowEndTimes = <Duration>[];
+    final Map<String, int> rowOf = <String, int>{};
+    for (final VideoOverlay o in sorted) {
+      int assigned = -1;
+      for (int r = 0; r < rowEndTimes.length; r++) {
+        if (rowEndTimes[r] <= o.startSec) {
+          assigned = r;
+          break;
+        }
+      }
+      if (assigned == -1) {
+        assigned = rowEndTimes.length;
+        rowEndTimes.add(o.endSec);
+      } else {
+        rowEndTimes[assigned] = o.endSec;
+      }
+      rowOf[o.id] = assigned;
+    }
+    return rowOf;
   }
 
   @override
   Widget build(BuildContext context) {
-    final double totalSec = originalDuration.inMilliseconds / 1000.0;
+    final double totalSec = widget.originalDuration.inMilliseconds / 1000.0;
     if (totalSec <= 0) {
       return const SizedBox.shrink();
     }
-    final double trimmedSec = trimmedDuration.inMilliseconds / 1000.0;
-    final bool draggable = maxTrimStartSeconds > 0;
+    final double trimmedSec = widget.trimmedDuration.inMilliseconds / 1000.0;
+    final bool draggable = widget.maxTrimStartSeconds > 0;
     final ColorScheme scheme = Theme.of(context).colorScheme;
 
-    final double trimTop = _rulerHeight + _laneGap;
-    final double speedTop = trimTop + _trimLaneHeight + _laneGap;
-    final double musicTop = speedTop + _laneHeight + _laneGap;
-    final double overlayTop = musicTop + _laneHeight + _laneGap;
-    final double totalHeight = overlayTop + _laneHeight;
+    final BackgroundAudio? music = widget.bgAudio;
+    double? musicLeft, musicWidth;
+    Duration musicStart = Duration.zero, musicEnd = Duration.zero;
+    if (music != null) {
+      musicStart = music.startSec;
+      final Duration musicDuration = music.duration ?? (widget.trimmedDuration - music.startSec);
+      musicEnd = musicStart + musicDuration;
+      musicLeft = (musicStart.inMilliseconds / 1000.0 + widget.trimStartSeconds) * _pixelsPerSecond;
+      musicWidth = musicDuration.inMilliseconds / 1000.0 * _pixelsPerSecond;
+    }
+
+    final Map<String, int> overlayRow = _packOverlayRows(widget.overlays);
+    final int textRows = overlayRow.values.isEmpty ? 1 : overlayRow.values.reduce(max) + 1;
+    final double textLaneHeight = textRows * _Timeline._laneHeight + (textRows - 1) * _textRowGap;
+
+    final double trimTop = _Timeline._rulerHeight + _Timeline._laneGap;
+    final double speedTop = trimTop + _Timeline._trimLaneHeight + _Timeline._laneGap;
+    final double musicTop = speedTop + _Timeline._laneHeight + _Timeline._laneGap;
+    final double overlayTop = musicTop + _Timeline._laneHeight + _Timeline._laneGap;
+    final double totalHeight = overlayTop + textLaneHeight;
+    final double contentWidth = totalSec * _pixelsPerSecond;
+    final double selLeft = widget.trimStartSeconds * _pixelsPerSecond;
+    final double selWidth = trimmedSec * _pixelsPerSecond;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.xs),
@@ -1243,18 +1324,18 @@ class _Timeline extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             SizedBox(
-              width: _labelWidth,
+              width: _Timeline._labelWidth,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   SizedBox(
-                    height: _rulerHeight,
+                    height: _Timeline._rulerHeight,
                     child: ValueListenableBuilder<VideoPlayerValue>(
-                      valueListenable: controller,
+                      valueListenable: widget.controller,
                       builder: (BuildContext context, VideoPlayerValue value, Widget? child) => InkWell(
                         borderRadius: BorderRadius.circular(AppRadius.sm),
                         onTap: () =>
-                            unawaited(value.isPlaying ? controller.pause() : controller.play()),
+                            unawaited(value.isPlaying ? widget.controller.pause() : widget.controller.play()),
                         child: Icon(
                           value.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
                           size: 20,
@@ -1263,14 +1344,14 @@ class _Timeline extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: _laneGap),
-                  SizedBox(height: _trimLaneHeight, child: _LaneLabel("Clip", scheme)),
-                  const SizedBox(height: _laneGap),
-                  SizedBox(height: _laneHeight, child: _LaneLabel("Speed", scheme)),
-                  const SizedBox(height: _laneGap),
-                  SizedBox(height: _laneHeight, child: _LaneLabel("Music", scheme)),
-                  const SizedBox(height: _laneGap),
-                  SizedBox(height: _laneHeight, child: _LaneLabel("Text", scheme)),
+                  const SizedBox(height: _Timeline._laneGap),
+                  SizedBox(height: _Timeline._trimLaneHeight, child: _LaneLabel("Clip", scheme)),
+                  const SizedBox(height: _Timeline._laneGap),
+                  SizedBox(height: _Timeline._laneHeight, child: _LaneLabel("Speed", scheme)),
+                  const SizedBox(height: _Timeline._laneGap),
+                  SizedBox(height: _Timeline._laneHeight, child: _LaneLabel("Music", scheme)),
+                  const SizedBox(height: _Timeline._laneGap),
+                  SizedBox(height: textLaneHeight, child: _LaneLabel("Text", scheme)),
                 ],
               ),
             ),
@@ -1278,376 +1359,450 @@ class _Timeline extends StatelessWidget {
             Expanded(
               child: LayoutBuilder(
                 builder: (BuildContext context, BoxConstraints constraints) {
-                  final double width = constraints.maxWidth;
-                  final double selLeft = (trimStartSeconds / totalSec) * width;
-                  final double selWidth = (trimmedSec / totalSec) * width;
+                  final double viewportWidth = constraints.maxWidth;
+                  return NotificationListener<ScrollNotification>(
+                    onNotification: (ScrollNotification notification) {
+                      if (notification is ScrollStartNotification && notification.dragDetails != null) {
+                        _isUserScrubbing = true;
+                      } else if (notification is ScrollUpdateNotification && _isUserScrubbing) {
+                        final double sec = (notification.metrics.pixels / _pixelsPerSecond).clamp(0.0, totalSec);
+                        unawaited(widget.controller.seekTo(Duration(milliseconds: (sec * 1000).round())));
+                      } else if (notification is ScrollEndNotification) {
+                        _isUserScrubbing = false;
+                      }
+                      return false;
+                    },
+                    child: SizedBox(
+                      height: totalHeight,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: <Widget>[
+                          SingleChildScrollView(
+                            controller: _scrollController,
+                            scrollDirection: Axis.horizontal,
+                            physics: _gestureLockScroll
+                                ? const NeverScrollableScrollPhysics()
+                                : const AlwaysScrollableScrollPhysics(),
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(horizontal: viewportWidth / 2),
+                              child: SizedBox(
+                                width: contentWidth,
+                                height: totalHeight,
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  children: <Widget>[
+                                    // Lane backgrounds — drawn even when
+                                    // empty, so every lane's own area is
+                                    // visible, not just wherever
+                                    // something happens to be placed.
+                                    _lane(scheme, top: trimTop, height: _Timeline._trimLaneHeight),
+                                    _lane(scheme, top: speedTop, height: _Timeline._laneHeight),
+                                    _lane(scheme, top: musicTop, height: _Timeline._laneHeight),
+                                    _lane(scheme, top: overlayTop, height: textLaneHeight),
 
-                  final BackgroundAudio? music = bgAudio;
-                  double? musicLeft, musicWidth;
-                  Duration musicStart = Duration.zero, musicEnd = Duration.zero;
-                  if (music != null) {
-                    musicStart = music.startSec;
-                    final Duration musicDuration = music.duration ?? (trimmedDuration - music.startSec);
-                    musicEnd = musicStart + musicDuration;
-                    musicLeft = ((musicStart.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width;
-                    musicWidth = (musicDuration.inMilliseconds / 1000.0 / totalSec) * width;
-                  }
+                                    _ruler(scheme, totalSec),
 
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    children: <Widget>[
-                      // Lane backgrounds — drawn even when empty, so every
-                      // lane's own area is visible rather than only
-                      // appearing once something is placed in it.
-                      _lane(scheme, top: trimTop, height: _trimLaneHeight),
-                      _lane(scheme, top: speedTop, height: _laneHeight),
-                      _lane(scheme, top: musicTop, height: _laneHeight),
-                      _lane(scheme, top: overlayTop, height: _laneHeight),
+                                    // Base track — real decoded frames
+                                    // when the filmstrip has generated, a
+                                    // plain bar otherwise (best-effort —
+                                    // see _generateThumbnails' own doc
+                                    // comment).
+                                    if (widget.thumbnailPaths.isNotEmpty)
+                                      Positioned(
+                                        top: trimTop,
+                                        left: 0,
+                                        width: contentWidth,
+                                        height: _Timeline._trimLaneHeight,
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                                          child: Row(
+                                            children: <Widget>[
+                                              for (final String path in widget.thumbnailPaths)
+                                                Expanded(
+                                                  child: Image.file(
+                                                    File(path),
+                                                    fit: BoxFit.cover,
+                                                    height: _Timeline._trimLaneHeight,
+                                                    errorBuilder: (_, __, ___) =>
+                                                        ColoredBox(color: scheme.surfaceContainerHighest),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      )
+                                    else
+                                      Positioned(
+                                        top: trimTop + 20,
+                                        left: 0,
+                                        width: contentWidth,
+                                        child: Container(
+                                          height: 4,
+                                          decoration: BoxDecoration(
+                                            color: scheme.surfaceContainerHighest,
+                                            borderRadius: BorderRadius.circular(2),
+                                          ),
+                                        ),
+                                      ),
 
-                      _ruler(scheme, width, totalSec),
-
-                      // Base track — real decoded frames when the
-                      // filmstrip has generated, a plain bar otherwise
-                      // (thumbnails are best-effort — see
-                      // _generateThumbnails' own doc comment).
-                      if (thumbnailPaths.isNotEmpty)
-                        Positioned(
-                          top: trimTop,
-                          left: 0,
-                          right: 0,
-                          height: _trimLaneHeight,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(AppRadius.sm),
-                            child: Row(
-                              children: <Widget>[
-                                for (final String path in thumbnailPaths)
-                                  Expanded(
-                                    child: Image.file(
-                                      File(path),
-                                      fit: BoxFit.cover,
-                                      height: _trimLaneHeight,
-                                      errorBuilder: (_, __, ___) => ColoredBox(color: scheme.surfaceContainerHighest),
+                                    // Selection window — drag to move
+                                    // where the up-to-10s clip starts
+                                    // within the original.
+                                    Positioned(
+                                      left: selLeft,
+                                      width: selWidth,
+                                      top: trimTop,
+                                      height: _Timeline._trimLaneHeight,
+                                      child: Listener(
+                                        onPointerDown: (_) => _setGestureLock(true),
+                                        onPointerUp: (_) => _setGestureLock(false),
+                                        onPointerCancel: (_) => _setGestureLock(false),
+                                        child: GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onHorizontalDragUpdate: !draggable
+                                              ? null
+                                              : (DragUpdateDetails d) {
+                                                  final double deltaSec = d.delta.dx / _pixelsPerSecond;
+                                                  widget.onTrimStartChanged(
+                                                    (widget.trimStartSeconds + deltaSec)
+                                                        .clamp(0, widget.maxTrimStartSeconds),
+                                                  );
+                                                },
+                                          child: Center(
+                                            child: Container(
+                                              height: 16,
+                                              decoration: BoxDecoration(
+                                                color: scheme.primary.withValues(alpha: 0.3),
+                                                border: Border.all(color: scheme.primary, width: 2),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else
-                        Positioned(
-                          top: trimTop + 20,
-                          left: 0,
-                          right: 0,
-                          child: Container(
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: scheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                      // Selection window — drag to move where the
-                      // up-to-10s clip starts within the original. The
-                      // hit area (44dp, per the platform-minimum touch
-                      // target) is much taller than the visible pill
-                      // (16dp).
-                      Positioned(
-                        left: selLeft,
-                        width: selWidth,
-                        top: trimTop,
-                        height: _trimLaneHeight,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onHorizontalDragUpdate: !draggable
-                              ? null
-                              : (DragUpdateDetails d) {
-                                  final double deltaSec = d.delta.dx / width * totalSec;
-                                  onTrimStartChanged((trimStartSeconds + deltaSec).clamp(0, maxTrimStartSeconds));
-                                },
-                          child: Center(
-                            child: Container(
-                              height: 16,
-                              decoration: BoxDecoration(
-                                color: scheme.primary.withValues(alpha: 0.3),
-                                border: Border.all(color: scheme.primary, width: 2),
-                                borderRadius: BorderRadius.circular(4),
+
+                                    // Speed zones, positioned relative to
+                                    // the *original* clip (zone times are
+                                    // relative to the trim window's own
+                                    // start). Tapping the body asks
+                                    // before removing; the edge handles
+                                    // resize instead.
+                                    for (final SpeedZone zone in widget.speedZones) ...<Widget>[
+                                      Positioned(
+                                        left: (zone.start.inMilliseconds / 1000.0 + widget.trimStartSeconds) *
+                                            _pixelsPerSecond,
+                                        width: (zone.end - zone.start).inMilliseconds / 1000.0 * _pixelsPerSecond,
+                                        top: speedTop,
+                                        height: _Timeline._laneHeight,
+                                        child: GestureDetector(
+                                          onTap: () => unawaited(_confirmRemoveZone(context, zone)),
+                                          child: Container(
+                                            alignment: Alignment.center,
+                                            padding: const EdgeInsets.symmetric(horizontal: 3),
+                                            decoration: BoxDecoration(
+                                              color: scheme.primary,
+                                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                                            ),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: <Widget>[
+                                                Text(
+                                                  "${zone.factor}x slow-mo",
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                  overflow: TextOverflow.clip,
+                                                  softWrap: false,
+                                                  maxLines: 1,
+                                                ),
+                                                Text(
+                                                  "${_Timeline._fmt(zone.start)}–${_Timeline._fmt(zone.end)}",
+                                                  style: const TextStyle(color: Colors.white70, fontSize: 8),
+                                                  overflow: TextOverflow.clip,
+                                                  softWrap: false,
+                                                  maxLines: 1,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      _edgeHandle(
+                                        left: (zone.start.inMilliseconds / 1000.0 + widget.trimStartSeconds) *
+                                            _pixelsPerSecond,
+                                        top: speedTop,
+                                        height: _Timeline._laneHeight,
+                                        onDeltaSeconds: (double deltaSec) {
+                                          final Duration next =
+                                              zone.start + Duration(milliseconds: (deltaSec * 1000).round());
+                                          final Duration clamped = next < Duration.zero
+                                              ? Duration.zero
+                                              : (next > zone.end - _Timeline._minZoneDuration
+                                                  ? zone.end - _Timeline._minZoneDuration
+                                                  : next);
+                                          widget.onResizeZone(
+                                            zone,
+                                            SpeedZone(start: clamped, end: zone.end, factor: zone.factor),
+                                          );
+                                        },
+                                      ),
+                                      _edgeHandle(
+                                        left: (zone.end.inMilliseconds / 1000.0 + widget.trimStartSeconds) *
+                                            _pixelsPerSecond,
+                                        top: speedTop,
+                                        height: _Timeline._laneHeight,
+                                        onDeltaSeconds: (double deltaSec) {
+                                          final Duration next =
+                                              zone.end + Duration(milliseconds: (deltaSec * 1000).round());
+                                          final Duration clamped = next > widget.trimmedDuration
+                                              ? widget.trimmedDuration
+                                              : (next < zone.start + _Timeline._minZoneDuration
+                                                  ? zone.start + _Timeline._minZoneDuration
+                                                  : next);
+                                          widget.onResizeZone(
+                                            zone,
+                                            SpeedZone(start: zone.start, end: clamped, factor: zone.factor),
+                                          );
+                                        },
+                                      ),
+                                    ],
+
+                                    // Music bar — same shape as a speed
+                                    // zone: body taps to remove, edges
+                                    // drag to resize its window.
+                                    if (music != null && musicLeft != null && musicWidth != null) ...<Widget>[
+                                      Positioned(
+                                        left: musicLeft,
+                                        width: musicWidth,
+                                        top: musicTop,
+                                        height: _Timeline._laneHeight,
+                                        child: GestureDetector(
+                                          onTap: () => unawaited(_confirmRemoveMusic(context)),
+                                          child: Container(
+                                            alignment: Alignment.center,
+                                            padding: const EdgeInsets.symmetric(horizontal: 3),
+                                            decoration: BoxDecoration(
+                                              color: scheme.tertiary,
+                                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                                            ),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: <Widget>[
+                                                const Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: <Widget>[
+                                                    Icon(Icons.music_note, size: 12, color: Colors.white),
+                                                    SizedBox(width: 2),
+                                                    Text(
+                                                      "music",
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.w700,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                Text(
+                                                  "${_Timeline._fmt(musicStart)}–${_Timeline._fmt(musicEnd)}",
+                                                  style: const TextStyle(color: Colors.white70, fontSize: 8),
+                                                  overflow: TextOverflow.clip,
+                                                  softWrap: false,
+                                                  maxLines: 1,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      _edgeHandle(
+                                        left: musicLeft,
+                                        top: musicTop,
+                                        height: _Timeline._laneHeight,
+                                        onDeltaSeconds: (double deltaSec) {
+                                          final Duration next =
+                                              musicStart + Duration(milliseconds: (deltaSec * 1000).round());
+                                          final Duration clamped = next < Duration.zero
+                                              ? Duration.zero
+                                              : (next > musicEnd - _Timeline._minZoneDuration
+                                                  ? musicEnd - _Timeline._minZoneDuration
+                                                  : next);
+                                          widget.onResizeMusic(
+                                            BackgroundAudio(
+                                              filePath: music.filePath,
+                                              volume: music.volume,
+                                              fadeInDuration: music.fadeInDuration,
+                                              fadeOutDuration: music.fadeOutDuration,
+                                              startSec: clamped,
+                                              duration: musicEnd - clamped,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      _edgeHandle(
+                                        left: musicLeft + musicWidth,
+                                        top: musicTop,
+                                        height: _Timeline._laneHeight,
+                                        onDeltaSeconds: (double deltaSec) {
+                                          final Duration next =
+                                              musicEnd + Duration(milliseconds: (deltaSec * 1000).round());
+                                          final Duration clamped = next > widget.trimmedDuration
+                                              ? widget.trimmedDuration
+                                              : (next < musicStart + _Timeline._minZoneDuration
+                                                  ? musicStart + _Timeline._minZoneDuration
+                                                  : next);
+                                          widget.onResizeMusic(
+                                            BackgroundAudio(
+                                              filePath: music.filePath,
+                                              volume: music.volume,
+                                              fadeInDuration: music.fadeInDuration,
+                                              fadeOutDuration: music.fadeOutDuration,
+                                              startSec: musicStart,
+                                              duration: clamped - musicStart,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
+
+                                    // Overlay markers — a labeled chip
+                                    // (the actual text, or "sticker"),
+                                    // sized/positioned by real duration,
+                                    // and allocated to a row (see
+                                    // _packOverlayRows) so overlapping
+                                    // layers don't collide visually.
+                                    for (final VideoOverlay overlay in widget.overlays) ...<Widget>[
+                                      Positioned(
+                                        left: (overlay.startSec.inMilliseconds / 1000.0 + widget.trimStartSeconds) *
+                                            _pixelsPerSecond,
+                                        width: (overlay.duration.inMilliseconds / 1000.0 * _pixelsPerSecond)
+                                            .clamp(40.0, 220.0),
+                                        top: overlayTop +
+                                            (overlayRow[overlay.id] ?? 0) *
+                                                (_Timeline._laneHeight + _textRowGap),
+                                        height: _Timeline._laneHeight,
+                                        child: GestureDetector(
+                                          onTap: () => unawaited(_confirmRemoveOverlay(context, overlay)),
+                                          child: Container(
+                                            alignment: Alignment.center,
+                                            padding: const EdgeInsets.symmetric(horizontal: 3),
+                                            decoration: BoxDecoration(
+                                              color: scheme.secondary,
+                                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                                            ),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: <Widget>[
+                                                Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: <Widget>[
+                                                    Icon(
+                                                      overlay is TextOverlay
+                                                          ? Icons.text_fields
+                                                          : Icons.emoji_emotions_outlined,
+                                                      size: 12,
+                                                      color: Colors.white,
+                                                    ),
+                                                    const SizedBox(width: 2),
+                                                    Flexible(
+                                                      child: Text(
+                                                        overlay is TextOverlay ? overlay.text : "sticker",
+                                                        style: const TextStyle(color: Colors.white, fontSize: 10),
+                                                        overflow: TextOverflow.ellipsis,
+                                                        maxLines: 1,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                Text(
+                                                  "${_Timeline._fmt(overlay.startSec)}–${_Timeline._fmt(overlay.endSec)}",
+                                                  style: const TextStyle(color: Colors.white70, fontSize: 8),
+                                                  overflow: TextOverflow.clip,
+                                                  softWrap: false,
+                                                  maxLines: 1,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      _edgeHandle(
+                                        left: (overlay.startSec.inMilliseconds / 1000.0 + widget.trimStartSeconds) *
+                                            _pixelsPerSecond,
+                                        top: overlayTop +
+                                            (overlayRow[overlay.id] ?? 0) *
+                                                (_Timeline._laneHeight + _textRowGap),
+                                        height: _Timeline._laneHeight,
+                                        onDeltaSeconds: (double deltaSec) {
+                                          final Duration next =
+                                              overlay.startSec + Duration(milliseconds: (deltaSec * 1000).round());
+                                          final Duration clamped = next < Duration.zero
+                                              ? Duration.zero
+                                              : (next > overlay.endSec - _Timeline._minZoneDuration
+                                                  ? overlay.endSec - _Timeline._minZoneDuration
+                                                  : next);
+                                          widget.onResizeOverlay(
+                                            overlay,
+                                            _withOverlayTiming(overlay, clamped, overlay.endSec - clamped),
+                                          );
+                                        },
+                                      ),
+                                      _edgeHandle(
+                                        left: (overlay.endSec.inMilliseconds / 1000.0 + widget.trimStartSeconds) *
+                                            _pixelsPerSecond,
+                                        top: overlayTop +
+                                            (overlayRow[overlay.id] ?? 0) *
+                                                (_Timeline._laneHeight + _textRowGap),
+                                        height: _Timeline._laneHeight,
+                                        onDeltaSeconds: (double deltaSec) {
+                                          final Duration next =
+                                              overlay.endSec + Duration(milliseconds: (deltaSec * 1000).round());
+                                          final Duration clamped = next > widget.trimmedDuration
+                                              ? widget.trimmedDuration
+                                              : (next < overlay.startSec + _Timeline._minZoneDuration
+                                                  ? overlay.startSec + _Timeline._minZoneDuration
+                                                  : next);
+                                          widget.onResizeOverlay(
+                                            overlay,
+                                            _withOverlayTiming(
+                                              overlay,
+                                              overlay.startSec,
+                                              clamped - overlay.startSec,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
+
+                          // Fixed center playhead — outside the
+                          // scrollable content, so it's the timeline that
+                          // moves underneath it, not the other way
+                          // around.
+                          Positioned(
+                            left: viewportWidth / 2 - 1,
+                            top: 0,
+                            height: totalHeight,
+                            child: const IgnorePointer(
+                              child: ColoredBox(
+                                color: Colors.redAccent,
+                                child: SizedBox(width: 2, height: double.infinity),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-
-                      // Speed zones, positioned relative to the
-                      // *original* clip (zone times are relative to the
-                      // trim window's own start). Tapping the body asks
-                      // before removing; the edge handles resize instead.
-                      for (final SpeedZone zone in speedZones) ...<Widget>[
-                        Positioned(
-                          left: ((zone.start.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
-                          width: ((zone.end - zone.start).inMilliseconds / 1000.0 / totalSec) * width,
-                          top: speedTop,
-                          height: _laneHeight,
-                          child: GestureDetector(
-                            onTap: () => unawaited(_confirmRemoveZone(context, zone)),
-                            child: Container(
-                              alignment: Alignment.center,
-                              padding: const EdgeInsets.symmetric(horizontal: 3),
-                              decoration: BoxDecoration(
-                                color: scheme.primary,
-                                borderRadius: BorderRadius.circular(AppRadius.sm),
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: <Widget>[
-                                  Text(
-                                    "${zone.factor}x slow-mo",
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                    overflow: TextOverflow.clip,
-                                    softWrap: false,
-                                    maxLines: 1,
-                                  ),
-                                  Text(
-                                    "${_fmt(zone.start)}–${_fmt(zone.end)}",
-                                    style: const TextStyle(color: Colors.white70, fontSize: 8),
-                                    overflow: TextOverflow.clip,
-                                    softWrap: false,
-                                    maxLines: 1,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        _edgeHandle(
-                          left: ((zone.start.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
-                          top: speedTop,
-                          height: _laneHeight,
-                          trackWidth: width,
-                          totalSec: totalSec,
-                          onDeltaSeconds: (double deltaSec) {
-                            final Duration next = zone.start + Duration(milliseconds: (deltaSec * 1000).round());
-                            final Duration clamped = next < Duration.zero
-                                ? Duration.zero
-                                : (next > zone.end - _minZoneDuration ? zone.end - _minZoneDuration : next);
-                            onResizeZone(zone, SpeedZone(start: clamped, end: zone.end, factor: zone.factor));
-                          },
-                        ),
-                        _edgeHandle(
-                          left: ((zone.end.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
-                          top: speedTop,
-                          height: _laneHeight,
-                          trackWidth: width,
-                          totalSec: totalSec,
-                          onDeltaSeconds: (double deltaSec) {
-                            final Duration next = zone.end + Duration(milliseconds: (deltaSec * 1000).round());
-                            final Duration clamped = next > trimmedDuration
-                                ? trimmedDuration
-                                : (next < zone.start + _minZoneDuration ? zone.start + _minZoneDuration : next);
-                            onResizeZone(zone, SpeedZone(start: zone.start, end: clamped, factor: zone.factor));
-                          },
-                        ),
-                      ],
-
-                      // Music bar — same shape as a speed zone: body taps
-                      // to remove, edges drag to resize its window.
-                      if (music != null && musicLeft != null && musicWidth != null) ...<Widget>[
-                        Positioned(
-                          left: musicLeft,
-                          width: musicWidth,
-                          top: musicTop,
-                          height: _laneHeight,
-                          child: GestureDetector(
-                            onTap: () => unawaited(_confirmRemoveMusic(context)),
-                            child: Container(
-                              alignment: Alignment.center,
-                              padding: const EdgeInsets.symmetric(horizontal: 3),
-                              decoration: BoxDecoration(
-                                color: scheme.tertiary,
-                                borderRadius: BorderRadius.circular(AppRadius.sm),
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: <Widget>[
-                                  const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: <Widget>[
-                                      Icon(Icons.music_note, size: 12, color: Colors.white),
-                                      SizedBox(width: 2),
-                                      Text(
-                                        "music",
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Text(
-                                    "${_fmt(musicStart)}–${_fmt(musicEnd)}",
-                                    style: const TextStyle(color: Colors.white70, fontSize: 8),
-                                    overflow: TextOverflow.clip,
-                                    softWrap: false,
-                                    maxLines: 1,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        _edgeHandle(
-                          left: musicLeft,
-                          top: musicTop,
-                          height: _laneHeight,
-                          trackWidth: width,
-                          totalSec: totalSec,
-                          onDeltaSeconds: (double deltaSec) {
-                            final Duration next = musicStart + Duration(milliseconds: (deltaSec * 1000).round());
-                            final Duration clamped = next < Duration.zero
-                                ? Duration.zero
-                                : (next > musicEnd - _minZoneDuration ? musicEnd - _minZoneDuration : next);
-                            onResizeMusic(
-                              BackgroundAudio(
-                                filePath: music.filePath,
-                                volume: music.volume,
-                                fadeInDuration: music.fadeInDuration,
-                                fadeOutDuration: music.fadeOutDuration,
-                                startSec: clamped,
-                                duration: musicEnd - clamped,
-                              ),
-                            );
-                          },
-                        ),
-                        _edgeHandle(
-                          left: musicLeft + musicWidth,
-                          top: musicTop,
-                          height: _laneHeight,
-                          trackWidth: width,
-                          totalSec: totalSec,
-                          onDeltaSeconds: (double deltaSec) {
-                            final Duration next = musicEnd + Duration(milliseconds: (deltaSec * 1000).round());
-                            final Duration clamped = next > trimmedDuration
-                                ? trimmedDuration
-                                : (next < musicStart + _minZoneDuration ? musicStart + _minZoneDuration : next);
-                            onResizeMusic(
-                              BackgroundAudio(
-                                filePath: music.filePath,
-                                volume: music.volume,
-                                fadeInDuration: music.fadeInDuration,
-                                fadeOutDuration: music.fadeOutDuration,
-                                startSec: musicStart,
-                                duration: clamped - musicStart,
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-
-                      // Overlay markers — a labeled chip (the actual
-                      // text, or "sticker"), sized/positioned by real
-                      // duration like a speed zone or music clip (not
-                      // auto-sized to its label) so its edge handles
-                      // land on its actual start/end.
-                      for (final VideoOverlay overlay in overlays) ...<Widget>[
-                        Positioned(
-                          left: ((overlay.startSec.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
-                          width: ((overlay.duration.inMilliseconds / 1000.0 / totalSec) * width).clamp(40.0, 140.0),
-                          top: overlayTop,
-                          height: _laneHeight,
-                          child: GestureDetector(
-                            onTap: () => unawaited(_confirmRemoveOverlay(context, overlay)),
-                            child: Container(
-                              alignment: Alignment.center,
-                              padding: const EdgeInsets.symmetric(horizontal: 3),
-                              decoration: BoxDecoration(
-                                color: scheme.secondary,
-                                borderRadius: BorderRadius.circular(AppRadius.sm),
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: <Widget>[
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: <Widget>[
-                                      Icon(
-                                        overlay is TextOverlay ? Icons.text_fields : Icons.emoji_emotions_outlined,
-                                        size: 12,
-                                        color: Colors.white,
-                                      ),
-                                      const SizedBox(width: 2),
-                                      Flexible(
-                                        child: Text(
-                                          overlay is TextOverlay ? overlay.text : "sticker",
-                                          style: const TextStyle(color: Colors.white, fontSize: 10),
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 1,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Text(
-                                    "${_fmt(overlay.startSec)}–${_fmt(overlay.endSec)}",
-                                    style: const TextStyle(color: Colors.white70, fontSize: 8),
-                                    overflow: TextOverflow.clip,
-                                    softWrap: false,
-                                    maxLines: 1,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        _edgeHandle(
-                          left: ((overlay.startSec.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
-                          top: overlayTop,
-                          height: _laneHeight,
-                          trackWidth: width,
-                          totalSec: totalSec,
-                          onDeltaSeconds: (double deltaSec) {
-                            final Duration next =
-                                overlay.startSec + Duration(milliseconds: (deltaSec * 1000).round());
-                            final Duration clamped = next < Duration.zero
-                                ? Duration.zero
-                                : (next > overlay.endSec - _minZoneDuration
-                                    ? overlay.endSec - _minZoneDuration
-                                    : next);
-                            onResizeOverlay(
-                              overlay,
-                              _withOverlayTiming(overlay, clamped, overlay.endSec - clamped),
-                            );
-                          },
-                        ),
-                        _edgeHandle(
-                          left: ((overlay.endSec.inMilliseconds / 1000.0 + trimStartSeconds) / totalSec) * width,
-                          top: overlayTop,
-                          height: _laneHeight,
-                          trackWidth: width,
-                          totalSec: totalSec,
-                          onDeltaSeconds: (double deltaSec) {
-                            final Duration next =
-                                overlay.endSec + Duration(milliseconds: (deltaSec * 1000).round());
-                            final Duration clamped = next > trimmedDuration
-                                ? trimmedDuration
-                                : (next < overlay.startSec + _minZoneDuration
-                                    ? overlay.startSec + _minZoneDuration
-                                    : next);
-                            onResizeOverlay(
-                              overlay,
-                              _withOverlayTiming(overlay, overlay.startSec, clamped - overlay.startSec),
-                            );
-                          },
-                        ),
-                      ],
-
-                      _playhead(width, totalSec, totalHeight),
-                    ],
+                    ),
                   );
                 },
               ),

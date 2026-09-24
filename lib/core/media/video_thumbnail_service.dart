@@ -17,4 +17,10 @@ abstract interface class VideoThumbnailService {
     required int count,
     int maxWidth = 96,
   });
+
+  /// Stops an in-flight [generateThumbnails] call (e.g. the editor was
+  /// closed before it finished) and deletes any thumbnail files already
+  /// written — a generation that was abandoned shouldn't leave temp
+  /// files behind for the rest of the session.
+  Future<void> cancel();
 }
