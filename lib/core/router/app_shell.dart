@@ -6,6 +6,7 @@ import "package:go_router/go_router.dart";
 
 import "../../features/create_ad/domain/create_ad_step.dart";
 import "../../features/create_ad/presentation/providers/create_ad_flow_controller.dart";
+import "../../features/create_ad/presentation/providers/create_ad_flow_state.dart";
 import "../theme/app_colors.dart";
 import "../theme/app_spacing.dart";
 
@@ -91,10 +92,19 @@ class AppShell extends ConsumerWidget {
       }
     });
 
+    // The editor (CreateAdStep.trim) is deliberately immersive — video
+    // is the visual focus, per the tightened editor spec's section 12:
+    // "No normal AdGag bottom navigation while editing... Video remains
+    // the visual focus." Every other create-flow step (subject picker,
+    // capture, caption/publish) keeps the normal shell chrome.
+    final bool onTrimStep = ref.watch(
+      createAdFlowControllerProvider.select((CreateAdFlowState s) => s.step == CreateAdStep.trim),
+    );
+
     return Scaffold(
       extendBody: true,
       body: navigationShell,
-      bottomNavigationBar: DecoratedBox(
+      bottomNavigationBar: onTrimStep ? null : DecoratedBox(
         decoration: BoxDecoration(
           color: Theme.of(context).scaffoldBackgroundColor,
           border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),

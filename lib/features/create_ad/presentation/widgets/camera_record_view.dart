@@ -67,7 +67,17 @@ class _CameraRecordViewState extends State<CameraRecordView> {
   Future<void> _openCamera(CameraDescription description) async {
     final CameraController controller = CameraController(
       description,
-      ResolutionPreset.high,
+      // Was ResolutionPreset.high (~720p on most devices) — a real,
+      // concrete cause of "export looks lower quality than expected":
+      // the *source* recording was already well below the phone's own
+      // capability before any editing/export ever touched it. veryHigh
+      // targets 1080p (this format's documented export target — see
+      // VideoFilterGraphBuilder/FfmpegVideoExportService, section 8 of
+      // the video-editor spec), which the export pipeline no longer
+      // downscales from (see the explicit format=yuv420p fix there —
+      // it fixes hardware-encoder compatibility, not resolution, but
+      // together the two mean 1080p in reliably means 1080p out).
+      ResolutionPreset.veryHigh,
       enableAudio: true,
     );
     await controller.initialize();

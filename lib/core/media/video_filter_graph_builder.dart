@@ -55,9 +55,16 @@ abstract final class VideoFilterGraphBuilder {
       if (!project.removeAudio) ...<String>["-map", "[aout]"] else "-an",
       "-c:v", videoEncoder,
       // Mobile hardware encoders (mediacodec/videotoolbox) don't pick a
-      // sensible default bitrate on their own — without this the output
-      // is visibly low-quality regardless of source resolution.
-      "-b:v", "10M",
+      // sensible default bitrate on their own — without an explicit
+      // target the output is visibly low-quality regardless of source
+      // resolution. 16M/20M targets a real 1080p master worth handing
+      // to Mux (which re-transcodes for delivery — the local export
+      // shouldn't already be the lossy step), not just "better than
+      // before"; -maxrate/-bufsize bound the encoder's own rate-control
+      // instead of leaving it to decide how strictly to honor -b:v.
+      "-b:v", "16M",
+      "-maxrate", "20M",
+      "-bufsize", "20M",
       if (!project.removeAudio) ...<String>["-c:a", "aac"],
       "-t", _seconds(project.trimmedDuration),
       "-y",
@@ -210,11 +217,17 @@ abstract final class VideoFilterGraphBuilder {
       case AppColorFilter.dramatic:
         transformFilters.add("eq=contrast=1.3:brightness=-0.04:saturation=0.9");
     }
-    if (transformFilters.isEmpty) {
-      parts.add("[$currentVideoLabel]null[vout]");
-    } else {
-      parts.add("[$currentVideoLabel]${transformFilters.join(',')}[vout]");
-    }
+    // Always the last video filter, not just when there's a rotation/
+    // flip/color transform to chain it onto: drawtext and overlay (used
+    // for text/sticker layers) can leave the frame in an alpha-carrying
+    // pixel format (e.g. yuva420p) once composited, and H.264 hardware
+    // encoders (h264_mediacodec on Android, h264_videotoolbox on iOS)
+    // have no alpha channel support — feeding one an alpha format is a
+    // real, reproducible cause of "export fails only when I add text or
+    // a sticker, works fine on a plain trim." Explicitly normalizing to
+    // yuv420p here is the standard fix, not a workaround.
+    final List<String> finalVideoFilters = <String>[...transformFilters, "format=yuv420p"];
+    parts.add("[$currentVideoLabel]${finalVideoFilters.join(',')}[vout]");
 
     if (!project.removeAudio) {
       String currentAudioLabel = aConcatOut;

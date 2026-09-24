@@ -234,34 +234,62 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     }
   }
 
-  double get _maxStartSeconds {
-    final Duration? total = _controller?.value.duration;
-    if (total == null) {
-      return 0;
-    }
-    final double maxStart = total.inMilliseconds / 1000.0 - VideoConstraints.max.inSeconds;
-    return maxStart < 0 ? 0 : maxStart;
-  }
+  /// trimStart/trimEnd are independently stored on [VideoProject] now
+  /// (each edge is its own draggable handle — see [_Timeline]), not
+  /// "start plus an auto-derived up-to-10s end" the way the single
+  /// drag-to-move trim window used to work, so this is just the
+  /// composition's own duration, not a recomputation.
+  Duration get _trimmedDuration => ref.read(editorControllerProvider)?.trimmedDuration ?? Duration.zero;
 
-  Duration get _trimmedDuration {
-    final Duration? total = _controller?.value.duration;
-    final Duration? start = ref.read(editorControllerProvider)?.trimStart;
-    if (total == null || start == null) {
-      return Duration.zero;
-    }
-    final Duration end = start + VideoConstraints.max > total ? total : start + VideoConstraints.max;
-    return end - start;
-  }
-
-  void _applyTrimStart(double startSeconds) {
-    final Duration? total = _controller?.value.duration;
-    if (total == null) {
+  /// Drags the LEFT edge of the trim selection — the RIGHT edge
+  /// (trimEnd) stays fixed, duration is clamped to
+  /// [VideoConstraints.min, VideoConstraints.max], matching how a
+  /// phone's native gallery/video editor trims (independent edges, not
+  /// "move a fixed-length window").
+  void _applyTrimStartEdge(double startSeconds) {
+    final VideoProject? project = ref.read(editorControllerProvider);
+    if (project == null) {
       return;
     }
-    final Duration start = Duration(milliseconds: (startSeconds * 1000).round());
-    final Duration end = start + VideoConstraints.max > total ? total : start + VideoConstraints.max;
+    final Duration end = project.trimEnd;
+    Duration start = Duration(milliseconds: (startSeconds * 1000).round());
+    if (start < Duration.zero) {
+      start = Duration.zero;
+    }
+    final Duration minStart = end - VideoConstraints.max;
+    final Duration maxStart = end - VideoConstraints.min;
+    if (start < minStart && minStart > Duration.zero) {
+      start = minStart;
+    }
+    if (start > maxStart) {
+      start = maxStart;
+    }
     ref.read(editorControllerProvider.notifier).setTrim(start: start, end: end);
     unawaited(_controller?.seekTo(start));
+  }
+
+  /// Drags the RIGHT edge — the LEFT edge (trimStart) stays fixed, same
+  /// duration clamp as the left handle.
+  void _applyTrimEndEdge(double endSeconds) {
+    final VideoProject? project = ref.read(editorControllerProvider);
+    final Duration? total = _controller?.value.duration;
+    if (project == null || total == null) {
+      return;
+    }
+    final Duration start = project.trimStart;
+    Duration end = Duration(milliseconds: (endSeconds * 1000).round());
+    if (end > total) {
+      end = total;
+    }
+    final Duration minEnd = start + VideoConstraints.min;
+    final Duration maxEnd = start + VideoConstraints.max;
+    if (end < minEnd) {
+      end = minEnd;
+    }
+    if (end > maxEnd) {
+      end = maxEnd > total ? total : maxEnd;
+    }
+    ref.read(editorControllerProvider.notifier).setTrim(start: start, end: end);
   }
 
   void _cycleRotation() {
@@ -606,8 +634,14 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     final EditorController editorNotifier = ref.read(editorControllerProvider.notifier);
 
     return Scaffold(
+      // Immersive per the editor spec's section 12: no title clutter, no
+      // giant bottom Continue button (removed below) — "Next" is the one
+      // primary action, top-right, and video stays the visual focus.
+      // Undo/redo stay directly visible (used often enough that burying
+      // them in a menu would cost more than the AppBar space they take);
+      // Reset/Retake — rarer, more consequential actions — are grouped
+      // into one overflow menu instead of their own permanent buttons.
       appBar: AppBar(
-        title: const Text("Edit your Ad"),
         actions: <Widget>[
           IconButton(
             icon: const Icon(Icons.undo),
@@ -619,13 +653,17 @@ class _TrimStepState extends ConsumerState<TrimStep> {
             tooltip: "Redo",
             onPressed: (_processing || !editorNotifier.canRedo) ? null : editorNotifier.redo,
           ),
-          TextButton(
-            onPressed: _processing ? null : _reset,
-            child: const Text("Reset"),
+          PopupMenuButton<VoidCallback>(
+            enabled: !_processing,
+            onSelected: (VoidCallback action) => action(),
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<VoidCallback>>[
+              PopupMenuItem<VoidCallback>(value: _reset, child: const Text("Reset edits")),
+              PopupMenuItem<VoidCallback>(value: _retake, child: const Text("Retake")),
+            ],
           ),
           TextButton(
-            onPressed: _processing ? null : _retake,
-            child: const Text("Retake"),
+            onPressed: (!ready || _processing) ? null : () => unawaited(_confirm()),
+            child: Text(_processing ? "${(_progress * 100).round()}%" : "Next"),
           ),
         ],
       ),
@@ -806,9 +844,9 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                   thumbnailPaths: _thumbnailPaths,
                   originalDuration: controller.value.duration,
                   trimStartSeconds: project.trimStart.inMilliseconds / 1000.0,
-                  maxTrimStartSeconds: _maxStartSeconds,
                   trimmedDuration: _trimmedDuration,
-                  onTrimStartChanged: _applyTrimStart,
+                  onTrimStartChanged: _applyTrimStartEdge,
+                  onTrimEndChanged: _applyTrimEndEdge,
                   speedZones: project.speedZones,
                   overlays: project.overlays,
                   bgAudio: project.bgAudio,
@@ -819,17 +857,6 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                   onResizeMusic: (BackgroundAudio updated) => unawaited(_setBgAudio(updated)),
                   onRemoveMusic: () => unawaited(_setBgAudio(null)),
                 ),
-                if (_maxStartSeconds == 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: AppSpacing.xs),
-                    child: Text(
-                      "Already fits within ${VideoConstraints.max.inSeconds}s — nothing to trim.",
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                    ),
-                  ),
                 const SizedBox(height: AppSpacing.lg),
               ],
 
@@ -844,16 +871,6 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                   padding: const EdgeInsets.only(bottom: AppSpacing.md),
                   child: LinearProgressIndicator(value: _progress > 0 ? _progress : null),
                 ),
-
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: (!ready || _processing) ? null : () => unawaited(_confirm()),
-                  child: _processing
-                      ? Text("Processing… ${(_progress * 100).round()}%")
-                      : const Text("Continue"),
-                ),
-              ),
             ],
           ),
         ),
@@ -971,47 +988,39 @@ class _FilterPreviewChip extends StatelessWidget {
 /// when it's empty, so it's clear that's the region a slow-mo zone or
 /// music clip would occupy, not an arbitrary gap.
 ///
-/// A ruler row on top shows a tick + number for every second (this
-/// format tops out at 10s per CLAUDE.md section 4, so unlike a
-/// general-purpose NLE timeline there's never a reason to zoom — one
-/// fixed-width view of the whole clip is enough) and doubles as a
-/// scrub surface: tap or drag anywhere on it to seek, live, the same
-/// controller the preview above is playing — CapCut/img.ly's own
-/// published timeline-design writeup describes exactly this as the
-/// standard mobile pattern (a scrub surface plus a live playhead), not
-/// "drag a 4px marker precisely." A vertical playhead line spans the
-/// full height of every lane, always at the controller's current
-/// position — it moves on its own during normal playback and jumps
-/// instantly to wherever you scrub, and it's read-only (`IgnorePointer`)
-/// so it never competes with the lanes underneath for touches.
+/// Centered-playhead, horizontally-scrolling (spec section 3: "the
+/// playhead should preferably remain centered while the timeline moves
+/// underneath it" — the standard mobile pattern, not desktop's
+/// drag-a-marker-across-a-fixed-ruler). Content lays out at a fixed
+/// [_TimelineState._pixelsPerSecond] scale, not stretched to the
+/// viewport, so there's always real horizontal scroll even for this
+/// format's short (<=10s) clips — scale is what makes the ruler/chips
+/// legible, not how much content there is. The ruler shows a tick +
+/// number per second; the whole scrollable area is the scrub surface
+/// (drag anywhere to seek); a static playhead line (outside the scroll
+/// view, `IgnorePointer`) marks "now."
+///
+/// The Clip lane's trim selection is two independent edge handles (drag
+/// left to change where the clip starts, drag right to change where it
+/// ends — a phone gallery editor's model, not one draggable window of a
+/// fixed length) over a clean filmstrip, with the excluded portions
+/// dimmed rather than the selected portion filled — no permanent colored
+/// block sits over the thumbnails.
 ///
 /// Speed-zone, music, and overlay items are all directly drag-resizable
 /// from their own left/right edge handles (a visibly larger grip than a
-/// plain body tap, with a hit area roughly twice the visual size — the
-/// same "why is this so hard to grab" fix already applied once to the
-/// trim-window handle, now applied consistently everywhere something
-/// has a start/end), in addition to tap-to-remove on the body of the
-/// chip/bar. Every chip also prints its own start–end time under its
-/// label, so placement doesn't rely on eyeballing position against the
-/// ruler alone.
-/// Centered-playhead, horizontally-scrolling timeline (per the tightened
-/// editor spec, section 3: "the playhead should preferably remain
-/// centered while the timeline moves underneath it" — the standard
-/// mobile-editor pattern, distinct from the desktop
-/// drag-a-marker-across-a-fixed-ruler model this widget used before).
-/// Content is laid out at a fixed [_TimelineState._pixelsPerSecond]
-/// scale, not stretched to fit the viewport, so there's always real
-/// horizontal scroll even for this format's short (<=10s) clips — scale
-/// is what makes the ruler/chips legible, not how much content there is.
+/// plain body tap, hit area roughly twice the visual size), in addition
+/// to tap-to-remove on the body of the chip/bar. Every chip also prints
+/// its own start–end time under its label.
 class _Timeline extends StatefulWidget {
   const _Timeline({
     required this.controller,
     required this.thumbnailPaths,
     required this.originalDuration,
     required this.trimStartSeconds,
-    required this.maxTrimStartSeconds,
     required this.trimmedDuration,
     required this.onTrimStartChanged,
+    required this.onTrimEndChanged,
     required this.speedZones,
     required this.overlays,
     required this.bgAudio,
@@ -1027,9 +1036,9 @@ class _Timeline extends StatefulWidget {
   final List<String> thumbnailPaths;
   final Duration originalDuration;
   final double trimStartSeconds;
-  final double maxTrimStartSeconds;
   final Duration trimmedDuration;
   final ValueChanged<double> onTrimStartChanged;
+  final ValueChanged<double> onTrimEndChanged;
   final List<SpeedZone> speedZones;
   final List<VideoOverlay> overlays;
   final BackgroundAudio? bgAudio;
@@ -1284,7 +1293,6 @@ class _TimelineState extends State<_Timeline> {
       return const SizedBox.shrink();
     }
     final double trimmedSec = widget.trimmedDuration.inMilliseconds / 1000.0;
-    final bool draggable = widget.maxTrimStartSeconds > 0;
     final ColorScheme scheme = Theme.of(context).colorScheme;
 
     final BackgroundAudio? music = widget.bgAudio;
@@ -1445,40 +1453,67 @@ class _TimelineState extends State<_Timeline> {
                                         ),
                                       ),
 
-                                    // Selection window — drag to move
-                                    // where the up-to-10s clip starts
-                                    // within the original.
+                                    // Trim selection — a clean filmstrip
+                                    // with the EXCLUDED portions dimmed
+                                    // (not a filled block over the
+                                    // selected one — that read as a
+                                    // permanent colored rectangle sitting
+                                    // on top of the thumbnails, not a
+                                    // trim control) and a thin bright
+                                    // outline around what's kept. Purely
+                                    // visual/non-interactive — the two
+                                    // edge handles below are the only
+                                    // drag surface, so the body of the
+                                    // filmstrip stays free for
+                                    // scroll-to-scrub.
+                                    if (selLeft > 0)
+                                      Positioned(
+                                        left: 0,
+                                        width: selLeft,
+                                        top: trimTop,
+                                        height: _Timeline._trimLaneHeight,
+                                        child: const IgnorePointer(
+                                          child: ColoredBox(color: Colors.black54),
+                                        ),
+                                      ),
+                                    if (selLeft + selWidth < contentWidth)
+                                      Positioned(
+                                        left: selLeft + selWidth,
+                                        width: contentWidth - selLeft - selWidth,
+                                        top: trimTop,
+                                        height: _Timeline._trimLaneHeight,
+                                        child: const IgnorePointer(
+                                          child: ColoredBox(color: Colors.black54),
+                                        ),
+                                      ),
                                     Positioned(
                                       left: selLeft,
                                       width: selWidth,
                                       top: trimTop,
                                       height: _Timeline._trimLaneHeight,
-                                      child: Listener(
-                                        onPointerDown: (_) => _setGestureLock(true),
-                                        onPointerUp: (_) => _setGestureLock(false),
-                                        onPointerCancel: (_) => _setGestureLock(false),
-                                        child: GestureDetector(
-                                          behavior: HitTestBehavior.opaque,
-                                          onHorizontalDragUpdate: !draggable
-                                              ? null
-                                              : (DragUpdateDetails d) {
-                                                  final double deltaSec = d.delta.dx / _pixelsPerSecond;
-                                                  widget.onTrimStartChanged(
-                                                    (widget.trimStartSeconds + deltaSec)
-                                                        .clamp(0, widget.maxTrimStartSeconds),
-                                                  );
-                                                },
-                                          child: Center(
-                                            child: Container(
-                                              height: 16,
-                                              decoration: BoxDecoration(
-                                                color: scheme.primary.withValues(alpha: 0.3),
-                                                border: Border.all(color: scheme.primary, width: 2),
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                            ),
+                                      child: IgnorePointer(
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            border: Border.all(color: scheme.primary, width: 2),
+                                            borderRadius: BorderRadius.circular(AppRadius.sm),
                                           ),
                                         ),
+                                      ),
+                                    ),
+                                    _edgeHandle(
+                                      left: selLeft,
+                                      top: trimTop,
+                                      height: _Timeline._trimLaneHeight,
+                                      onDeltaSeconds: (double deltaSec) => widget.onTrimStartChanged(
+                                        widget.trimStartSeconds + deltaSec,
+                                      ),
+                                    ),
+                                    _edgeHandle(
+                                      left: selLeft + selWidth,
+                                      top: trimTop,
+                                      height: _Timeline._trimLaneHeight,
+                                      onDeltaSeconds: (double deltaSec) => widget.onTrimEndChanged(
+                                        widget.trimStartSeconds + trimmedSec + deltaSec,
                                       ),
                                     ),
 
