@@ -19,6 +19,7 @@ import "../../domain/video_constraints.dart";
 import "../../domain/video_project.dart";
 import "../providers/create_ad_flow_controller.dart";
 import "../providers/editor_controller.dart";
+import "editor_transport.dart";
 import "timeline_geometry.dart";
 
 /// The creation flow's one editing step (CLAUDE.md section 4/38): trim,
@@ -47,6 +48,14 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   static const Uuid _uuid = Uuid();
 
   VideoPlayerController? _controller;
+
+  // The ONE authoritative clock for this editing session (videoeditor6.txt
+  // section 1) — every media component (video player, music, timeline,
+  // overlay visibility) either feeds it (via _reportPlayerPosition) or
+  // reads from it (via _onTransportChanged and the transport-driven
+  // widgets below), never both directions for the same event. See
+  // editor_transport.dart's own class doc for the full architecture.
+  EditorTransport? _transport;
 
   // The trim window's *end* the first time this screen loads a clip —
   // needed by both EditorController.init() and Reset (which restores
@@ -102,12 +111,18 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       return;
     }
     // Retrying after a failed/timed-out init (via the "Try again"
-    // button) must not leak the controller from the attempt that just
-    // failed.
+    // button) must not leak the controller (or transport/its listener)
+    // from the attempt that just failed.
+    _controller?.removeListener(_reportPlayerPosition);
     _controller?.dispose().ignore();
+    _transport?.removeListener(_onTransportChanged);
+    _transport?.dispose();
+    _lastAppliedMute = null;
+    _lastAppliedPreviewSpeed = null;
     setState(() {
       _initError = null;
       _controller = null;
+      _transport = null;
     });
     final VideoPlayerController controller = VideoPlayerController.file(File(draft.filePath));
     _controller = controller;
@@ -137,10 +152,30 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     ref.read(editorControllerProvider.notifier).init(
           VideoProject(videoPath: draft.filePath, trimStart: Duration.zero, trimEnd: _initialTrimEnd),
         );
+
+    // EditorTransport.currentTime is project time (0 = trimStart) — the
+    // player itself operates in source time, so onSeek converts at this
+    // one boundary (sourceTime = trimStart + projectTime), reading
+    // trimStart fresh on every call since a trim-edge drag can change it
+    // between requests.
+    final EditorTransport transport = EditorTransport(
+      duration: _initialTrimEnd,
+      onSeek: (Duration projectTime) async {
+        final Duration trimStart = ref.read(editorControllerProvider)?.trimStart ?? Duration.zero;
+        await controller.seekTo(trimStart + projectTime);
+      },
+    );
+    _transport = transport;
+    transport.addListener(_onTransportChanged);
+
     setState(() {});
     unawaited(controller.setLooping(true));
-    unawaited(controller.play());
-    controller.addListener(_syncLivePreview);
+    // Player position -> transport only (never the reverse from this
+    // listener) — see _reportPlayerPosition's own doc comment.
+    controller.addListener(_reportPlayerPosition);
+    // Routed through the transport, not controller.play() directly, so
+    // isPlaying has exactly one owner from the very first frame.
+    transport.play();
     // Thumbnail generation deliberately does not block `ready` above —
     // it fills in progressively (see _generateThumbnails' own doc
     // comment on the filmstrip's best-effort fallback), never gating
@@ -162,7 +197,10 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   @override
   void dispose() {
     _progressSub?.cancel();
+    _controller?.removeListener(_reportPlayerPosition);
     _controller?.dispose().ignore();
+    _transport?.removeListener(_onTransportChanged);
+    _transport?.dispose();
     _musicController?.dispose().ignore();
     // Stops an in-flight thumbnail generation and deletes whatever it
     // had already written — leaving the editor before generation
@@ -175,50 +213,64 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     super.dispose();
   }
 
-  /// Drives both live-preview approximations that don't otherwise show up
-  /// until export: a speed zone's slow/fast motion (via the *same*
-  /// controller's own `setPlaybackSpeed`, only changed when the active
-  /// zone actually changes — not every tick, since it's a platform call)
-  /// and background music (played/paused/seeked on `_musicController` to
-  /// track whichever window of the main clip is currently showing).
-  /// Approximation, not a promise of an exact match: `setPlaybackSpeed`
-  /// pitch-shifts the *preview's* audio the way most players do, where
-  /// the real export uses FFmpeg's `atempo` to keep pitch correct — only
-  /// the preview has this limitation, matching the same
-  /// preview-vs-render approximation this screen already makes for color
-  /// filters (`ColorFilter.matrix` vs. FFmpeg's `eq`/`hue`).
-  void _syncLivePreview() {
+  /// The ONLY place the player's own position ever writes into the
+  /// transport (videoeditor6.txt section 5). Pure report, never a seek —
+  /// [EditorTransport.reportPlaybackPosition] itself silently ignores
+  /// this while the transport is scrubbing or has a seek in flight, so
+  /// this listener never needs to know which state the transport is in;
+  /// it just always reports, and the transport decides whether that's
+  /// trustworthy right now. This one-directional flow (player -> report
+  /// -> transport, and separately transport -> requestSeek -> player,
+  /// never both for the same event) is what prevents the
+  /// position-drives-scroll-drives-seek-drives-position loop the spec
+  /// explicitly warns about.
+  void _reportPlayerPosition() {
     final VideoPlayerController? controller = _controller;
+    final EditorTransport? transport = _transport;
     final VideoProject? project = ref.read(editorControllerProvider);
-    if (controller == null || !controller.value.isInitialized || project == null) {
+    if (controller == null || transport == null || project == null || !controller.value.isInitialized) {
       return;
     }
-    // BUG 11 fix: mute used to be applied only from the one toolbar
-    // button's own handler — undo/redo/Reset all change
-    // project.removeAudio without going through that handler, so the
-    // actual preview volume could drift out of sync with the
-    // composition's own state ("does not RELIABLY mute"). Re-asserted
-    // here on every position tick instead, so it self-corrects
-    // regardless of which path changed removeAudio — the same
-    // single-source-of-truth contract as everything else VideoProject
-    // drives.
+    final Duration projectTime = controller.value.position - project.trimStart;
+    transport.reportPlaybackPosition(projectTime.isNegative ? Duration.zero : projectTime);
+  }
+
+  /// The other direction: everything the transport's clock implies gets
+  /// applied back onto the real media components here — play/pause
+  /// state, mute (BUG 11's fix, now re-asserted from one single
+  /// mechanism instead of scattered toggle handlers, per spec section 7
+  /// "undo/redo/reset must correctly update preview volume"), the active
+  /// speed zone (BUG 7-adjacent: preview must reflect speed the same way
+  /// export does), and background music position (spec section 6's exact
+  /// mapping, via [EditorTransport.musicLocalTimeAt]). Registered as a
+  /// listener on `_transport` itself, so it runs on every clock change
+  /// (play, pause, a reported position, a requested seek) — never driven
+  /// by a separate/unrelated timer.
+  ///
+  /// `setPlaybackSpeed`'s pitch-shift (vs. export's pitch-correct FFmpeg
+  /// `atempo`) remains a known preview-only approximation, same as this
+  /// screen's existing `ColorFilter.matrix`-vs-FFmpeg-`eq`/`hue` preview
+  /// approximation for color filters.
+  void _onTransportChanged() {
+    final EditorTransport? transport = _transport;
+    final VideoPlayerController? controller = _controller;
+    final VideoProject? project = ref.read(editorControllerProvider);
+    if (transport == null || controller == null || !controller.value.isInitialized || project == null) {
+      return;
+    }
+
+    if (transport.isPlaying && !controller.value.isPlaying) {
+      unawaited(controller.play());
+    } else if (!transport.isPlaying && controller.value.isPlaying) {
+      unawaited(controller.pause());
+    }
+
     if (_lastAppliedMute != project.removeAudio) {
       _lastAppliedMute = project.removeAudio;
       unawaited(controller.setVolume(project.removeAudio ? 0 : 1));
     }
 
-    final double startSeconds = project.trimStart.inMilliseconds / 1000.0;
-    final double elapsedInTrim = controller.value.position.inMilliseconds / 1000.0 - startSeconds;
-
-    double desiredSpeed = 1.0;
-    for (final SpeedZone zone in project.speedZones) {
-      final double zoneStart = zone.start.inMilliseconds / 1000.0;
-      final double zoneEnd = zone.end.inMilliseconds / 1000.0;
-      if (elapsedInTrim >= zoneStart && elapsedInTrim < zoneEnd) {
-        desiredSpeed = zone.factor;
-        break;
-      }
-    }
+    final double desiredSpeed = EditorTransport.activeSpeedAt(project.speedZones, transport.currentTime);
     if (_lastAppliedPreviewSpeed != desiredSpeed) {
       _lastAppliedPreviewSpeed = desiredSpeed;
       unawaited(controller.setPlaybackSpeed(desiredSpeed));
@@ -229,18 +281,34 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     if (music == null || bg == null || !music.value.isInitialized) {
       return;
     }
-    final double musicStart = bg.startSec.inMilliseconds / 1000.0;
-    final double musicDuration =
-        (bg.duration ?? (project.trimmedDuration - bg.startSec)).inMilliseconds / 1000.0;
-    final bool inMusicWindow = elapsedInTrim >= musicStart && elapsedInTrim < musicStart + musicDuration;
-    if (inMusicWindow) {
+    final Duration? localMusicTime =
+        EditorTransport.musicLocalTimeAt(bg, transport.currentTime, project.trimmedDuration);
+    if (localMusicTime == null) {
+      if (music.value.isPlaying) {
+        unawaited(music.pause());
+      }
+      return;
+    }
+    if (transport.isPlaying) {
       if (!music.value.isPlaying) {
-        final Duration seekTo = Duration(milliseconds: ((elapsedInTrim - musicStart) * 1000).round());
-        unawaited(music.seekTo(seekTo.isNegative ? Duration.zero : seekTo));
+        unawaited(music.seekTo(localMusicTime));
         unawaited(music.play());
       }
-    } else if (music.value.isPlaying) {
-      unawaited(music.pause());
+    } else {
+      // Paused or mid-scrub: no free-running audio, and per spec section
+      // 6 ("if user scrubs backward/forward, music follows") the
+      // position must still track exactly, so it's correct whenever
+      // playback (or the next scrub frame) resumes. Unlike the main
+      // video seek, this isn't routed through a coalescing queue — a
+      // plain audio-only seekTo on a short (<=10s-window) clip is cheap
+      // enough on this player that per-frame calls during a drag are not
+      // the same cost class as a full decoder seek; worth revisiting if
+      // real-device testing shows audible stutter during aggressive
+      // scrubbing with music attached.
+      if (music.value.isPlaying) {
+        unawaited(music.pause());
+      }
+      unawaited(music.seekTo(localMusicTime));
     }
   }
 
@@ -273,6 +341,10 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       await controller.setVolume(audio.volume);
       if (mounted) {
         setState(() => _musicController = controller);
+        // Immediate sync rather than waiting for the next transport
+        // tick — otherwise newly-attached music sits silent/unsynced
+        // until playback naturally advances or the user scrubs.
+        _onTransportChanged();
       }
     } catch (_) {
       // The picked file's format isn't one the platform player can open
@@ -320,6 +392,12 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     }
     ref.read(editorControllerProvider.notifier).setTrim(start: start, end: end);
     unawaited(_controller?.seekTo(start));
+    // The trim window's own length is the transport's duration (project
+    // time 0 = trimStart) — this direct controller.seekTo above isn't
+    // routed through the transport's onSeek, but the resulting position
+    // change still reaches the transport normally via
+    // _reportPlayerPosition once the seek completes.
+    _transport?.updateDuration(_trimmedDuration);
   }
 
   /// Drags the RIGHT edge — the LEFT edge (trimStart) stays fixed, same
@@ -344,6 +422,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       end = maxEnd > total ? total : maxEnd;
     }
     ref.read(editorControllerProvider.notifier).setTrim(start: start, end: end);
+    _transport?.updateDuration(_trimmedDuration);
   }
 
   void _cycleRotation() {
@@ -365,7 +444,32 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   void _toggleRemoveAudio() {
     final bool current = ref.read(editorControllerProvider)?.removeAudio ?? false;
     ref.read(editorControllerProvider.notifier).setRemoveAudio(!current);
-    unawaited(_controller?.setVolume(!current ? 0 : 1));
+    // Mute is project-driven, applied through the one mechanism in
+    // _onTransportChanged — called directly here just for immediacy
+    // (no need to wait for the next transport tick).
+    _onTransportChanged();
+  }
+
+  /// Wraps EditorController.undo()/redo() with a transport re-sync —
+  /// either can restore a project state with a different trim window
+  /// (and therefore a different transport duration/valid currentTime
+  /// range) than what's currently loaded.
+  void _undo() {
+    ref.read(editorControllerProvider.notifier).undo();
+    _syncTransportAfterProjectChange();
+  }
+
+  void _redo() {
+    ref.read(editorControllerProvider.notifier).redo();
+    _syncTransportAfterProjectChange();
+  }
+
+  void _syncTransportAfterProjectChange() {
+    final VideoProject? project = ref.read(editorControllerProvider);
+    if (project != null) {
+      _transport?.updateDuration(project.trimmedDuration);
+    }
+    _onTransportChanged();
   }
 
   void _toggleFilterStrip() {
@@ -592,9 +696,15 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   /// it), so hitting Reset by mistake can still be undone.
   void _reset() {
     ref.read(editorControllerProvider.notifier).resetToDefaults(_initialTrimEnd);
-    unawaited(_controller?.setVolume(1));
+    // Force-clear the applied-value caches so _onTransportChanged
+    // reapplies mute/speed even if the reset value happens to equal
+    // whatever was last cached (equality-gated, not state-gated).
+    _lastAppliedMute = null;
+    _lastAppliedPreviewSpeed = null;
+    _transport?.updateDuration(_initialTrimEnd);
     unawaited(_controller?.seekTo(Duration.zero));
     unawaited(_setBgAudio(null));
+    _onTransportChanged();
   }
 
   Future<void> _confirm() async {
@@ -692,14 +802,18 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     // preview on its own — without this listener the clip (with audio)
     // kept playing behind whichever tab the user switched to.
     ref.listen(activeShellBranchIndexProvider, (int? previous, int next) {
-      final VideoPlayerController? c = _controller;
-      if (c == null || !c.value.isInitialized) {
+      // Routed through the transport (not controller.play()/pause()
+      // directly) so isPlaying keeps exactly one owner — the ruler's
+      // play/pause icon and every other transport-driven bit of UI stay
+      // correct after a tab switch, not just the raw player itself.
+      final EditorTransport? transport = _transport;
+      if (transport == null) {
         return;
       }
       if (next == 2) {
-        unawaited(c.play());
+        transport.play();
       } else {
-        unawaited(c.pause());
+        transport.pause();
       }
     });
 
@@ -718,12 +832,12 @@ class _TrimStepState extends ConsumerState<TrimStep> {
           IconButton(
             icon: const Icon(Icons.undo),
             tooltip: "Undo",
-            onPressed: (_processing || !editorNotifier.canUndo) ? null : editorNotifier.undo,
+            onPressed: (_processing || !editorNotifier.canUndo) ? null : _undo,
           ),
           IconButton(
             icon: const Icon(Icons.redo),
             tooltip: "Redo",
-            onPressed: (_processing || !editorNotifier.canRedo) ? null : editorNotifier.redo,
+            onPressed: (_processing || !editorNotifier.canRedo) ? null : _redo,
           ),
           PopupMenuButton<VoidCallback>(
             enabled: !_processing,
@@ -776,28 +890,25 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                                   ),
                                 ),
                                 for (final VideoOverlay overlay in project.overlays)
-                                  // BUG 7 fix: an overlay used to render
-                                  // unconditionally regardless of
-                                  // playback position — timeline data
-                                  // and preview rendering were
-                                  // disconnected. Visibility is now a
-                                  // pure function of the controller's own
-                                  // current position vs. this overlay's
-                                  // [startSec, endSec) window (relative
-                                  // to the trim start, the same
-                                  // convention the timeline itself uses),
-                                  // reactive via ValueListenableBuilder
-                                  // so only this one overlay's visibility
-                                  // rebuilds per tick, not the full
-                                  // preview tree.
-                                  ValueListenableBuilder<VideoPlayerValue>(
-                                    valueListenable: controller,
-                                    builder: (BuildContext context, VideoPlayerValue value, Widget? child) {
-                                      final double elapsed = value.position.inMilliseconds / 1000.0 -
-                                          project.trimStart.inMilliseconds / 1000.0;
-                                      final double start = overlay.startSec.inMilliseconds / 1000.0;
-                                      final double end = overlay.endSec.inMilliseconds / 1000.0;
-                                      final bool visible = elapsed >= start && elapsed < end;
+                                  // BUG 7 fix, now transport-driven
+                                  // (videoeditor6.txt section 8):
+                                  // visibility is a pure function of
+                                  // VideoProject + EditorTransport's
+                                  // currentTime — EditorTransport is the
+                                  // one clock every overlay's [startSec,
+                                  // endSec) window is evaluated against,
+                                  // not the player's own position
+                                  // directly (which would bypass the
+                                  // scrub/seek-in-flight gating the
+                                  // transport provides). Reactive via
+                                  // AnimatedBuilder so only this one
+                                  // overlay's visibility rebuilds per
+                                  // tick, not the full preview tree.
+                                  AnimatedBuilder(
+                                    animation: _transport!,
+                                    builder: (BuildContext context, Widget? child) {
+                                      final bool visible =
+                                          EditorTransport.isOverlayVisibleAt(overlay, _transport!.currentTime);
                                       if (!visible) {
                                         return const SizedBox.shrink();
                                       }
@@ -961,6 +1072,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                 const SizedBox(height: AppSpacing.md),
                 _Timeline(
                   controller: controller,
+                  transport: _transport!,
                   thumbnailPaths: _thumbnailPaths,
                   originalDuration: controller.value.duration,
                   trimStartSeconds: project.trimStart.inMilliseconds / 1000.0,
@@ -1135,6 +1247,7 @@ class _FilterPreviewChip extends StatelessWidget {
 class _Timeline extends StatefulWidget {
   const _Timeline({
     required this.controller,
+    required this.transport,
     required this.thumbnailPaths,
     required this.originalDuration,
     required this.trimStartSeconds,
@@ -1153,6 +1266,7 @@ class _Timeline extends StatefulWidget {
   });
 
   final VideoPlayerController controller;
+  final EditorTransport transport;
   final List<String> thumbnailPaths;
   final Duration originalDuration;
   final double trimStartSeconds;
@@ -1212,22 +1326,39 @@ class _TimelineState extends State<_Timeline> {
   void initState() {
     super.initState();
     _scrollController = ScrollController();
-    widget.controller.addListener(_onPlaybackPositionChanged);
+    // Auto-scroll now follows the ONE transport clock, not the player
+    // controller directly (videoeditor6.txt section 1/11) — the
+    // coalescing/scrub-vs-programmatic distinction this relies on lives
+    // in EditorTransport itself, not duplicated here.
+    widget.transport.addListener(_onTransportPositionChanged);
   }
 
   @override
   void dispose() {
-    widget.controller.removeListener(_onPlaybackPositionChanged);
+    widget.transport.removeListener(_onTransportPositionChanged);
     _scrollController.dispose();
     super.dispose();
   }
 
-  void _onPlaybackPositionChanged() {
+  /// Auto-scrolls the timeline to follow the transport's own clock
+  /// (normal playback, or any other component's seek) — gated on
+  /// `_isUserScrubbing` so this jump is never itself misread as a new
+  /// user drag by the `NotificationListener` below (jumpTo's resulting
+  /// ScrollUpdateNotification carries no `dragDetails`, so it wouldn't
+  /// be anyway, but skipping the jump outright while the user's own
+  /// finger is driving the scroll avoids visibly fighting their gesture
+  /// for a frame). This is the transport-generalized version of the
+  /// exact same feedback-loop-prevention this screen already had.
+  void _onTransportPositionChanged() {
     if (_isUserScrubbing || !mounted || !_scrollController.hasClients) {
       return;
     }
-    final double sec = widget.controller.value.position.inMilliseconds / 1000.0;
-    final double target = TimelineGeometry.scrollOffsetForTime(sec, _pixelsPerSecond);
+    // Timeline content is laid out in SOURCE time (0 = start of the
+    // original clip); transport.currentTime is PROJECT time (0 =
+    // trimStart) — convert at this one boundary.
+    final double projectSec = widget.transport.currentTime.inMilliseconds / 1000.0;
+    final double sourceSec = widget.trimStartSeconds + projectSec;
+    final double target = TimelineGeometry.scrollOffsetForTime(sourceSec, _pixelsPerSecond);
     final ScrollPosition position = _scrollController.position;
     _scrollController.jumpTo(target.clamp(position.minScrollExtent, position.maxScrollExtent));
   }
@@ -1238,38 +1369,14 @@ class _TimelineState extends State<_Timeline> {
     }
   }
 
-  // BUG 9 fix: rapid scrubbing used to call controller.seekTo() on
-  // every single ScrollUpdateNotification — a violent left/right/left
-  // flick can fire dozens of these in under a second, launching that
-  // many overlapping async seeks with no ordering guarantee about which
-  // finishes last, a real contributor to "the editor falls apart" and
-  // the frame-stall symptom in bug 10. Latest-seek-wins coalescing
-  // instead: a scroll update only ever *records* the latest requested
-  // position; a single in-flight drain loop performs the actual
-  // decoder seek, and if a newer position was requested while that
-  // seek was still running, it immediately seeks again to whatever's
-  // now latest — never queuing up every intermediate position. Visual
-  // timeline movement (native scrolling) is completely unaffected by
-  // this; only the expensive media seek is throttled.
-  Duration? _pendingSeek;
-  bool _seekInFlight = false;
-
-  void _requestSeek(Duration target) {
-    _pendingSeek = target;
-    if (_seekInFlight) {
-      return;
-    }
-    unawaited(_drainPendingSeeks());
-  }
-
-  Future<void> _drainPendingSeeks() async {
-    _seekInFlight = true;
-    while (_pendingSeek != null) {
-      final Duration target = _pendingSeek!;
-      _pendingSeek = null;
-      await widget.controller.seekTo(target);
-    }
-    _seekInFlight = false;
+  /// Converts a scroll offset (source-time pixels) into a project-time
+  /// [Duration] clamped to the current trim window — the shared
+  /// conversion both the drag-update and drag-end paths below use.
+  Duration _projectTimeForScrollOffset(double pixels, double totalSec) {
+    final double sourceSec = TimelineGeometry.timeForScrollOffset(pixels, _pixelsPerSecond).clamp(0.0, totalSec);
+    final double projectSec =
+        (sourceSec - widget.trimStartSeconds).clamp(0.0, widget.trimmedDuration.inMilliseconds / 1000.0);
+    return Duration(milliseconds: (projectSec * 1000).round());
   }
 
   Future<void> _confirmRemoveZone(BuildContext context, SpeedZone zone) async {
@@ -1492,14 +1599,14 @@ class _TimelineState extends State<_Timeline> {
                 children: <Widget>[
                   SizedBox(
                     height: _Timeline._rulerHeight,
-                    child: ValueListenableBuilder<VideoPlayerValue>(
-                      valueListenable: widget.controller,
-                      builder: (BuildContext context, VideoPlayerValue value, Widget? child) => InkWell(
+                    child: AnimatedBuilder(
+                      animation: widget.transport,
+                      builder: (BuildContext context, Widget? child) => InkWell(
                         borderRadius: BorderRadius.circular(AppRadius.sm),
                         onTap: () =>
-                            unawaited(value.isPlaying ? widget.controller.pause() : widget.controller.play()),
+                            widget.transport.isPlaying ? widget.transport.pause() : widget.transport.play(),
                         child: Icon(
-                          value.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
+                          widget.transport.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
                           size: 20,
                           color: scheme.onSurfaceVariant,
                         ),
@@ -1524,14 +1631,28 @@ class _TimelineState extends State<_Timeline> {
                   final double viewportWidth = constraints.maxWidth;
                   return NotificationListener<ScrollNotification>(
                     onNotification: (ScrollNotification notification) {
+                      // User vs. programmatic scroll is still
+                      // distinguished exactly as before
+                      // (dragDetails != null); what changed is that the
+                      // resulting begin/request/end calls now go through
+                      // EditorTransport's own coalescing (latest-wins,
+                      // generation-safe — see editor_transport.dart)
+                      // instead of this widget's own former
+                      // _pendingSeek/_seekInFlight pair, so every
+                      // scrubbing surface in the editor (this timeline,
+                      // and any future one) shares the exact same
+                      // coalescing guarantees instead of each
+                      // reimplementing it.
                       if (notification is ScrollStartNotification && notification.dragDetails != null) {
                         _isUserScrubbing = true;
+                        widget.transport.beginScrub();
                       } else if (notification is ScrollUpdateNotification && _isUserScrubbing) {
-                        final double sec = TimelineGeometry.timeForScrollOffset(notification.metrics.pixels, _pixelsPerSecond)
-                            .clamp(0.0, totalSec);
-                        _requestSeek(Duration(milliseconds: (sec * 1000).round()));
+                        widget.transport
+                            .requestSeek(_projectTimeForScrollOffset(notification.metrics.pixels, totalSec));
                       } else if (notification is ScrollEndNotification) {
                         _isUserScrubbing = false;
+                        widget.transport
+                            .endScrub(_projectTimeForScrollOffset(notification.metrics.pixels, totalSec));
                       }
                       return false;
                     },
