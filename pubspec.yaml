@@ -138,6 +138,33 @@ flutter:
     - assets/branding/
     - assets/fonts/
 
+  # Text-overlay font choices (CLAUDE.md-adjacent video-editor spec,
+  # section 4: distinct visual categories, not size/weight variations of
+  # one family). Each also needs its own raw asset entry above (already
+  # covered by the blanket assets/fonts/ line) since
+  # FfmpegVideoExportService extracts these to real files for drawtext's
+  # fontfile= — Flutter's own font-family registration here only governs
+  # the *live preview*'s rendering, a separate mechanism from FFmpeg's.
+  # All four are Google Fonts, Open Font License — verified as genuine
+  # TrueType data via the `file` command before committing, the same
+  # verification this project already applies to every font asset.
+  fonts:
+    - family: AdGagRoboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+    - family: Anton
+      fonts:
+        - asset: assets/fonts/Anton-Regular.ttf
+    - family: Caveat
+      fonts:
+        - asset: assets/fonts/Caveat-Bold.ttf
+    - family: Bangers
+      fonts:
+        - asset: assets/fonts/Bangers-Regular.ttf
+    - family: PlayfairDisplay
+      fonts:
+        - asset: assets/fonts/PlayfairDisplay-Bold.ttf
+
 # flutter_launcher_icons config (CLAUDE.md section 65: brand assets stay
 # swappable — this is the one place the launcher icon source is named).
 # AdGagIkon.png is the icon-only mark (no wordmark/tagline baked in),

@@ -479,6 +479,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
           text: overlay.text,
           argbColor: overlay.argbColor,
           fontSize: (_gestureBaseSize * details.scale).clamp(12.0, 96.0),
+          fontFamily: overlay.fontFamily,
           animation: overlay.animation,
           opacity: overlay.opacity,
           hasOutline: overlay.hasOutline,
@@ -1866,6 +1867,7 @@ VideoOverlay _withOverlayTiming(VideoOverlay overlay, Duration start, Duration d
         text: overlay.text,
         argbColor: overlay.argbColor,
         fontSize: overlay.fontSize,
+        fontFamily: overlay.fontFamily,
         animation: overlay.animation,
         opacity: overlay.opacity,
         hasOutline: overlay.hasOutline,
@@ -1923,6 +1925,7 @@ class _OverlayPreview extends StatelessWidget {
               style: TextStyle(
                 color: Color(text.argbColor),
                 fontSize: text.fontSize,
+                fontFamily: text.fontFamily.flutterFamily,
                 fontWeight: FontWeight.bold,
                 shadows: <Shadow>[
                   if (text.hasOutline)
@@ -2152,6 +2155,7 @@ class _TextOverlayDialogState extends State<_TextOverlayDialog> {
   late double _start = 0;
   late double _end = widget.maxDuration.inMilliseconds / 1000.0;
   int _styleIndex = 0;
+  TextFontFamily _fontFamily = TextFontFamily.classic;
   TextAnimation _animation = TextAnimation.none;
   double _opacity = 1.0;
   bool _hasOutline = false;
@@ -2209,6 +2213,7 @@ class _TextOverlayDialogState extends State<_TextOverlayDialog> {
                       color: Color(style.argbColor),
                       fontSize: style.fontSize,
                       fontWeight: style.weight,
+                      fontFamily: _fontFamily.flutterFamily,
                       shadows: <Shadow>[
                         if (_hasOutline)
                           for (final Offset o in const <Offset>[
@@ -2223,6 +2228,27 @@ class _TextOverlayDialogState extends State<_TextOverlayDialog> {
                     ),
                   ),
                 ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text("Font", style: Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: AppSpacing.xs),
+            SizedBox(
+              height: 40,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: TextFontFamily.values.length,
+                itemBuilder: (BuildContext context, int i) {
+                  final TextFontFamily family = TextFontFamily.values[i];
+                  return Padding(
+                    padding: const EdgeInsets.only(right: AppSpacing.sm),
+                    child: ChoiceChip(
+                      label: Text(family.displayName, style: TextStyle(fontFamily: family.flutterFamily)),
+                      selected: _fontFamily == family,
+                      onSelected: (_) => setState(() => _fontFamily = family),
+                    ),
+                  );
+                },
               ),
             ),
             const SizedBox(height: AppSpacing.sm),
@@ -2320,6 +2346,7 @@ class _TextOverlayDialogState extends State<_TextOverlayDialog> {
                       text: _textController.text.trim(),
                       argbColor: style.argbColor,
                       fontSize: style.fontSize,
+                      fontFamily: _fontFamily,
                       animation: _animation,
                       opacity: _opacity,
                       hasOutline: _hasOutline,

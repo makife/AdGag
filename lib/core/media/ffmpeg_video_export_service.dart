@@ -50,21 +50,25 @@ final class FfmpegVideoExportService implements VideoExportService {
   /// has no fontconfig-discoverable "Sans" family the way desktop Linux
   /// does, so relying on a bare family name fails with "Cannot find a
   /// valid font for the family Sans" (confirmed live, via a user's actual
-  /// device — this bundled Roboto TTF, extracted once to a real path, is
-  /// the fix, not a font-family-name tweak). Cached after the first
-  /// extraction since the bytes never change between exports.
-  String? _fontFilePath;
+  /// device — a bundled TTF, extracted once to a real path, is the fix,
+  /// not a font-family-name tweak). One entry per [TextFontFamily]
+  /// (distinct typefaces, not size/weight variants of one font — see
+  /// that enum's own doc comment), cached after first extraction since
+  /// the bytes never change between exports; only the families a given
+  /// project's overlays actually use get extracted, not all five every
+  /// time.
+  final Map<TextFontFamily, String> _fontFilePaths = <TextFontFamily, String>{};
 
-  Future<String> _ensureFontFile() async {
-    final String? cached = _fontFilePath;
+  Future<String> _ensureFontFile(TextFontFamily family) async {
+    final String? cached = _fontFilePaths[family];
     if (cached != null && File(cached).existsSync()) {
       return cached;
     }
-    final ByteData data = await rootBundle.load("assets/fonts/Roboto-Regular.ttf");
+    final ByteData data = await rootBundle.load(family.assetPath);
     final Directory tempDir = await getTemporaryDirectory();
-    final File file = File("${tempDir.path}/adgag_drawtext_font.ttf");
+    final File file = File("${tempDir.path}/adgag_drawtext_font_${family.name}.ttf");
     await file.writeAsBytes(data.buffer.asUint8List(), flush: true);
-    _fontFilePath = file.path;
+    _fontFilePaths[family] = file.path;
     return file.path;
   }
 
@@ -73,13 +77,27 @@ final class FfmpegVideoExportService implements VideoExportService {
     final Directory tempDir = await getTemporaryDirectory();
     final String outputPath =
         "${tempDir.path}/adgag_export_${DateTime.now().millisecondsSinceEpoch}.mp4";
-    final String fontFilePath = await _ensureFontFile();
+
+    final Set<TextFontFamily> familiesUsed = <TextFontFamily>{
+      for (final VideoOverlay overlay in project.overlays)
+        if (overlay is TextOverlay) overlay.fontFamily,
+    };
+    // Text is optional, but drawtext=fontfile= is still required
+    // plumbing whenever the filter graph builder needs *a* font path to
+    // reference (e.g. if a future filter needs one even without text) —
+    // always resolve at least the default so callers never see a null.
+    if (familiesUsed.isEmpty) {
+      familiesUsed.add(TextFontFamily.classic);
+    }
+    final Map<TextFontFamily, String> fontFilePaths = <TextFontFamily, String>{
+      for (final TextFontFamily family in familiesUsed) family: await _ensureFontFile(family),
+    };
 
     final List<String> args = VideoFilterGraphBuilder.build(
       project: project,
       outputPath: outputPath,
       videoEncoder: _videoEncoder,
-      fontFilePath: fontFilePath,
+      fontFilePaths: fontFilePaths,
     );
 
     final int totalMs = project.trimmedDuration.inMilliseconds;

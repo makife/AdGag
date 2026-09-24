@@ -88,6 +88,47 @@ sealed class VideoOverlay {
 /// filter this app had to actually debug against a real font crash).
 enum TextAnimation { none, slideIn, popIn }
 
+/// Genuinely distinct typefaces (not size/weight variations of one
+/// family — the video-editor spec explicitly complained about "seven
+/// fonts that look almost identical"), each a real Google Fonts (Open
+/// Font License) asset bundled with the app. [flutterFamily] is what the
+/// live preview's own `TextStyle(fontFamily:)` uses (registered in
+/// pubspec.yaml's `flutter: fonts:` block); [assetPath] is what
+/// `FfmpegVideoExportService` extracts to a real file for drawtext's
+/// `fontfile=` — two different mechanisms need to agree on the same
+/// underlying font file for preview and export to actually match.
+enum TextFontFamily {
+  classic,
+  boldImpact,
+  handwritten,
+  comic,
+  elegant;
+
+  String get displayName => switch (this) {
+        TextFontFamily.classic => "Classic",
+        TextFontFamily.boldImpact => "Bold Impact",
+        TextFontFamily.handwritten => "Handwritten",
+        TextFontFamily.comic => "Comic",
+        TextFontFamily.elegant => "Elegant",
+      };
+
+  String get flutterFamily => switch (this) {
+        TextFontFamily.classic => "AdGagRoboto",
+        TextFontFamily.boldImpact => "Anton",
+        TextFontFamily.handwritten => "Caveat",
+        TextFontFamily.comic => "Bangers",
+        TextFontFamily.elegant => "PlayfairDisplay",
+      };
+
+  String get assetPath => switch (this) {
+        TextFontFamily.classic => "assets/fonts/Roboto-Regular.ttf",
+        TextFontFamily.boldImpact => "assets/fonts/Anton-Regular.ttf",
+        TextFontFamily.handwritten => "assets/fonts/Caveat-Bold.ttf",
+        TextFontFamily.comic => "assets/fonts/Bangers-Regular.ttf",
+        TextFontFamily.elegant => "assets/fonts/PlayfairDisplay-Bold.ttf",
+      };
+}
+
 final class TextOverlay extends VideoOverlay {
   const TextOverlay({
     required super.id,
@@ -98,6 +139,7 @@ final class TextOverlay extends VideoOverlay {
     required this.text,
     this.argbColor = 0xFFFFFFFF,
     this.fontSize = 32,
+    this.fontFamily = TextFontFamily.classic,
     this.animation = TextAnimation.none,
     this.opacity = 1.0,
     this.hasOutline = false,
@@ -112,6 +154,7 @@ final class TextOverlay extends VideoOverlay {
   /// "separate presentation, domain, and data").
   final int argbColor;
   final double fontSize;
+  final TextFontFamily fontFamily;
   final TextAnimation animation;
 
   /// 0.0 (invisible) to 1.0 (fully opaque).

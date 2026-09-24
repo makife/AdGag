@@ -1,6 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:adgag/core/media/video_editor_service.dart";
 import "package:adgag/core/media/video_filter_graph_builder.dart";
 import "package:adgag/features/create_ad/domain/video_project.dart";
 
@@ -59,7 +58,7 @@ void main() {
         project: project,
         outputPath: "/tmp/out.mp4",
         videoEncoder: encoder,
-        fontFilePath: font,
+        fontFilePaths: <TextFontFamily, String>{for (final TextFontFamily f in TextFontFamily.values) f: font},
       );
 
   String filterComplexOf(List<String> args) {

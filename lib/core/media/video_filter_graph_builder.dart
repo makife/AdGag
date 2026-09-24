@@ -21,7 +21,7 @@ abstract final class VideoFilterGraphBuilder {
     required VideoProject project,
     required String outputPath,
     required String videoEncoder, // e.g. "h264_mediacodec" / "h264_videotoolbox"
-    required String fontFilePath, // real filesystem path — see fontfile= below
+    required Map<TextFontFamily, String> fontFilePaths, // real filesystem paths — see fontfile= below
   }) {
     final List<String> inputs = <String>["-ss", _seconds(project.trimStart), "-i", project.videoPath];
     final List<String> extraInputArgs = <String>[];
@@ -44,7 +44,7 @@ abstract final class VideoFilterGraphBuilder {
       project: project,
       bgAudioInputIndex: bgAudioInputIndex,
       imageOverlayInputIndex: imageOverlayInputIndex,
-      fontFilePath: fontFilePath,
+      fontFilePaths: fontFilePaths,
     );
 
     return <String>[
@@ -76,7 +76,7 @@ abstract final class VideoFilterGraphBuilder {
     required VideoProject project,
     required int? bgAudioInputIndex,
     required Map<String, int> imageOverlayInputIndex,
-    required String fontFilePath,
+    required Map<TextFontFamily, String> fontFilePaths,
   }) {
     final List<String> parts = <String>[];
     final _Timeline timeline = _Timeline.fromZones(project.speedZones, project.trimmedDuration);
@@ -123,6 +123,7 @@ abstract final class VideoFilterGraphBuilder {
         case TextOverlay():
           final String escaped = _escapeDrawtext(overlay.text);
           final String colorHex = _argbToFFmpegHex(overlay.argbColor);
+          final String fontFilePath = fontFilePaths[overlay.fontFamily] ?? fontFilePaths.values.first;
           final String escapedFontPath = _escapeDrawtext(fontFilePath);
           final String targetX = "(w*${overlay.xPercent})";
           final String xValue = switch (overlay.animation) {
