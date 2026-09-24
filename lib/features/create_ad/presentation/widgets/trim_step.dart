@@ -380,25 +380,13 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     // Routed through the transport, not controller.play() directly, so
     // isPlaying has exactly one owner from the very first frame.
     transport.play();
-    // videoeditor11.txt: TEMPORARY isolation-test disablement. The call
-    // below is deliberately never made — not started-then-cancelled,
-    // not merely hidden from the UI — to test whether the background
-    // FFmpeg thumbnail-generation session (a real, separate native
-    // decode pass over the same source file, previously only cancelled
-    // in dispose(), so still running throughout a raw-preview A/B test)
-    // is the actual source of reported editor playback stutter. Revert
-    // by restoring `unawaited(_generateThumbnails(draft));` once this
-    // diagnostic round is resolved.
-    // unawaited(_generateThumbnails(draft));
-    if (kDebugMode) {
-      _log.info("THUMBNAIL_FFMPEG_STARTED=0 (disabled for videoeditor11.txt isolation test)");
-    }
+    // videoeditor11.txt's isolation test is resolved: thumbnail
+    // generation was never the cause (the actual bug — an ungated
+    // ScrollEndNotification double-seeking on every timeline
+    // auto-follow jump — is fixed). Restored.
+    unawaited(_generateThumbnails(draft));
   }
 
-  // videoeditor11.txt: kept intact, deliberately unused, for this
-  // isolation round — the call site above is commented out, not this
-  // method, so restoring the round is a one-line revert.
-  // ignore: unused_element
   Future<void> _generateThumbnails(LocalVideoDraft draft) async {
     final List<String> paths = await ref.read(videoThumbnailServiceProvider).generateThumbnails(
           videoPath: draft.filePath,
@@ -923,9 +911,29 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     if (path == null || !mounted) {
       return;
     }
+    // Real bug found via user report: BackgroundAudio.duration was never
+    // set when music was first added, defaulting to null — which
+    // musicLocalTimeAt treats as "extends to the end of the trimmed
+    // video," regardless of the picked file's own actual length. Any
+    // music shorter than the video (the common case — a sound effect or
+    // a music snippet) meant the sync logic tried to seek the music
+    // controller PAST its own real duration for the rest of the clip,
+    // which never produces audible playback there — reported as "music
+    // never plays no matter where I scrub to." Probing the file's real
+    // duration up front (the same LocalVideoProber this screen already
+    // uses for the main clip) and clamping to it fixes this at the
+    // source, for every current and future BackgroundAudio consumer.
+    final Duration audioDuration = await ref.read(localVideoProberProvider).probeDuration(path);
+    if (!mounted) {
+      return;
+    }
     final BackgroundAudio? audio = await showDialog<BackgroundAudio>(
       context: context,
-      builder: (BuildContext context) => _BackgroundAudioDialog(filePath: path, maxDuration: _trimmedDuration),
+      builder: (BuildContext context) => _BackgroundAudioDialog(
+        filePath: path,
+        maxDuration: _trimmedDuration,
+        audioDuration: audioDuration,
+      ),
     );
     if (audio != null) {
       unawaited(_setBgAudio(audio));
@@ -1269,8 +1277,27 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                                   // scrub/seek-in-flight gating the
                                   // transport provides). Reactive via
                                   // AnimatedBuilder so only this one
-                                  // overlay's visibility rebuilds per
-                                  // tick, not the full preview tree.
+                                  // overlay's visibility/animation
+                                  // rebuilds per tick, not the full
+                                  // preview tree.
+                                  //
+                                  // _OverlayPreview is now built INSIDE
+                                  // builder (not passed as AnimatedBuilder's
+                                  // cached `child`) — real bug found via
+                                  // user report: entrance animations
+                                  // (slide-in/pop-in) were implemented for
+                                  // export only, never in the live
+                                  // preview, because the previous
+                                  // structure cached the whole overlay
+                                  // subtree as a static `child` that never
+                                  // rebuilt per tick, so there was nowhere
+                                  // for animation progress to be applied.
+                                  // localLayerTime comes from
+                                  // EditorTransport.localLayerTimeAt — the
+                                  // exact "animation clock foundation"
+                                  // built for this purpose, now actually
+                                  // used by an animation for the first
+                                  // time.
                                   AnimatedBuilder(
                                     animation: _transport!,
                                     builder: (BuildContext context, Widget? child) {
@@ -1279,50 +1306,55 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                                       if (!visible) {
                                         return const SizedBox.shrink();
                                       }
-                                      return child!;
-                                    },
-                                    child: Positioned(
-                                      left: overlay.xPercent * previewSize.width,
-                                      top: overlay.yPercent * previewSize.height,
-                                      child: GestureDetector(
-                                        // onScale (not onPan) so one
-                                        // finger moves it, two fingers
-                                        // pinch to resize and rotate
-                                        // (images) — all through the same
-                                        // callback pair, since a
-                                        // GestureDetector can't mix
-                                        // onPanUpdate and onScaleUpdate
-                                        // without them fighting over the
-                                        // gesture arena.
-                                        onScaleStart: (ScaleStartDetails d) => _onOverlayScaleStart(overlay, d),
-                                        onScaleUpdate: (ScaleUpdateDetails d) =>
-                                            _onOverlayScaleUpdate(overlay, d, previewSize),
-                                        child: Stack(
-                                          clipBehavior: Clip.none,
-                                          children: <Widget>[
-                                            _OverlayPreview(overlay: overlay, previewWidth: previewSize.width),
-                                            Positioned(
-                                              right: -10,
-                                              top: -10,
-                                              child: GestureDetector(
-                                                onTap: () => ref
-                                                    .read(editorControllerProvider.notifier)
-                                                    .removeOverlay(overlay.id),
-                                                child: Container(
-                                                  width: 22,
-                                                  height: 22,
-                                                  decoration: const BoxDecoration(
-                                                    color: Colors.black87,
-                                                    shape: BoxShape.circle,
+                                      final Duration localLayerTime =
+                                          EditorTransport.localLayerTimeAt(overlay, _transport!.currentTime);
+                                      return Positioned(
+                                        left: overlay.xPercent * previewSize.width,
+                                        top: overlay.yPercent * previewSize.height,
+                                        child: GestureDetector(
+                                          // onScale (not onPan) so one
+                                          // finger moves it, two fingers
+                                          // pinch to resize and rotate
+                                          // (images) — all through the same
+                                          // callback pair, since a
+                                          // GestureDetector can't mix
+                                          // onPanUpdate and onScaleUpdate
+                                          // without them fighting over the
+                                          // gesture arena.
+                                          onScaleStart: (ScaleStartDetails d) => _onOverlayScaleStart(overlay, d),
+                                          onScaleUpdate: (ScaleUpdateDetails d) =>
+                                              _onOverlayScaleUpdate(overlay, d, previewSize),
+                                          child: Stack(
+                                            clipBehavior: Clip.none,
+                                            children: <Widget>[
+                                              _OverlayPreview(
+                                                overlay: overlay,
+                                                previewWidth: previewSize.width,
+                                                localLayerTime: localLayerTime,
+                                              ),
+                                              Positioned(
+                                                right: -10,
+                                                top: -10,
+                                                child: GestureDetector(
+                                                  onTap: () => ref
+                                                      .read(editorControllerProvider.notifier)
+                                                      .removeOverlay(overlay.id),
+                                                  child: Container(
+                                                    width: 22,
+                                                    height: 22,
+                                                    decoration: const BoxDecoration(
+                                                      color: Colors.black87,
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                    child: const Icon(Icons.close, size: 14, color: Colors.white),
                                                   ),
-                                                  child: const Icon(Icons.close, size: 14, color: Colors.white),
                                                 ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    ),
+                                      );
+                                    },
                                   ),
                               ],
                             ),
@@ -2145,7 +2177,17 @@ class _TimelineState extends State<_Timeline> {
                                 ? const NeverScrollableScrollPhysics()
                                 : const AlwaysScrollableScrollPhysics(),
                             child: Padding(
-                              padding: EdgeInsets.symmetric(horizontal: viewportWidth / 2),
+                              // Real user feedback: replaced the earlier
+                              // centered-playhead padding (equal on both
+                              // sides) with left-anchored padding — just
+                              // enough leading space for the playhead's
+                              // own fixed offset, and enough trailing
+                              // space for the clip's last instant to
+                              // still reach the playhead.
+                              padding: EdgeInsets.only(
+                                left: TimelineGeometry.playheadOffset,
+                                right: viewportWidth - TimelineGeometry.playheadOffset,
+                              ),
                               child: SizedBox(
                                 width: contentWidth,
                                 height: totalHeight,
@@ -2468,8 +2510,25 @@ class _TimelineState extends State<_Timeline> {
                                       Positioned(
                                         left: (overlay.startSec.inMilliseconds / 1000.0 + widget.trimStartSeconds) *
                                             _pixelsPerSecond,
-                                        width: (overlay.duration.inMilliseconds / 1000.0 * _pixelsPerSecond)
-                                            .clamp(40.0, 220.0),
+                                        // Real bug found via user report: an
+                                        // upper clamp here (220px) meant the
+                                        // visual chip stopped short of the
+                                        // overlay's actual duration for
+                                        // anything longer than ~3.1s, while
+                                        // the right _edgeHandle below is
+                                        // (correctly) positioned at the
+                                        // TRUE, unclamped endSec — so the
+                                        // drag handle appeared detached, far
+                                        // to the right of the chip it was
+                                        // supposed to belong to. Only a
+                                        // lower clamp remains (so a very
+                                        // short overlay still has a visible/
+                                        // tappable chip), matching how speed
+                                        // zones already render unclamped.
+                                        width: max(
+                                          40.0,
+                                          overlay.duration.inMilliseconds / 1000.0 * _pixelsPerSecond,
+                                        ),
                                         top: overlayTop +
                                             (overlayRow[overlay.id] ?? 0) *
                                                 (_Timeline._laneHeight + _textRowGap),
@@ -2573,12 +2632,18 @@ class _TimelineState extends State<_Timeline> {
                             ),
                           ),
 
-                          // Fixed center playhead — outside the
+                          // Fixed left-anchored playhead — outside the
                           // scrollable content, so it's the timeline that
                           // moves underneath it, not the other way
-                          // around.
+                          // around. Per direct user feedback, moved from
+                          // the timeline's horizontal center to a small
+                          // fixed offset from the left (see
+                          // TimelineGeometry.playheadOffset) so the
+                          // timeline reads left-to-right, starting from
+                          // the left, instead of centered with a wide
+                          // empty margin on either side.
                           Positioned(
-                            left: viewportWidth / 2 - 1,
+                            left: TimelineGeometry.playheadOffset - 1,
                             top: 0,
                             height: totalHeight,
                             child: const IgnorePointer(
@@ -2657,49 +2722,87 @@ class _LaneLabel extends StatelessWidget {
 }
 
 class _OverlayPreview extends StatelessWidget {
-  const _OverlayPreview({required this.overlay, required this.previewWidth});
+  const _OverlayPreview({required this.overlay, required this.previewWidth, required this.localLayerTime});
 
   final VideoOverlay overlay;
   final double previewWidth;
 
+  /// How far into this overlay's own local timeline the preview
+  /// currently is — `EditorTransport.localLayerTimeAt`'s own output,
+  /// always `>= 0` and reproducible for a given (overlay, transport
+  /// time) pair regardless of play/seek/scrub/replay. Only meaningful
+  /// for [TextOverlay]'s entrance animation right now.
+  final Duration localLayerTime;
+
+  /// Matches `VideoFilterGraphBuilder._animDuration`/`_popInFontsizeExpr`'s
+  /// own 0.35s/0.25s ramps exactly, so what's previewed here is the same
+  /// timing the actual export produces — not just a plausible
+  /// approximation.
+  static const double _slideInDuration = 0.35;
+  static const double _popInDuration = 0.25;
+
   @override
   Widget build(BuildContext context) {
     return switch (overlay) {
-      final TextOverlay text => Opacity(
-          opacity: text.opacity,
-          child: Container(
-            padding: text.hasBackground ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4) : null,
-            decoration: text.hasBackground
-                ? BoxDecoration(color: Colors.black.withValues(alpha: 0.45), borderRadius: BorderRadius.circular(4))
-                : null,
-            child: Text(
-              text.text,
-              style: TextStyle(
-                color: Color(text.argbColor),
-                fontSize: text.fontSize,
-                fontFamily: text.fontFamily.flutterFamily,
-                fontWeight: FontWeight.bold,
-                shadows: <Shadow>[
-                  if (text.hasOutline)
-                    for (final Offset o in const <Offset>[
-                      Offset(-1, -1),
-                      Offset(1, -1),
-                      Offset(-1, 1),
-                      Offset(1, 1),
-                    ])
-                      Shadow(color: Colors.black87, offset: o),
-                  if (text.hasShadow) const Shadow(color: Colors.black54, offset: Offset(2, 2), blurRadius: 3),
-                ],
-              ),
-            ),
-          ),
-        ),
+      final TextOverlay text => _buildText(text),
       ImageOverlay(:final String assetPath, :final double widthPercent, :final double rotationDegrees) =>
         Transform.rotate(
           angle: rotationDegrees * pi / 180,
           child: SizedBox(width: previewWidth * widthPercent, child: Image.file(File(assetPath))),
         ),
     };
+  }
+
+  Widget _buildText(TextOverlay text) {
+    final double localSeconds = localLayerTime.inMilliseconds / 1000.0;
+
+    double fontSize = text.fontSize;
+    double slideOffsetX = 0;
+    switch (text.animation) {
+      case TextAnimation.none:
+        break;
+      case TextAnimation.slideIn:
+        // Off-screen-right (the full preview width, matching the
+        // export's own `w` frame-width reference) at progress=0,
+        // target position at progress=1.
+        final double progress = (localSeconds / _slideInDuration).clamp(0.0, 1.0);
+        slideOffsetX = previewWidth * (1 - progress);
+      case TextAnimation.popIn:
+        final double progress = (localSeconds / _popInDuration).clamp(0.0, 1.0);
+        fontSize = text.fontSize * (0.4 + 0.6 * progress);
+    }
+
+    final Widget content = Opacity(
+      opacity: text.opacity,
+      child: Container(
+        padding: text.hasBackground ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4) : null,
+        decoration: text.hasBackground
+            ? BoxDecoration(color: Colors.black.withValues(alpha: 0.45), borderRadius: BorderRadius.circular(4))
+            : null,
+        child: Text(
+          text.text,
+          style: TextStyle(
+            color: Color(text.argbColor),
+            fontSize: fontSize,
+            fontFamily: text.fontFamily.flutterFamily,
+            fontWeight: FontWeight.bold,
+            shadows: <Shadow>[
+              if (text.hasOutline)
+                for (final Offset o in const <Offset>[
+                  Offset(-1, -1),
+                  Offset(1, -1),
+                  Offset(-1, 1),
+                  Offset(1, 1),
+                ])
+                  Shadow(color: Colors.black87, offset: o),
+              if (text.hasShadow) const Shadow(color: Colors.black54, offset: Offset(2, 2), blurRadius: 3),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    return slideOffsetX == 0 ? content : Transform.translate(offset: Offset(slideOffsetX, 0), child: content);
   }
 }
 
@@ -3196,9 +3299,19 @@ class _TextOverlaySheetState extends State<_TextOverlaySheet> {
 }
 
 class _BackgroundAudioDialog extends StatefulWidget {
-  const _BackgroundAudioDialog({required this.filePath, required this.maxDuration});
+  const _BackgroundAudioDialog({
+    required this.filePath,
+    required this.maxDuration,
+    required this.audioDuration,
+  });
   final String filePath;
   final Duration maxDuration;
+
+  /// The picked audio file's own real, probed duration — used to clamp
+  /// the resulting [BackgroundAudio.duration] so playback is never
+  /// asked to seek past what the file actually contains (see
+  /// `_pickMusic`'s own doc comment on the bug this fixes).
+  final Duration audioDuration;
 
   @override
   State<_BackgroundAudioDialog> createState() => _BackgroundAudioDialogState();
@@ -3234,6 +3347,7 @@ class _BackgroundAudioDialogState extends State<_BackgroundAudioDialog> {
               volume: _volume,
               fadeInDuration: Duration(milliseconds: (_fadeIn * 1000).round()),
               fadeOutDuration: Duration(milliseconds: (_fadeOut * 1000).round()),
+              duration: widget.audioDuration < widget.maxDuration ? widget.audioDuration : widget.maxDuration,
             ),
           ),
           child: const Text("Add"),
