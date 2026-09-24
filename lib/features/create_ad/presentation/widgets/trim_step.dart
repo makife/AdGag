@@ -59,6 +59,17 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   StreamSubscription<double>? _progressSub;
   String? _error;
 
+  // Live-preview-only state (never exported — the real render always goes
+  // through VideoFilterGraphBuilder/FfmpegVideoExportService). A second
+  // VideoPlayerController plays the picked music file in sync with the
+  // main preview rather than adding a dedicated audio-player dependency —
+  // video_player's native ExoPlayer/AVPlayer backing plays audio-only
+  // files fine, and this project's history this session (file_picker,
+  // share_plus, ffmpeg_kit) is full of new-native-dependency Kotlin/AGP
+  // conflicts worth avoiding when an already-vetted package can do it.
+  VideoPlayerController? _musicController;
+  double? _lastAppliedPreviewSpeed;
+
   @override
   void initState() {
     super.initState();
@@ -72,6 +83,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
             setState(() {});
             unawaited(controller.setLooping(true));
             unawaited(controller.play());
+            controller.addListener(_syncLivePreview);
           }
         }),
       );
@@ -82,11 +94,108 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   void dispose() {
     _progressSub?.cancel();
     _controller?.dispose().ignore();
+    _musicController?.dispose().ignore();
     // Whatever happens next (successful Continue, Retake, or the shell
     // itself navigating away after confirmation) means there's nothing
     // left on *this* screen to warn about losing.
     ref.read(hasUnsavedCreateEditsProvider.notifier).state = false;
     super.dispose();
+  }
+
+  /// Drives both live-preview approximations that don't otherwise show up
+  /// until export: a speed zone's slow/fast motion (via the *same*
+  /// controller's own `setPlaybackSpeed`, only changed when the active
+  /// zone actually changes — not every tick, since it's a platform call)
+  /// and background music (played/paused/seeked on `_musicController` to
+  /// track whichever window of the main clip is currently showing).
+  /// Approximation, not a promise of an exact match: `setPlaybackSpeed`
+  /// pitch-shifts the *preview's* audio the way most players do, where
+  /// the real export uses FFmpeg's `atempo` to keep pitch correct — only
+  /// the preview has this limitation, matching the same
+  /// preview-vs-render approximation this screen already makes for color
+  /// filters (`ColorFilter.matrix` vs. FFmpeg's `eq`/`hue`).
+  void _syncLivePreview() {
+    final VideoPlayerController? controller = _controller;
+    if (controller == null || !controller.value.isInitialized) {
+      return;
+    }
+    final double elapsedInTrim = controller.value.position.inMilliseconds / 1000.0 - _startSeconds;
+
+    double desiredSpeed = 1.0;
+    for (final SpeedZone zone in _speedZones) {
+      final double zoneStart = zone.start.inMilliseconds / 1000.0;
+      final double zoneEnd = zone.end.inMilliseconds / 1000.0;
+      if (elapsedInTrim >= zoneStart && elapsedInTrim < zoneEnd) {
+        desiredSpeed = zone.factor;
+        break;
+      }
+    }
+    if (_lastAppliedPreviewSpeed != desiredSpeed) {
+      _lastAppliedPreviewSpeed = desiredSpeed;
+      unawaited(controller.setPlaybackSpeed(desiredSpeed));
+    }
+
+    final VideoPlayerController? music = _musicController;
+    final BackgroundAudio? bg = _bgAudio;
+    if (music == null || bg == null || !music.value.isInitialized) {
+      return;
+    }
+    final double musicStart = bg.startSec.inMilliseconds / 1000.0;
+    final double musicDuration =
+        (bg.duration ?? (_trimmedDuration - bg.startSec)).inMilliseconds / 1000.0;
+    final bool inMusicWindow = elapsedInTrim >= musicStart && elapsedInTrim < musicStart + musicDuration;
+    if (inMusicWindow) {
+      if (!music.value.isPlaying) {
+        final Duration seekTo = Duration(milliseconds: ((elapsedInTrim - musicStart) * 1000).round());
+        unawaited(music.seekTo(seekTo.isNegative ? Duration.zero : seekTo));
+        unawaited(music.play());
+      }
+    } else if (music.value.isPlaying) {
+      unawaited(music.pause());
+    }
+  }
+
+  /// Creates/replaces/tears down `_musicController` to match [audio] —
+  /// the single place `_bgAudio` should be written from, so the preview
+  /// player never drifts out of sync with what's actually selected
+  /// (direct `setState(() => _bgAudio = ...)` calls used to be scattered
+  /// across the music-picker dialog and the timeline's resize/remove
+  /// callbacks with no controller lifecycle attached to any of them).
+  Future<void> _setBgAudio(BackgroundAudio? audio) async {
+    final bool sourceChanged = _bgAudio?.filePath != audio?.filePath;
+    setState(() => _bgAudio = audio);
+    if (!sourceChanged) {
+      if (audio != null) {
+        unawaited(_musicController?.setVolume(audio.volume));
+      }
+      return;
+    }
+    final VideoPlayerController? old = _musicController;
+    _musicController = null;
+    await old?.pause();
+    await old?.dispose();
+    if (audio == null) {
+      return;
+    }
+    final VideoPlayerController controller = VideoPlayerController.file(File(audio.filePath));
+    try {
+      await controller.initialize();
+      await controller.setVolume(audio.volume);
+      if (mounted) {
+        setState(() => _musicController = controller);
+      }
+    } catch (_) {
+      // The picked file's format isn't one the platform player can open
+      // for live preview — FFmpeg's format support at export time is far
+      // broader than video_player's, so this only affects the in-editor
+      // preview, not whether the music actually ends up in the published
+      // Ad. Surface it rather than silently doing nothing, but don't
+      // block anything.
+      await controller.dispose();
+      if (mounted) {
+        _showSnack("Couldn't preview this audio here — it'll still be used when you publish.");
+      }
+    }
   }
 
   bool get _hasAnyEdit =>
@@ -268,7 +377,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       builder: (BuildContext context) => _BackgroundAudioDialog(filePath: path, maxDuration: _trimmedDuration),
     );
     if (audio != null) {
-      setState(() => _bgAudio = audio);
+      unawaited(_setBgAudio(audio));
     }
   }
 
@@ -359,12 +468,12 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       _flip = AppFlipDirection.none;
       _removeAudio = false;
       _colorFilter = AppColorFilter.none;
-      _bgAudio = null;
       _speedZones.clear();
       _overlays.clear();
     });
     unawaited(_controller?.setVolume(1));
     unawaited(_controller?.seekTo(Duration.zero));
+    unawaited(_setBgAudio(null));
   }
 
   Future<void> _confirm() async {
@@ -667,8 +776,8 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                   onResizeZone: _onResizeZone,
                   onRemoveOverlay: (String id) =>
                       setState(() => _overlays.removeWhere((VideoOverlay o) => o.id == id)),
-                  onResizeMusic: (BackgroundAudio updated) => setState(() => _bgAudio = updated),
-                  onRemoveMusic: () => setState(() => _bgAudio = null),
+                  onResizeMusic: (BackgroundAudio updated) => unawaited(_setBgAudio(updated)),
+                  onRemoveMusic: () => unawaited(_setBgAudio(null)),
                 ),
                 if (_maxStartSeconds == 0)
                   Padding(
