@@ -70,6 +70,15 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   VideoPlayerController? _musicController;
   double? _lastAppliedPreviewSpeed;
 
+  // Real decoded frames for the timeline's Clip lane (not a placeholder
+  // bar — see the video-editor spec this round implements). Generated
+  // once against the *original* captured file, independent of trim/edits,
+  // since the filmstrip represents the whole source clip the same way
+  // the base track already does. Empty until generation finishes, and
+  // stays empty (falling back to the plain lane background) if it fails
+  // — a missing filmstrip should never block editing.
+  List<String> _thumbnailPaths = <String>[];
+
   @override
   void initState() {
     super.initState();
@@ -84,9 +93,21 @@ class _TrimStepState extends ConsumerState<TrimStep> {
             unawaited(controller.setLooping(true));
             unawaited(controller.play());
             controller.addListener(_syncLivePreview);
+            unawaited(_generateThumbnails(draft));
           }
         }),
       );
+    }
+  }
+
+  Future<void> _generateThumbnails(LocalVideoDraft draft) async {
+    final List<String> paths = await ref.read(videoThumbnailServiceProvider).generateThumbnails(
+          videoPath: draft.filePath,
+          duration: draft.duration,
+          count: 10,
+        );
+    if (mounted && paths.isNotEmpty) {
+      setState(() => _thumbnailPaths = paths);
     }
   }
 
@@ -247,15 +268,10 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     unawaited(_controller?.setVolume(_removeAudio ? 0 : 1));
   }
 
-  void _cycleColorFilter() {
-    setState(() {
-      _colorFilter = switch (_colorFilter) {
-        AppColorFilter.none => AppColorFilter.warm,
-        AppColorFilter.warm => AppColorFilter.cool,
-        AppColorFilter.cool => AppColorFilter.blackAndWhite,
-        AppColorFilter.blackAndWhite => AppColorFilter.none,
-      };
-    });
+  bool _showFilterStrip = false;
+
+  void _toggleFilterStrip() {
+    setState(() => _showFilterStrip = !_showFilterStrip);
   }
 
   Future<void> _addSpeedZone() async {
@@ -433,6 +449,10 @@ class _TrimStepState extends ConsumerState<TrimStep> {
           argbColor: overlay.argbColor,
           fontSize: (_gestureBaseSize * details.scale).clamp(12.0, 96.0),
           animation: overlay.animation,
+          opacity: overlay.opacity,
+          hasOutline: overlay.hasOutline,
+          hasShadow: overlay.hasShadow,
+          hasBackground: overlay.hasBackground,
         ),
       ImageOverlay() => ImageOverlay(
           id: overlay.id,
@@ -740,8 +760,8 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                       _ToolButton(
                         icon: Icons.palette_outlined,
                         label: _colorFilter.label,
-                        selected: _colorFilter != AppColorFilter.none,
-                        onTap: _cycleColorFilter,
+                        selected: _colorFilter != AppColorFilter.none || _showFilterStrip,
+                        onTap: _toggleFilterStrip,
                       ),
                       _ToolButton(
                         icon: Icons.music_note_outlined,
@@ -768,9 +788,29 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                   ),
                 ),
 
+                if (_showFilterStrip) ...<Widget>[
+                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(
+                    height: 76,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: <Widget>[
+                        for (final AppColorFilter filter in AppColorFilter.values)
+                          _FilterPreviewChip(
+                            filter: filter,
+                            thumbnailPath: _thumbnailPaths.isNotEmpty ? _thumbnailPaths.first : null,
+                            selected: _colorFilter == filter,
+                            onTap: () => setState(() => _colorFilter = filter),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: AppSpacing.md),
                 _Timeline(
                   controller: controller,
+                  thumbnailPaths: _thumbnailPaths,
                   originalDuration: controller.value.duration,
                   trimStartSeconds: _startSeconds,
                   maxTrimStartSeconds: _maxStartSeconds,
@@ -878,6 +918,63 @@ class _ToolButton extends StatelessWidget {
   }
 }
 
+/// One entry in the horizontal filter picker (CLAUDE.md-adjacent spec
+/// section 10: "horizontally scrollable filter selector with visual
+/// previews," not a bare label). Uses a real frame from the clip's own
+/// filmstrip when one's available (same thumbnails the timeline shows)
+/// so the preview is the actual footage, not a generic swatch; falls
+/// back to a plain tinted square before thumbnails finish generating.
+class _FilterPreviewChip extends StatelessWidget {
+  const _FilterPreviewChip({
+    required this.filter,
+    required this.thumbnailPath,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final AppColorFilter filter;
+  final String? thumbnailPath;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final String? path = thumbnailPath;
+    return Padding(
+      padding: const EdgeInsets.only(right: AppSpacing.sm),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                border: Border.all(color: selected ? scheme.primary : scheme.outlineVariant, width: 2),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.sm - 2),
+                child: ColorFiltered(
+                  colorFilter: filter.previewFilter,
+                  child: path != null
+                      ? Image.file(File(path), fit: BoxFit.cover, width: 52, height: 52)
+                      : ColoredBox(color: scheme.surfaceContainerHighest),
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(filter.label, style: Theme.of(context).textTheme.labelSmall),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// The timeline: a visibly bounded panel (a bordered/tinted [Container],
 /// not empty space) with a fixed-width label column on the left naming
 /// each lane ("Clip", "Speed", "Music", "Text") and, to the right, a
@@ -911,6 +1008,7 @@ class _ToolButton extends StatelessWidget {
 class _Timeline extends StatelessWidget {
   const _Timeline({
     required this.controller,
+    required this.thumbnailPaths,
     required this.originalDuration,
     required this.trimStartSeconds,
     required this.maxTrimStartSeconds,
@@ -928,6 +1026,7 @@ class _Timeline extends StatelessWidget {
   });
 
   final VideoPlayerController controller;
+  final List<String> thumbnailPaths;
   final Duration originalDuration;
   final double trimStartSeconds;
   final double maxTrimStartSeconds;
@@ -1222,20 +1321,46 @@ class _Timeline extends StatelessWidget {
 
                       _ruler(scheme, width, totalSec),
 
-                      // Base track — the full original clip, inside the
-                      // "Clip" lane.
-                      Positioned(
-                        top: trimTop + 20,
-                        left: 0,
-                        right: 0,
-                        child: Container(
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: scheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(2),
+                      // Base track — real decoded frames when the
+                      // filmstrip has generated, a plain bar otherwise
+                      // (thumbnails are best-effort — see
+                      // _generateThumbnails' own doc comment).
+                      if (thumbnailPaths.isNotEmpty)
+                        Positioned(
+                          top: trimTop,
+                          left: 0,
+                          right: 0,
+                          height: _trimLaneHeight,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                            child: Row(
+                              children: <Widget>[
+                                for (final String path in thumbnailPaths)
+                                  Expanded(
+                                    child: Image.file(
+                                      File(path),
+                                      fit: BoxFit.cover,
+                                      height: _trimLaneHeight,
+                                      errorBuilder: (_, __, ___) => ColoredBox(color: scheme.surfaceContainerHighest),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        Positioned(
+                          top: trimTop + 20,
+                          left: 0,
+                          right: 0,
+                          child: Container(
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: scheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
                           ),
                         ),
-                      ),
                       // Selection window — drag to move where the
                       // up-to-10s clip starts within the original. The
                       // hit area (44dp, per the platform-minimum touch
@@ -1567,6 +1692,10 @@ VideoOverlay _withOverlayTiming(VideoOverlay overlay, Duration start, Duration d
         argbColor: overlay.argbColor,
         fontSize: overlay.fontSize,
         animation: overlay.animation,
+        opacity: overlay.opacity,
+        hasOutline: overlay.hasOutline,
+        hasShadow: overlay.hasShadow,
+        hasBackground: overlay.hasBackground,
       ),
     ImageOverlay() => ImageOverlay(
         id: overlay.id,
@@ -1607,9 +1736,33 @@ class _OverlayPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (overlay) {
-      TextOverlay(:final String text, :final int argbColor, :final double fontSize) => Text(
-          text,
-          style: TextStyle(color: Color(argbColor), fontSize: fontSize, fontWeight: FontWeight.bold),
+      final TextOverlay text => Opacity(
+          opacity: text.opacity,
+          child: Container(
+            padding: text.hasBackground ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4) : null,
+            decoration: text.hasBackground
+                ? BoxDecoration(color: Colors.black.withValues(alpha: 0.45), borderRadius: BorderRadius.circular(4))
+                : null,
+            child: Text(
+              text.text,
+              style: TextStyle(
+                color: Color(text.argbColor),
+                fontSize: text.fontSize,
+                fontWeight: FontWeight.bold,
+                shadows: <Shadow>[
+                  if (text.hasOutline)
+                    for (final Offset o in const <Offset>[
+                      Offset(-1, -1),
+                      Offset(1, -1),
+                      Offset(-1, 1),
+                      Offset(1, 1),
+                    ])
+                      Shadow(color: Colors.black87, offset: o),
+                  if (text.hasShadow) const Shadow(color: Colors.black54, offset: Offset(2, 2), blurRadius: 3),
+                ],
+              ),
+            ),
+          ),
         ),
       ImageOverlay(:final String assetPath, :final double widthPercent, :final double rotationDegrees) =>
         Transform.rotate(
@@ -1825,6 +1978,10 @@ class _TextOverlayDialogState extends State<_TextOverlayDialog> {
   late double _end = widget.maxDuration.inMilliseconds / 1000.0;
   int _styleIndex = 0;
   TextAnimation _animation = TextAnimation.none;
+  double _opacity = 1.0;
+  bool _hasOutline = false;
+  bool _hasShadow = false;
+  bool _hasBackground = false;
 
   @override
   void initState() {
@@ -1860,11 +2017,69 @@ class _TextOverlayDialogState extends State<_TextOverlayDialog> {
               padding: const EdgeInsets.all(AppSpacing.md),
               color: Colors.black,
               alignment: Alignment.center,
-              child: Text(
-                _textController.text.isEmpty ? "Preview" : _textController.text,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Color(style.argbColor), fontSize: style.fontSize, fontWeight: style.weight),
+              child: Opacity(
+                opacity: _opacity,
+                child: Container(
+                  padding: _hasBackground ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4) : null,
+                  decoration: _hasBackground
+                      ? BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          borderRadius: BorderRadius.circular(4),
+                        )
+                      : null,
+                  child: Text(
+                    _textController.text.isEmpty ? "Preview" : _textController.text,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(style.argbColor),
+                      fontSize: style.fontSize,
+                      fontWeight: style.weight,
+                      shadows: <Shadow>[
+                        if (_hasOutline)
+                          for (final Offset o in const <Offset>[
+                            Offset(-1, -1),
+                            Offset(1, -1),
+                            Offset(-1, 1),
+                            Offset(1, 1),
+                          ])
+                            Shadow(color: Colors.black87, offset: o),
+                        if (_hasShadow) const Shadow(color: Colors.black54, offset: Offset(2, 2), blurRadius: 3),
+                      ],
+                    ),
+                  ),
+                ),
               ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text("Style", style: Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: AppSpacing.xs),
+            Wrap(
+              spacing: AppSpacing.sm,
+              children: <Widget>[
+                FilterChip(
+                  label: const Text("Outline"),
+                  selected: _hasOutline,
+                  onSelected: (bool v) => setState(() => _hasOutline = v),
+                ),
+                FilterChip(
+                  label: const Text("Shadow"),
+                  selected: _hasShadow,
+                  onSelected: (bool v) => setState(() => _hasShadow = v),
+                ),
+                FilterChip(
+                  label: const Text("Background"),
+                  selected: _hasBackground,
+                  onSelected: (bool v) => setState(() => _hasBackground = v),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text("Opacity: ${(_opacity * 100).round()}%"),
+            Slider(
+              value: _opacity,
+              min: 0.2,
+              max: 1.0,
+              onChanged: (double v) => setState(() => _opacity = v),
             ),
             const SizedBox(height: AppSpacing.sm),
             SizedBox(
@@ -1931,6 +2146,10 @@ class _TextOverlayDialogState extends State<_TextOverlayDialog> {
                       argbColor: style.argbColor,
                       fontSize: style.fontSize,
                       animation: _animation,
+                      opacity: _opacity,
+                      hasOutline: _hasOutline,
+                      hasShadow: _hasShadow,
+                      hasBackground: _hasBackground,
                     ),
                   ),
           child: const Text("Add"),
@@ -1990,10 +2209,13 @@ class _BackgroundAudioDialogState extends State<_BackgroundAudioDialog> {
 
 extension on AppColorFilter {
   String get label => switch (this) {
-        AppColorFilter.none => "Filter",
+        AppColorFilter.none => "Original",
         AppColorFilter.warm => "Warm",
         AppColorFilter.cool => "Cool",
-        AppColorFilter.blackAndWhite => "B&W",
+        AppColorFilter.blackAndWhite => "Mono",
+        AppColorFilter.vintage => "Vintage",
+        AppColorFilter.vivid => "Vivid",
+        AppColorFilter.dramatic => "Dramatic",
       };
 
   /// A `ColorFilter.matrix` approximation of the FFmpeg `eq`/`hue` filter
@@ -2024,6 +2246,24 @@ extension on AppColorFilter {
             0.2126, 0.7152, 0.0722, 0, 0, //
             0.2126, 0.7152, 0.0722, 0, 0, //
             0.2126, 0.7152, 0.0722, 0, 0, //
+            0, 0, 0, 1, 0, //
+          ]),
+        AppColorFilter.vintage => const ColorFilter.matrix(<double>[
+            0.9, 0.1, 0.0, 0, 10, //
+            0.05, 0.85, 0.05, 0, 4, //
+            0.05, 0.1, 0.75, 0, -6, //
+            0, 0, 0, 1, 0, //
+          ]),
+        AppColorFilter.vivid => const ColorFilter.matrix(<double>[
+            1.35, -0.32, -0.03, 0, 0, //
+            -0.10, 1.13, -0.03, 0, 0, //
+            -0.10, -0.32, 1.42, 0, 0, //
+            0, 0, 0, 1, 0, //
+          ]),
+        AppColorFilter.dramatic => const ColorFilter.matrix(<double>[
+            1.25, -0.05, -0.02, 0, -25, //
+            -0.05, 1.2, -0.02, 0, -25, //
+            -0.02, -0.05, 1.15, 0, -30, //
             0, 0, 0, 1, 0, //
           ]),
       };

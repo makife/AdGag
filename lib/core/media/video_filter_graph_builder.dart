@@ -127,10 +127,23 @@ abstract final class VideoFilterGraphBuilder {
             TextAnimation.popIn => "'${_popInFontsizeExpr(overlay.startSec, overlay.fontSize.round())}'",
             TextAnimation.none || TextAnimation.slideIn => "${overlay.fontSize.round()}",
           };
+          // Long-established, well-documented drawtext options (unlike
+          // the animation x/fontsize expressions above, which are a
+          // genuine unverified-on-device gamble) — low risk for real
+          // legibility value, per CLAUDE.md's own spec calling
+          // outline/shadow/background/opacity "extremely important" for
+          // this app's text-heavy ad format.
+          final List<String> extraOptions = <String>[
+            if (overlay.opacity < 1.0) "alpha=${overlay.opacity.toStringAsFixed(2)}",
+            if (overlay.hasOutline) ...<String>["bordercolor=black@0.8", "borderw=2"],
+            if (overlay.hasShadow) ...<String>["shadowcolor=black@0.6", "shadowx=2", "shadowy=2"],
+            if (overlay.hasBackground) ...<String>["box=1", "boxcolor=black@0.45", "boxborderw=6"],
+          ];
+          final String extra = extraOptions.isEmpty ? "" : ":${extraOptions.join(':')}";
           parts.add(
             "[$currentVideoLabel]drawtext=fontfile='$escapedFontPath':text='$escaped':fontcolor=$colorHex:"
             "fontsize=$fontsizeValue:"
-            "x=$xValue:y=(h*${overlay.yPercent}):enable='$enable'[$nextLabel]",
+            "x=$xValue:y=(h*${overlay.yPercent}):enable='$enable'$extra[$nextLabel]",
           );
         case ImageOverlay():
           final int inputIdx = imageOverlayInputIndex[overlay.id]!;
@@ -187,6 +200,15 @@ abstract final class VideoFilterGraphBuilder {
         transformFilters.add("eq=gamma_r=0.9:gamma_b=1.15:saturation=1.05");
       case AppColorFilter.blackAndWhite:
         transformFilters.add("hue=s=0");
+      case AppColorFilter.vintage:
+        // Faded contrast + a warm cast + light grain-adjacent desaturation
+        // — the "old film" look without a separate grain/noise filter,
+        // which would add real per-frame render cost for a subtle effect.
+        transformFilters.add("eq=contrast=0.85:saturation=0.75:gamma_r=1.1:brightness=0.02");
+      case AppColorFilter.vivid:
+        transformFilters.add("eq=saturation=1.45:contrast=1.15");
+      case AppColorFilter.dramatic:
+        transformFilters.add("eq=contrast=1.3:brightness=-0.04:saturation=0.9");
     }
     if (transformFilters.isEmpty) {
       parts.add("[$currentVideoLabel]null[vout]");

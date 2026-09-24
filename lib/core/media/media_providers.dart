@@ -4,10 +4,12 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "easy_video_editor_service.dart";
 import "ffmpeg_video_export_service.dart";
+import "ffmpeg_video_thumbnail_service.dart";
 import "local_video_prober.dart";
 import "video_editor_service.dart";
 import "video_export_service.dart";
 import "video_player_local_prober.dart";
+import "video_thumbnail_service.dart";
 
 final Provider<VideoEditorService> videoEditorServiceProvider = Provider<VideoEditorService>((ref) {
   return EasyVideoEditorService();
@@ -25,4 +27,8 @@ final AutoDisposeProvider<VideoExportService> videoExportServiceProvider =
 
 final Provider<LocalVideoProber> localVideoProberProvider = Provider<LocalVideoProber>((ref) {
   return VideoPlayerLocalProber();
+});
+
+final Provider<VideoThumbnailService> videoThumbnailServiceProvider = Provider<VideoThumbnailService>((ref) {
+  return FfmpegVideoThumbnailService();
 });

@@ -5,7 +5,7 @@ import "../../../core/media/video_editor_service.dart" show AppFlipDirection, Ap
 /// FFmpeg `eq`/`hue` filter — see [VideoFilterGraphBuilder] — and one
 /// `ColorFilter.matrix` approximation for the live preview, so what's
 /// previewed while editing matches what actually gets rendered.
-enum AppColorFilter { none, warm, cool, blackAndWhite }
+enum AppColorFilter { none, warm, cool, blackAndWhite, vintage, vivid, dramatic }
 
 /// A time-ranged speed multiplier — e.g. 0.5 across seconds 3-5 for a
 /// slow-motion window within an otherwise normal-speed clip. Multiple
@@ -99,6 +99,10 @@ final class TextOverlay extends VideoOverlay {
     this.argbColor = 0xFFFFFFFF,
     this.fontSize = 32,
     this.animation = TextAnimation.none,
+    this.opacity = 1.0,
+    this.hasOutline = false,
+    this.hasShadow = false,
+    this.hasBackground = false,
   });
 
   final String text;
@@ -109,6 +113,23 @@ final class TextOverlay extends VideoOverlay {
   final int argbColor;
   final double fontSize;
   final TextAnimation animation;
+
+  /// 0.0 (invisible) to 1.0 (fully opaque).
+  final double opacity;
+
+  /// A black stroke around each glyph (drawtext's `bordercolor`/`borderw`)
+  /// — improves legibility over busy video without needing a background
+  /// box, the more common social-app treatment for short captions.
+  final bool hasOutline;
+
+  /// A soft black drop shadow (drawtext's `shadowcolor`/`shadowx`/`shadowy`).
+  final bool hasShadow;
+
+  /// A semi-transparent black box behind the text (drawtext's
+  /// `box`/`boxcolor`/`boxborderw`) — the alternative legibility
+  /// treatment to an outline, for when the text needs to read over any
+  /// background rather than just a busy one.
+  final bool hasBackground;
 }
 
 /// A static image or a single sticker/GIF *frame* composited as an image
