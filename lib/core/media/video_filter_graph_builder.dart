@@ -57,14 +57,21 @@ abstract final class VideoFilterGraphBuilder {
       // Mobile hardware encoders (mediacodec/videotoolbox) don't pick a
       // sensible default bitrate on their own — without an explicit
       // target the output is visibly low-quality regardless of source
-      // resolution. 16M/20M targets a real 1080p master worth handing
-      // to Mux (which re-transcodes for delivery — the local export
-      // shouldn't already be the lossy step), not just "better than
-      // before"; -maxrate/-bufsize bound the encoder's own rate-control
-      // instead of leaving it to decide how strictly to honor -b:v.
-      "-b:v", "16M",
-      "-maxrate", "20M",
-      "-bufsize", "20M",
+      // resolution. Real user report: 16M/20M (a prior round's fix)
+      // still visibly degraded quality relative to the source — modern
+      // phone cameras routinely record 1080p at 20-50+ Mbps, so a 16M
+      // re-encode ceiling was itself the lossy step for higher-bitrate
+      // source footage, before this file was ever handed to Mux (which
+      // re-transcodes for delivery, but can't recover quality already
+      // lost here). Raised well above typical phone-camera bitrates so
+      // this re-encode is no longer the bottleneck for ordinary source
+      // footage; -maxrate/-bufsize bound the encoder's own rate-control
+      // instead of leaving it to decide how strictly to honor -b:v. A
+      // 10s clip at this ceiling is a worst-case ~62MB temp file, not a
+      // meaningful storage/upload-time concern for a local pre-Mux step.
+      "-b:v", "50M",
+      "-maxrate", "60M",
+      "-bufsize", "60M",
       if (!project.removeAudio) ...<String>["-c:a", "aac"],
       "-t", _seconds(project.trimmedDuration),
       "-y",

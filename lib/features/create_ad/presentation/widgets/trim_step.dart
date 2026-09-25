@@ -156,6 +156,15 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   int _dbgMuteChangeCount = 0;
   int _dbgTimelineUpdateCount = 0;
   int _dbgEditorRebuildCount = 0;
+  // Added this round: a still-unresolved "music never resumes after a
+  // scrub / timeline appears to stop" report needs to see whether
+  // music commands are even being attempted, and whether
+  // _onTransportChanged is throwing (see its own try/catch).
+  int _dbgMusicSeekCount = 0;
+  int _dbgMusicPlayCount = 0;
+  int _dbgMusicPauseCount = 0;
+  int _dbgErrorCount = 0;
+  String? _dbgLastError;
   Timer? _dbgReportTimer;
 
   void _startDebugInstrumentation() {
@@ -166,7 +175,9 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       _log.info(
         "10s window: seekTo=$_dbgSeekCount play=$_dbgPlayCount pause=$_dbgPauseCount "
         "speedChanges=$_dbgSpeedChangeCount muteChanges=$_dbgMuteChangeCount "
-        "timelineUpdates=$_dbgTimelineUpdateCount editorRebuilds=$_dbgEditorRebuildCount",
+        "timelineUpdates=$_dbgTimelineUpdateCount editorRebuilds=$_dbgEditorRebuildCount "
+        "musicSeek=$_dbgMusicSeekCount musicPlay=$_dbgMusicPlayCount musicPause=$_dbgMusicPauseCount "
+        "errors=$_dbgErrorCount",
       );
       _dbgSeekCount = 0;
       _dbgPlayCount = 0;
@@ -175,6 +186,12 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       _dbgMuteChangeCount = 0;
       _dbgTimelineUpdateCount = 0;
       _dbgEditorRebuildCount = 0;
+      _dbgMusicSeekCount = 0;
+      _dbgMusicPlayCount = 0;
+      _dbgMusicPauseCount = 0;
+      // _dbgErrorCount/_dbgLastError deliberately NOT reset — an error
+      // should stay visible on screen until the next one replaces it,
+      // not silently disappear after 10s.
     });
   }
 
@@ -465,6 +482,19 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     if (transport == null || controller == null || !controller.value.isInitialized || project == null) {
       return;
     }
+    // Diagnostic wrap, per a persisting user report ("timeline duruyor"/
+    // music never resuming after a scrub) that survived the duration-
+    // clamp fix: an uncaught exception anywhere below would silently
+    // abort THIS notifyListeners() round for every listener registered
+    // AFTER this one on the same ChangeNotifier — including
+    // _Timeline's own _onTransportPositionChanged (its auto-follow),
+    // which would look exactly like "the timeline stops" while the
+    // native video/music players keep running underneath, unaffected
+    // (Dart-side exception, not a platform one). Caught, logged, and
+    // surfaced on the on-screen debug overlay instead of guessed at —
+    // the same evidence-first approach that found the real seek-loop
+    // bug earlier in this diagnosis chain.
+    try {
 
     // Gated on transport.isPlaying CHANGING from what we last told the
     // controller — not on comparing against controller.value.isPlaying
@@ -524,7 +554,10 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     if (bg == null) {
       _musicInRegion = false;
       if (music.value.isPlaying) {
-        if (kDebugMode) _log.fine("MUSIC_PAUSE reason=NO_MUSIC");
+        if (kDebugMode) {
+          _log.fine("MUSIC_PAUSE reason=NO_MUSIC");
+          _dbgMusicPauseCount++;
+        }
         unawaited(music.pause());
       }
       return;
@@ -572,6 +605,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       final int generation = ++_audioSyncGeneration;
       if (kDebugMode) {
         _log.fine("MUSIC_SEEK target=$target reason=${wasInRegion ? 'DRIFT' : 'ENTER_REGION'}");
+        _dbgMusicSeekCount++;
       }
       // Fire-and-forget on purpose (section 6): video playback and
       // transport updates must never wait on this. The generation check
@@ -590,7 +624,10 @@ class _TrimStepState extends ConsumerState<TrimStep> {
         if (playAfter) {
           if (_lastAppliedMusicPlaying != true) {
             _lastAppliedMusicPlaying = true;
-            if (kDebugMode) _log.fine("MUSIC_PLAY reason=POST_SEEK");
+            if (kDebugMode) {
+              _log.fine("MUSIC_PLAY reason=POST_SEEK");
+              _dbgMusicPlayCount++;
+            }
             await music.play();
           }
         } else if (_lastAppliedMusicPlaying != false) {
@@ -602,13 +639,26 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       if (decision.playback == MusicPlaybackIntent.playing) {
         if (_lastAppliedMusicPlaying != true) {
           _lastAppliedMusicPlaying = true;
-          if (kDebugMode) _log.fine("MUSIC_PLAY reason=RESUME");
+          if (kDebugMode) {
+            _log.fine("MUSIC_PLAY reason=RESUME");
+            _dbgMusicPlayCount++;
+          }
           unawaited(music.play());
         }
       } else if (_lastAppliedMusicPlaying != false) {
         _lastAppliedMusicPlaying = false;
-        if (kDebugMode) _log.fine("MUSIC_PAUSE reason=${transport.isScrubbing ? 'SCRUB' : 'OUT_OF_REGION'}");
+        if (kDebugMode) {
+          _log.fine("MUSIC_PAUSE reason=${transport.isScrubbing ? 'SCRUB' : 'OUT_OF_REGION'}");
+          _dbgMusicPauseCount++;
+        }
         unawaited(music.pause());
+      }
+    }
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        _dbgErrorCount++;
+        _dbgLastError = "$e";
+        _log.severe("_onTransportChanged threw — this tick's remaining listeners were skipped", e, stackTrace);
       }
     }
   }
@@ -1258,8 +1308,14 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                                         child: Text(
                                           "seek=$_dbgSeekCount play=$_dbgPlayCount pause=$_dbgPauseCount\n"
                                           "speed=$_dbgSpeedChangeCount mute=$_dbgMuteChangeCount\n"
-                                          "tl=$_dbgTimelineUpdateCount rebuild=$_dbgEditorRebuildCount",
-                                          style: const TextStyle(color: Colors.greenAccent, fontSize: 10),
+                                          "tl=$_dbgTimelineUpdateCount rebuild=$_dbgEditorRebuildCount\n"
+                                          "mSeek=$_dbgMusicSeekCount mPlay=$_dbgMusicPlayCount mPause=$_dbgMusicPauseCount\n"
+                                          "musicInRegion=$_musicInRegion errors=$_dbgErrorCount"
+                                          "${_dbgLastError != null ? '\n$_dbgLastError' : ''}",
+                                          style: TextStyle(
+                                            color: _dbgErrorCount > 0 ? Colors.redAccent : Colors.greenAccent,
+                                            fontSize: 10,
+                                          ),
                                         ),
                                       ),
                                     ),
