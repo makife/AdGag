@@ -3,6 +3,7 @@ package com.adgag.adgag.editor
 import android.content.Context
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.getValue
@@ -193,7 +194,26 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
             }
             .build()
         DebugLog.log(context, "buildComposition: clippedVideo MediaItem built")
-        val videoItem = EditedMediaItem.Builder(clippedVideo).build()
+        // SECOND real crash found via the checkpoint log, after the 1ms-
+        // clip fix (above) didn't actually resolve it: read
+        // CompositionPlayer's own source directly
+        // (createNonLoopingMediaSource in CompositionPlayer.java) and
+        // found `checkArgument(editedMediaItem.durationUs != C.TIME_UNSET)`
+        // — unlike Transformer (export), where setDurationUs is optional
+        // and can be inferred from the file itself,
+        // EditedMediaItem.Builder's own doc comment confirms this is
+        // NOT optional for the player: it needs every item's duration
+        // known upfront to build its internal playback graph before
+        // decoding starts. This project's EditedMediaItems never called
+        // setDurationUs at all — every single setComposition() call was
+        // hitting this checkArgument. Probed with MediaMetadataRetriever
+        // (durationUs must reflect the SOURCE's full, untrimmed length
+        // per the setter's own doc comment, not the clipped range).
+        val sourceDurationUs = probeDurationUs(context, Uri.fromFile(File(sourcePath)))
+        DebugLog.log(context, "buildComposition: sourceDurationUs=$sourceDurationUs")
+        val videoItem = EditedMediaItem.Builder(clippedVideo)
+            .apply { if (sourceDurationUs != null) setDurationUs(sourceDurationUs) }
+            .build()
         DebugLog.log(context, "buildComposition: videoItem built")
         // EditedMediaItemSequence has no public constructor as of media3
         // 1.11.0 (confirmed by reading the real sources jar downloaded
@@ -234,7 +254,11 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         // above) rather than guessed, since a wrong signature is a build
         // break, not a soft failure. Music plays at its own source level
         // for now.
-        val musicItem = EditedMediaItem.Builder(MediaItem.fromUri(uri)).build()
+        val musicDurationUs = probeDurationUs(context, uri)
+        DebugLog.log(context, "buildComposition: musicDurationUs=$musicDurationUs")
+        val musicItem = EditedMediaItem.Builder(MediaItem.fromUri(uri))
+            .apply { if (musicDurationUs != null) setDurationUs(musicDurationUs) }
+            .build()
         // isLooping=false (withAudioFrom's default): this app's
         // BackgroundAudio model (see the Flutter side's VideoProject)
         // never asked for the music to loop past the clip's own end —
@@ -321,6 +345,32 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
             cachedPath = path
             cachedResult = result
             return result
+        }
+
+        /**
+         * Probes [uri]'s real duration synchronously via
+         * [MediaMetadataRetriever] (a plain, stable platform API — not
+         * Media3-specific), needed because [CompositionPlayer] requires
+         * every [EditedMediaItem]'s `durationUs` known upfront (see the
+         * call site's own comment on the real crash this fixes).
+         * `setDataSource(Context, Uri)` — not the plain-`String`
+         * overload — handles both `file://` (the captured clip) and
+         * `content://` (a music file picked via the system audio
+         * picker) URIs uniformly.
+         */
+        fun probeDurationUs(context: Context, uri: Uri): Long? {
+            val retriever = MediaMetadataRetriever()
+            return try {
+                retriever.setDataSource(context, uri)
+                val durationMsString = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                val durationMs = durationMsString?.toLongOrNull()
+                if (durationMs != null && durationMs > 0) durationMs * 1000 else null
+            } catch (e: Exception) {
+                Log.w("EditorViewModel", "probeDurationUs failed for $uri", e)
+                null
+            } finally {
+                retriever.release()
+            }
         }
     }
 }
