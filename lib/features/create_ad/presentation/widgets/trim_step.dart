@@ -207,41 +207,58 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   }
 
   Timer? _playbackWatchdog;
+  Duration? _watchdogLastVideoPos;
+  Duration? _watchdogLastMusicPos;
 
-  /// Recovers from a GENUINE (sustained) mismatch between what this
-  /// screen last told a controller to be and what it actually reports —
-  /// confirmed via two real user screenshots showing the exact pattern
-  /// on both sides: `lastV=true v=false` (video) in one, `lastM=true
-  /// m=false` (music) in the other, each persisting with music/video
-  /// respectively still advancing normally.
+  /// Recovers from a GENUINE (sustained) playback freeze — but, per two
+  /// FURTHER user screenshots after the first version of this watchdog
+  /// shipped, `VideoPlayerController.value.isPlaying` itself turned out
+  /// to be an unreliable signal on the reporting device: it read `false`
+  /// for many consecutive seconds while `vPos` kept advancing completely
+  /// normally in lockstep with `mPos` — i.e. the flag was simply wrong,
+  /// not the video actually frozen. Trusting that flag (this watchdog's
+  /// first version) meant firing needless retry `play()` calls against
+  /// an already-healthy player, which could itself have been
+  /// contributing interference rather than helping.
+  ///
+  /// Freeze detection is now POSITION-based instead: compare the
+  /// controller's own position against what it was on the PREVIOUS
+  /// watchdog tick (800ms ago) — if it genuinely has not moved at all
+  /// while this screen wants it playing, that's real, direct evidence
+  /// of a stall, independent of whatever the `isPlaying` flag claims.
   ///
   /// Why this can't live inside `_onTransportChanged`: that method only
   /// runs in reaction to `_transport` notifying, which itself only
   /// happens when `_reportPlayerPosition` sees the *video's* position
   /// actually change. If the video controller genuinely stops
-  /// advancing (not just a transient buffering flicker — a real
-  /// decoder failure/resource contention, plausibly from running two
-  /// simultaneous `VideoPlayerController`-backed decoders on the same
-  /// device), position reports stop entirely, so `_onTransportChanged`
-  /// would never run again to notice or retry — exactly the deadlock
-  /// this round's screenshots caught in the act. This watchdog is
+  /// advancing, position reports stop entirely, so `_onTransportChanged`
+  /// would never run again to notice or retry. This watchdog is
   /// intentionally independent of `_transport`'s own notification
   /// stream (same reasoning as `_DebugOverlay`'s own timer) and runs on
   /// a deliberately slow cadence (800ms, not every ~100ms tick) so it
-  /// corrects a SUSTAINED mismatch without reintroducing the original
+  /// corrects a SUSTAINED stall without reintroducing the original
   /// play()-restart-latency stutter a single transient flicker would
   /// cause if retried immediately.
   void _startPlaybackWatchdog() {
     _playbackWatchdog?.cancel();
+    _watchdogLastVideoPos = null;
+    _watchdogLastMusicPos = null;
     _playbackWatchdog = Timer.periodic(const Duration(milliseconds: 800), (_) {
       final EditorTransport? transport = _transport;
       final VideoPlayerController? controller = _controller;
       if (transport == null || controller == null || !controller.value.isInitialized) {
         return;
       }
-      if (transport.isPlaying && !controller.value.isPlaying) {
+
+      final Duration videoPos = controller.value.position;
+      final bool videoFrozen =
+          transport.isPlaying && _watchdogLastVideoPos != null && videoPos == _watchdogLastVideoPos;
+      _watchdogLastVideoPos = videoPos;
+      if (videoFrozen) {
         if (kDebugMode) {
-          _log.warning("VIDEO_WATCHDOG: transport wants playing, native reports paused — retrying play()");
+          _log.warning(
+            "VIDEO_WATCHDOG: position hasn't advanced in 800ms while transport wants playing — retrying play()",
+          );
         }
         unawaited(controller.play());
       }
@@ -250,6 +267,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       final VideoProject? project = ref.read(editorControllerProvider);
       final BackgroundAudio? bg = project?.bgAudio;
       if (music == null || !music.value.isInitialized || project == null || bg == null) {
+        _watchdogLastMusicPos = null;
         return;
       }
       // Recompute the decision fresh (not just "call play() blindly") so
@@ -264,9 +282,14 @@ class _TrimStepState extends ConsumerState<TrimStep> {
         wasInRegion: _musicInRegion,
         musicPlayerPosition: music.value.position,
       );
-      if (decision.playback == MusicPlaybackIntent.playing && !music.value.isPlaying) {
+      final Duration musicPos = music.value.position;
+      final bool musicFrozen = decision.playback == MusicPlaybackIntent.playing &&
+          _watchdogLastMusicPos != null &&
+          musicPos == _watchdogLastMusicPos;
+      _watchdogLastMusicPos = musicPos;
+      if (musicFrozen) {
         if (kDebugMode) {
-          _log.warning("MUSIC_WATCHDOG: should be playing, native reports paused — resyncing");
+          _log.warning("MUSIC_WATCHDOG: position hasn't advanced in 800ms while it should be playing — resyncing");
         }
         _requestMusicSeek(
           EditorTransport.musicLocalTimeAt(bg, transport.currentTime, project.trimmedDuration) ?? Duration.zero,
