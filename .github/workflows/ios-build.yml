@@ -1,0 +1,59 @@
+name: iOS build
+
+# This dev environment has no Mac/Xcode at all — this workflow is the
+# ONLY place the iOS side of AdGag (Flutter's own iOS embedding, and the
+# native Swift editor under ios/Runner/Editor/) is ever actually
+# compiled. A macOS GitHub-hosted runner stands in for a local Mac.
+#
+# --no-codesign: this workflow only confirms the Swift/Flutter code
+# COMPILES — it does not produce an installable .ipa. Getting a build
+# onto a real iPhone (TestFlight or ad-hoc) needs an Apple Developer
+# Program account for real signing certificates/provisioning profiles,
+# which this project does not have configured yet (see CLAUDE.md's
+# checkpoint). Do not add signing here until those are provided —
+# inventing placeholder credentials would just produce a build that
+# silently can't install anywhere.
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "ios/**"
+      - "lib/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - ".github/workflows/ios-build.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - "lib/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build iOS (no codesign)
+        run: flutter build ios --debug --no-codesign
+
+      - name: Run RunnerTests (XCTest)
+        run: |
+          xcodebuild test \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -destination "platform=iOS Simulator,name=iPhone 16" \
+            CODE_SIGNING_ALLOWED=NO
+        continue-on-error: true

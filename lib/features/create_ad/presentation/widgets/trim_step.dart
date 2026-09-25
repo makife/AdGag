@@ -1654,14 +1654,18 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                   value: _openStandaloneRawPlayerRoute,
                   child: const Text("Standalone route (debug)"),
                 ),
-              // Phase 1 native editor (Kotlin/Media3 CompositionPlayer)
-              // — Android only until the iOS/Swift equivalent lands.
+              // Phase 1 native editor — Kotlin/Media3 CompositionPlayer
+              // on Android, Swift/AVFoundation on iOS, same
+              // "com.adgag.adgag/native_editor" channel contract on both.
               // Debug-menu entry point, not the production path yet; see
-              // _openNativeEditor's own doc comment.
-              if (kDebugMode && Platform.isAndroid)
+              // _openNativeEditor's own doc comment. The iOS side has
+              // never been run at all (no Mac in this dev environment —
+              // only GitHub Actions compiles it) — reachable here so it
+              // can actually be tested once a real build exists.
+              if (kDebugMode && (Platform.isAndroid || Platform.isIOS))
                 PopupMenuItem<VoidCallback>(
                   value: () => unawaited(_openNativeEditor()),
-                  child: const Text("Native editor (debug, Android)"),
+                  child: Text("Native editor (debug, ${Platform.isAndroid ? 'Android' : 'iOS'})"),
                 ),
             ],
           ),
