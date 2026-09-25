@@ -61,7 +61,16 @@ class MainActivity : FlutterActivity() {
         }
         val result = pendingResult ?: return
         pendingResult = null
-        if (resultCode == Activity.RESULT_OK && data != null) {
+        val errorMessage = data?.getStringExtra(NativeEditorActivity.EXTRA_ERROR)
+        if (errorMessage != null) {
+            // A real crash/failure inside the native editor, caught and
+            // surfaced (see NativeEditorActivity's own uncaught-exception
+            // handling) instead of taking the whole app down — reaches
+            // Flutter as a genuine PlatformException, not a silent null,
+            // so the caller can show the real reason instead of just
+            // "nothing happened."
+            result.error("NATIVE_EDITOR_CRASHED", errorMessage, null)
+        } else if (resultCode == Activity.RESULT_OK && data != null) {
             val outputPath = data.getStringExtra(NativeEditorActivity.EXTRA_OUTPUT_PATH)
             val durationMs = data.getLongExtra(NativeEditorActivity.EXTRA_OUTPUT_DURATION_MS, 0L)
             if (outputPath != null) {

@@ -12,7 +12,6 @@ import "package:uuid/uuid.dart";
 import "package:video_player/video_player.dart";
 
 import "../../../../core/media/media_providers.dart";
-import "../../../../core/media/native_editor_bridge.dart";
 import "../../../../core/router/app_shell.dart";
 import "../../../../core/router/route_paths.dart";
 import "../../../../core/media/video_editor_service.dart";
@@ -475,34 +474,6 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     _rawController = null;
     setState(() => _rawPreviewMode = false);
     _startInitialization();
-  }
-
-  /// Opens the native (Kotlin/Media3 CompositionPlayer on Android)
-  /// editor screen — see [NativeEditorBridge]'s own doc comment for why
-  /// this exists at all. Debug-menu entry point only, not the
-  /// production creation-flow path, until phase 1 (trim + one
-  /// background-music attachment, no text/stickers/filters/speed yet)
-  /// is confirmed working well on a real device — swapping the
-  /// production entry point before then would regress functionality
-  /// for every Android user, not just add a new option.
-  Future<void> _openNativeEditor() async {
-    final LocalVideoDraft? draft = ref.read(createAdFlowControllerProvider).capturedDraft;
-    if (draft == null || !mounted) {
-      return;
-    }
-    try {
-      final NativeEditorResult? result = await NativeEditorBridge.openEditor(draft.filePath);
-      if (result == null || !mounted) {
-        return; // User backed out of the native editor without exporting.
-      }
-      ref.read(createAdFlowControllerProvider.notifier).onVideoTrimmed(
-            LocalVideoDraft(filePath: result.filePath, duration: Duration(milliseconds: result.durationMs)),
-          );
-    } catch (e) {
-      if (mounted) {
-        _showSnack("Native editor failed: $e");
-      }
-    }
   }
 
   /// videoeditor10.txt's standalone-route experiment: uses
@@ -1653,19 +1624,6 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                 PopupMenuItem<VoidCallback>(
                   value: _openStandaloneRawPlayerRoute,
                   child: const Text("Standalone route (debug)"),
-                ),
-              // Phase 1 native editor — Kotlin/Media3 CompositionPlayer
-              // on Android, Swift/AVFoundation on iOS, same
-              // "com.adgag.adgag/native_editor" channel contract on both.
-              // Debug-menu entry point, not the production path yet; see
-              // _openNativeEditor's own doc comment. The iOS side has
-              // never been run at all (no Mac in this dev environment —
-              // only GitHub Actions compiles it) — reachable here so it
-              // can actually be tested once a real build exists.
-              if (kDebugMode && (Platform.isAndroid || Platform.isIOS))
-                PopupMenuItem<VoidCallback>(
-                  value: () => unawaited(_openNativeEditor()),
-                  child: Text("Native editor (debug, ${Platform.isAndroid ? 'Android' : 'iOS'})"),
                 ),
             ],
           ),

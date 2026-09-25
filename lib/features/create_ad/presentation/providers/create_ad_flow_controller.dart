@@ -21,6 +21,13 @@ import "create_ad_flow_state.dart";
 /// with its own edit state; nothing else should write to it.
 final StateProvider<bool> hasUnsavedCreateEditsProvider = StateProvider<bool>((ref) => false);
 
+/// True once the user has explicitly chosen "Use classic editor instead"
+/// after a native-editor failure (see `NativeEditorStep`) — `CreateAdScreen`
+/// reads this to fall back to the Flutter `TrimStep` for the rest of this
+/// creation session. Reset on [CreateAdFlowController.retake] so a fresh
+/// capture always tries the native editor again first.
+final StateProvider<bool> useClassicEditorProvider = StateProvider<bool>((ref) => false);
+
 /// Drives the single creation engine described in CLAUDE.md section 38:
 /// subject -> capture -> (trim if needed) -> caption -> publish -> upload
 /// -> processing -> ready. AD THIS ([startAdThis]) reuses this same
@@ -78,6 +85,7 @@ final class CreateAdFlowController extends Notifier<CreateAdFlowState> {
   /// step's "Retake" action).
   void retake() {
     state = state.copyWith(step: CreateAdStep.capture);
+    ref.read(useClassicEditorProvider.notifier).state = false;
   }
 
   void setCaption(String caption) {

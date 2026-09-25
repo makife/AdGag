@@ -43,7 +43,7 @@
         <activity
             android:name=".editor.NativeEditorActivity"
             android:exported="false"
-            android:theme="@style/LaunchTheme"
+            android:theme="@style/NormalTheme"
             android:windowSoftInputMode="adjustResize" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

@@ -1,7 +1,10 @@
 package com.adgag.adgag.editor
 
 import android.content.Context
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -155,7 +158,21 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         // constructor failed to compile) — withAudioAndVideoFrom/
         // withAudioFrom are the current, non-deprecated static factories
         // over EditedMediaItemSequence.Builder.
-        val videoSequence = EditedMediaItemSequence.withAudioAndVideoFrom(ImmutableList.of(videoItem))
+        //
+        // Real crash found on first physical-device test: unconditionally
+        // calling withAudioAndVideoFrom REQUIRES the sequence to produce
+        // an audio track — if the captured source clip genuinely has no
+        // audio track (silent recording, muted gallery import), Media3's
+        // internal pipeline has nothing to satisfy that requirement with
+        // and throws. Probing the real source file first (MediaExtractor,
+        // a plain stable Android API, not Media3-specific) and only
+        // requesting audio+video when an audio track actually exists
+        // fixes this at the source instead of guessing at a workaround.
+        val videoSequence = if (sourceHasAudioTrack(sourcePath)) {
+            EditedMediaItemSequence.withAudioAndVideoFrom(ImmutableList.of(videoItem))
+        } else {
+            EditedMediaItemSequence.withVideoFrom(ImmutableList.of(videoItem))
+        }
 
         val uri = musicUri
         if (uri == null) {
@@ -231,5 +248,31 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
 
     override fun onCleared() {
         player.release()
+    }
+
+    private companion object {
+        /** Cached per source path — the source file never changes mid-session. */
+        var cachedPath: String? = null
+        var cachedResult: Boolean = false
+
+        fun sourceHasAudioTrack(path: String): Boolean {
+            if (cachedPath == path) return cachedResult
+            val extractor = MediaExtractor()
+            val result = try {
+                extractor.setDataSource(path)
+                (0 until extractor.trackCount).any { i ->
+                    val mime = extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME)
+                    mime?.startsWith("audio/") == true
+                }
+            } catch (e: Exception) {
+                Log.w("EditorViewModel", "sourceHasAudioTrack probe failed, assuming no audio track", e)
+                false
+            } finally {
+                extractor.release()
+            }
+            cachedPath = path
+            cachedResult = result
+            return result
+        }
     }
 }

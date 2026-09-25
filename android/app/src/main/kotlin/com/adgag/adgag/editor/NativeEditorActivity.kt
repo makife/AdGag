@@ -3,6 +3,7 @@ package com.adgag.adgag.editor
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -32,6 +33,7 @@ class NativeEditorActivity : ComponentActivity() {
         const val EXTRA_OUTPUT_PATH = "output_path"
         const val EXTRA_OUTPUT_DURATION_MS = "output_duration_ms"
         const val EXTRA_ERROR = "error"
+        private const val TAG = "NativeEditorActivity"
     }
 
     private val viewModel: EditorViewModel by viewModels {
@@ -45,26 +47,79 @@ class NativeEditorActivity : ComponentActivity() {
         }
     }
 
+    private var previousExceptionHandler: Thread.UncaughtExceptionHandler? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            EditorScreen(
-                viewModel = viewModel,
-                onCancel = {
-                    setResult(RESULT_CANCELED)
-                    finish()
-                },
-                onExported = { path, durationMs ->
+        // Real user report: this screen crashed the whole app on first
+        // physical-device test with no way to see why (no ADB access in
+        // this dev environment, only the user's own screenshot of the
+        // system "app has stopped" dialog). Rather than guess again at
+        // what a stack trace would have said, this makes the crash
+        // recoverable AND visible: any uncaught exception anywhere in
+        // this Activity's lifetime (Compose recomposition, a background
+        // coroutine inside EditorViewModel, anything) is caught here,
+        // finishes the Activity cleanly with the real exception text
+        // instead of killing the process, and MainActivity.onActivityResult
+        // surfaces it as a real Flutter-side error message — the same
+        // "never silently fail, never require a connected computer to
+        // diagnose" discipline this project's Flutter/Dart side has used
+        // throughout its own debugging history. Scoped to only this
+        // Activity's lifetime (installed in onCreate, restored in
+        // onDestroy) so it can't mask an unrelated crash elsewhere in the
+        // app after the user leaves this screen.
+        previousExceptionHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Log.e(TAG, "Uncaught exception in native editor", throwable)
+            try {
+                runOnUiThread {
                     val result = Intent().apply {
-                        putExtra(EXTRA_OUTPUT_PATH, path)
-                        putExtra(EXTRA_OUTPUT_DURATION_MS, durationMs)
+                        putExtra(EXTRA_ERROR, "${throwable::class.java.simpleName}: ${throwable.message}\n${throwable.stackTraceToString()}")
                     }
-                    setResult(RESULT_OK, result)
+                    setResult(RESULT_CANCELED, result)
                     finish()
-                },
-                exportOutputPath = outputFilePath(this),
-            )
+                }
+            } catch (recoveryFailure: Exception) {
+                // Recovery itself failed (e.g. this Activity is already
+                // finishing) — fall back to the platform's own crash
+                // handling rather than silently swallowing everything.
+                Log.e(TAG, "Crash recovery itself failed", recoveryFailure)
+                previousExceptionHandler?.uncaughtException(thread, throwable)
+            }
         }
+
+        try {
+            setContent {
+                EditorScreen(
+                    viewModel = viewModel,
+                    onCancel = {
+                        setResult(RESULT_CANCELED)
+                        finish()
+                    },
+                    onExported = { path, durationMs ->
+                        val result = Intent().apply {
+                            putExtra(EXTRA_OUTPUT_PATH, path)
+                            putExtra(EXTRA_OUTPUT_DURATION_MS, durationMs)
+                        }
+                        setResult(RESULT_OK, result)
+                        finish()
+                    },
+                    exportOutputPath = outputFilePath(this),
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize native editor", e)
+            val result = Intent().apply {
+                putExtra(EXTRA_ERROR, "${e::class.java.simpleName}: ${e.message}\n${e.stackTraceToString()}")
+            }
+            setResult(RESULT_CANCELED, result)
+            finish()
+        }
+    }
+
+    override fun onDestroy() {
+        Thread.setDefaultUncaughtExceptionHandler(previousExceptionHandler)
+        super.onDestroy()
     }
 
     override fun onBackPressed() {
