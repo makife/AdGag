@@ -159,14 +159,38 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
 
     private fun buildComposition(): Composition {
         DebugLog.log(context, "buildComposition: start trimStartMs=$trimStartMs trimEndMs=$trimEndMs")
+        // REAL CRASH FOUND via the on-device checkpoint log: the very
+        // FIRST call to this method (from init{}'s initial
+        // rebuildAndPrepare, called before the player has ever reported
+        // a real duration) ran with trimStartMs=0 and trimEndMs=0 — the
+        // untouched defaults. The old code below always applied SOME
+        // clipping configuration regardless, falling back to
+        // `trimStartMs + 1` when trimEndMs wasn't yet meaningfully set,
+        // which meant this first-ever composition was clipped to
+        // [0ms, 1ms] — a degenerate, near-zero-length clip handed
+        // straight into CompositionPlayer.setComposition(). The
+        // checkpoint log confirmed the crash happens exactly at that
+        // call, immediately after logging trimStartMs=0/trimEndMs=0 —
+        // consistent with this being the actual cause, not just a
+        // plausible theory. Fixed: only apply a ClippingConfiguration
+        // once there's a genuine, positive-length trim window (either
+        // the real duration has been learned and trimEndMs defaulted to
+        // it, or the user actually dragged a trim handle) — otherwise
+        // play the source unclipped, exactly like "no edit yet" should.
+        val hasRealTrimWindow = trimEndMs > trimStartMs
+        DebugLog.log(context, "buildComposition: hasRealTrimWindow=$hasRealTrimWindow")
         val clippedVideo = MediaItem.Builder()
             .setUri(Uri.fromFile(File(sourcePath)))
-            .setClippingConfiguration(
-                MediaItem.ClippingConfiguration.Builder()
-                    .setStartPositionMs(trimStartMs)
-                    .setEndPositionMs(if (trimEndMs > trimStartMs) trimEndMs else trimStartMs + 1)
-                    .build(),
-            )
+            .apply {
+                if (hasRealTrimWindow) {
+                    setClippingConfiguration(
+                        MediaItem.ClippingConfiguration.Builder()
+                            .setStartPositionMs(trimStartMs)
+                            .setEndPositionMs(trimEndMs)
+                            .build(),
+                    )
+                }
+            }
             .build()
         DebugLog.log(context, "buildComposition: clippedVideo MediaItem built")
         val videoItem = EditedMediaItem.Builder(clippedVideo).build()
