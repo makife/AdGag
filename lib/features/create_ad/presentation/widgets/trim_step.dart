@@ -230,6 +230,17 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   Duration? _watchdogLastVideoPos;
   Duration? _watchdogLastMusicPos;
 
+  // Escalation counter: a confirmed user report says music going silent
+  // is PERMANENT (never recovers on its own, video keeps going fine) —
+  // meaning the cheap seekTo()+play() resync below isn't enough on its
+  // own; the decoder itself has likely entered a genuinely broken state
+  // a fresh seek/play command can't revive. After a few consecutive
+  // 800ms cycles of confirmed non-advancement (not just one), escalate
+  // to fully disposing and recreating the music controller from the
+  // same file — see _rebuildMusicController.
+  int _musicWatchdogFailStreak = 0;
+  bool _musicRebuildInProgress = false;
+
   /// Recovers from a GENUINE (sustained) playback freeze — but, per two
   /// FURTHER user screenshots after the first version of this watchdog
   /// shipped, `VideoPlayerController.value.isPlaying` itself turned out
@@ -263,6 +274,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     _playbackWatchdog?.cancel();
     _watchdogLastVideoPos = null;
     _watchdogLastMusicPos = null;
+    _musicWatchdogFailStreak = 0;
     _playbackWatchdog = Timer.periodic(const Duration(milliseconds: 800), (_) {
       final EditorTransport? transport = _transport;
       final VideoPlayerController? controller = _controller;
@@ -308,16 +320,84 @@ class _TrimStepState extends ConsumerState<TrimStep> {
           musicPos == _watchdogLastMusicPos;
       _watchdogLastMusicPos = musicPos;
       if (musicFrozen) {
-        if (kDebugMode) {
-          _log.warning("MUSIC_WATCHDOG: position hasn't advanced in 800ms while it should be playing — resyncing");
-          _logMusicEvent("WATCHDOG_FROZEN");
+        _musicWatchdogFailStreak++;
+        if (_musicWatchdogFailStreak >= 3) {
+          // Three consecutive 800ms cycles (~2.4s) of confirmed zero
+          // movement despite repeated seekTo()+play() resync attempts —
+          // per the user's own confirmation this freeze is PERMANENT,
+          // not something a cheap resync recovers from. Escalate to a
+          // full controller rebuild instead of trying the same thing a
+          // fourth time.
+          _musicWatchdogFailStreak = 0;
+          unawaited(_rebuildMusicController(bg));
+        } else {
+          if (kDebugMode) {
+            _log.warning(
+              "MUSIC_WATCHDOG: position hasn't advanced in 800ms while it should be playing — resyncing "
+              "(attempt $_musicWatchdogFailStreak/3 before rebuild)",
+            );
+            _logMusicEvent("WATCHDOG_FROZEN_$_musicWatchdogFailStreak");
+          }
+          _requestMusicSeek(
+            EditorTransport.musicLocalTimeAt(bg, transport.currentTime, project.trimmedDuration) ?? Duration.zero,
+            playAfter: true,
+          );
         }
-        _requestMusicSeek(
-          EditorTransport.musicLocalTimeAt(bg, transport.currentTime, project.trimmedDuration) ?? Duration.zero,
-          playAfter: true,
-        );
+      } else {
+        _musicWatchdogFailStreak = 0;
       }
     });
+  }
+
+  /// Last-resort recovery when repeated seekTo()+play() resync attempts
+  /// don't revive a genuinely stuck music decoder: dispose it entirely
+  /// and build a fresh `VideoPlayerController` from the same file,
+  /// matching how it was first attached in `_setBgAudio`. Guarded
+  /// against overlapping calls (`_musicRebuildInProgress`) since the
+  /// watchdog could otherwise fire again mid-rebuild.
+  Future<void> _rebuildMusicController(BackgroundAudio bg) async {
+    if (_musicRebuildInProgress || !mounted) {
+      return;
+    }
+    _musicRebuildInProgress = true;
+    if (kDebugMode) {
+      _log.warning("MUSIC_WATCHDOG: sustained freeze survived resync attempts — rebuilding controller from scratch");
+      _logMusicEvent("REBUILD");
+    }
+    final VideoPlayerController? old = _musicController;
+    _musicController = null;
+    _pendingMusicSeek = null;
+    _watchdogLastMusicPos = null;
+    try {
+      await old?.pause();
+    } catch (_) {
+      // Best-effort teardown of a controller already in a broken state.
+    }
+    try {
+      await old?.dispose();
+    } catch (_) {
+      // Same as above.
+    }
+    try {
+      final VideoPlayerController fresh = VideoPlayerController.file(File(bg.filePath));
+      await fresh.initialize();
+      await fresh.setVolume(bg.volume);
+      if (mounted) {
+        setState(() => _musicController = fresh);
+        _lastAppliedMusicPlaying = null;
+        _musicInRegion = false;
+        _onTransportChanged();
+      } else {
+        await fresh.dispose();
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        _log.severe("MUSIC_WATCHDOG: rebuild itself failed", e);
+        _logMusicEvent("REBUILD_FAILED");
+      }
+    } finally {
+      _musicRebuildInProgress = false;
+    }
   }
 
   /// Tears down EVERY normal-mode playback resource (not gated/early-
