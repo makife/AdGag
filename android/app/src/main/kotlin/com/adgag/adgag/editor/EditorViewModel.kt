@@ -75,7 +75,28 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
 
     val player: CompositionPlayer = run {
         DebugLog.log(context, "EditorViewModel: building CompositionPlayer")
-        val built = CompositionPlayer.Builder(context).build()
+        // New crash found on a real device, at a genuinely different
+        // point than the two already fixed this session (video-clip/
+        // duration ones): the checkpoint log stopped right after this
+        // exact log line, with NOTHING after it — not even a "built OK"
+        // — meaning the crash is inside CompositionPlayer.Builder(context)
+        // .build() itself, before any composition/source file is even
+        // involved. That call does real, heavy native work internally
+        // (confirmed by reading CompositionPlayer's own constructor: it
+        // starts a new HandlerThread at THREAD_PRIORITY_AUDIO and sets
+        // up its own GL-backed video graph pipeline) — plausible to fail
+        // under real device resource pressure. The reporting screenshot
+        // showed the device at 6% battery, a real, non-code confounding
+        // factor worth ruling out before assuming this is a code bug —
+        // retest with the device charged before trusting this repros
+        // reliably. Splitting the builder/build() call in two here so
+        // the NEXT log, if it crashes again, at least confirms whether
+        // Builder(context) itself (construction) or .build() (which
+        // does the heavy HandlerThread/GL work) is the actual site.
+        val builder = CompositionPlayer.Builder(context)
+        DebugLog.log(context, "EditorViewModel: CompositionPlayer.Builder(context) constructed, calling build()")
+        val built = builder.build()
+        DebugLog.log(context, "EditorViewModel: builder.build() returned")
         // REAL BUG found via user report ("video sürekli tekrarlı
         // akmıyor... play butonu çalışmıyor"): repeatMode was never set
         // anywhere, so a plain STATE_ENDED was reached at the end of
