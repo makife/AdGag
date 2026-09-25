@@ -95,36 +95,46 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
 
   @override
   Widget build(BuildContext context) {
+    final String? error = _error;
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: _error != null
-              ? Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      const Icon(Icons.error_outline, size: 40),
-                      const SizedBox(height: 12),
-                      Text(
-                        _isCrashLogFromLastAttempt
-                            ? "The native editor crashed last time — here's the checkpoint log leading up to it"
-                            : "Native editor failed",
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                        textAlign: TextAlign.center,
+        child: error != null
+            // Real layout bug found via user report/screenshot
+            // ("BOTTOM OVERFLOWED BY 11785 PIXELS"): a long checkpoint
+            // log (accumulated across several trim/seek edits in a
+            // normal session) genuinely overflowed the old
+            // Center+Column layout, which had no scroll container at
+            // all — pushing Retry off-screen and making this error
+            // state effectively untappable. The icon/title/Retry now
+            // stay fixed; only the log text itself scrolls, in the
+            // space actually available, however long it is.
+            ? Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: <Widget>[
+                    const Icon(Icons.error_outline, size: 40),
+                    const SizedBox(height: 12),
+                    Text(
+                      _isCrashLogFromLastAttempt
+                          ? "The native editor crashed last time — here's the checkpoint log leading up to it"
+                          : "Native editor failed",
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: SelectableText(error, style: const TextStyle(fontSize: 12)),
                       ),
-                      const SizedBox(height: 8),
-                      // Full raw error text, on screen — no ADB/computer
-                      // needed to see why, matching this app's own
-                      // established debugging discipline.
-                      SelectableText(_error!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
-                      const SizedBox(height: 20),
-                      FilledButton(onPressed: () => unawaited(_open()), child: const Text("Retry")),
-                    ],
-                  ),
-                )
-              : (_launching ? const CircularProgressIndicator() : const SizedBox.shrink()),
-        ),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(onPressed: () => unawaited(_open()), child: const Text("Retry")),
+                  ],
+                ),
+              )
+            : Center(
+                child: _launching ? const CircularProgressIndicator() : const SizedBox.shrink(),
+              ),
       ),
     );
   }

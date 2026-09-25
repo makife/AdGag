@@ -79,6 +79,9 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         private set
     var musicUri by mutableStateOf<Uri?>(null)
     var musicVolume by mutableStateOf(1.0f)
+    /** The music file's own real duration, probed once when attached — drives the timeline's music segment width (see EditorScreen's TimelineSection). Null while no music is attached. */
+    var musicDurationMs by mutableStateOf<Long?>(null)
+        private set
     /** 0/90/180/270 — [rotateNinety] is the only mutator, so it can never drift off a multiple of 90. */
     var rotationDegrees by mutableStateOf(0)
         private set
@@ -143,6 +146,7 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
 
     fun setMusic(uri: Uri?) {
         musicUri = uri
+        musicDurationMs = if (uri != null) probeDurationUs(context, uri)?.let { it / 1000 } else null
         val wasPlaying = player.isPlaying
         val resumeAt = player.currentPosition
         rebuildAndPrepare(startAt = resumeAt, playWhenReady = wasPlaying)

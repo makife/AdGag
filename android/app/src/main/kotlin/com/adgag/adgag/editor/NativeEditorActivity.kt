@@ -92,15 +92,30 @@ class NativeEditorActivity : ComponentActivity() {
 
         try {
             DebugLog.log(applicationContext, "onCreate: about to call setContent")
+            var composedOnce = false
             setContent {
-                DebugLog.log(applicationContext, "setContent: composing EditorScreen")
+                // Real bug found via user report ("editor page is very
+                // sluggish"): this DebugLog.log call used to sit directly
+                // in the composable body, meaning it ran — as a
+                // SYNCHRONOUS, BLOCKING FILE WRITE ON THE MAIN THREAD —
+                // on every single recomposition (every play/pause, trim
+                // drag, rotate, mute tap all trigger one). A local flag
+                // instead of e.g. LaunchedEffect(Unit): this needs to run
+                // exactly once, at the very first composition, with zero
+                // Compose scheduling overhead of its own.
+                if (!composedOnce) {
+                    composedOnce = true
+                    DebugLog.log(applicationContext, "setContent: composing EditorScreen (first time)")
+                }
                 EditorScreen(
                     viewModel = viewModel,
                     onCancel = {
+                        DebugLog.clear(applicationContext) // normal exit, not a crash — see DebugLog.clear's own doc comment
                         setResult(RESULT_CANCELED)
                         finish()
                     },
                     onExported = { path, durationMs ->
+                        DebugLog.clear(applicationContext) // normal exit, not a crash
                         val result = Intent().apply {
                             putExtra(EXTRA_OUTPUT_PATH, path)
                             putExtra(EXTRA_OUTPUT_DURATION_MS, durationMs)
@@ -127,6 +142,7 @@ class NativeEditorActivity : ComponentActivity() {
     }
 
     override fun onBackPressed() {
+        DebugLog.clear(applicationContext) // normal exit (system back), not a crash
         setResult(RESULT_CANCELED)
         super.onBackPressed()
     }

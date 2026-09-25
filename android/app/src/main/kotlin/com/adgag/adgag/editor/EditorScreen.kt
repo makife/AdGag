@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,9 +16,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -152,7 +155,7 @@ fun EditorScreen(
                     .padding(horizontal = AdGagSpacing.lg.dp, vertical = AdGagSpacing.lg.dp),
             ) {
                 if (viewModel.durationMs > 0) {
-                    TrimSection(viewModel)
+                    TimelineSection(viewModel)
                     Spacer(modifier = Modifier.height(AdGagSpacing.lg.dp))
                 }
 
@@ -176,11 +179,25 @@ fun EditorScreen(
     }
 }
 
+/**
+ * Real user report: "eklediğim müziği timelineda göremiyorum, timeline
+ * yapmamışsın" (can't see the music I added in a timeline, you didn't
+ * build one) — the previous version was just a trim slider with no
+ * visual track at all. This is a real, if minimal, two-row timeline: a
+ * Clip row (the trim slider itself, functionally unchanged — already
+ * proven to work) and a Music row directly beneath it, drawn to scale
+ * against the SAME ruler, showing exactly where the attached music
+ * plays relative to the clip. Music always starts at the trim window's
+ * own start (this phase's `EditorViewModel` has no per-track start-
+ * offset concept yet — matches the actual composition logic, not an
+ * idealized picture of it) and runs for its own real probed duration,
+ * clamped to the trim window's end.
+ */
 @Composable
-private fun TrimSection(viewModel: EditorViewModel) {
+private fun TimelineSection(viewModel: EditorViewModel) {
     Column {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(text = "Trim", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
+            Text(text = "Clip", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
             Text(
                 text = "${formatSeconds(viewModel.trimStartMs)} – ${formatSeconds(viewModel.trimEndMs)}",
                 color = AdGagColors.OnSurfaceMuted,
@@ -205,6 +222,34 @@ private fun TrimSection(viewModel: EditorViewModel) {
                 thumbColor = Color.White,
             ),
         )
+
+        val musicDurationMs = viewModel.musicDurationMs
+        if (viewModel.musicUri != null && musicDurationMs != null && viewModel.durationMs > 0) {
+            Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
+            Text(text = "Music", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
+            Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
+            val totalMs = viewModel.durationMs.toFloat()
+            val segmentStartFraction = (viewModel.trimStartMs / totalMs).coerceIn(0f, 1f)
+            val segmentEndMs = (viewModel.trimStartMs + musicDurationMs).coerceAtMost(viewModel.trimEndMs)
+            val segmentEndFraction = (segmentEndMs / totalMs).coerceIn(segmentStartFraction, 1f)
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(20.dp)
+                    .clip(RoundedCornerShape(AdGagRadius.sm.dp))
+                    .background(AdGagColors.Surface),
+            ) {
+                val trackWidth = maxWidth
+                Box(
+                    modifier = Modifier
+                        .offset(x = trackWidth * segmentStartFraction)
+                        .width(trackWidth * (segmentEndFraction - segmentStartFraction))
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(AdGagRadius.sm.dp))
+                        .background(AdGagColors.GradientBlue.copy(alpha = 0.55f)),
+                )
+            }
+        }
     }
 }
 
@@ -292,17 +337,17 @@ private fun ScrimIconButton(
                 Icon(imageVector = icon, contentDescription = contentDescription, tint = Color.White, modifier = Modifier.size(size * 0.55f))
             }
         } else {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(AdGagRadius.pill.dp))
-                    .background(Color.Transparent)
-                    .padding(horizontal = AdGagSpacing.lg.dp, vertical = AdGagSpacing.sm.dp),
-            ) {
+            // REAL BUG found via user report ("cancel button doesn't
+            // work"): this branch used to be a plain Text with no click
+            // handling at all — onClick was accepted as a parameter but
+            // never actually wired to anything in this code path. Fixed
+            // by using TextButton, the same click-handling widget
+            // NextButton already uses correctly.
+            TextButton(onClick = onClick) {
                 Text(
                     text = text ?: contentDescription,
                     color = Color.White,
                     style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(0.dp),
                 )
             }
         }

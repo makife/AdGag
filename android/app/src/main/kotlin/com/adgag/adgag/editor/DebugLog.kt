@@ -50,4 +50,24 @@ object DebugLog {
         file.delete()
         return content?.takeIf { it.isNotBlank() }
     }
+
+    /**
+     * Real bug found via user report: this log was only ever cleared
+     * when the NEXT session checked it (`readAndClear`) — never at the
+     * end of a session that finished NORMALLY (export succeeded, or the
+     * user cancelled). That meant every ordinary, non-crashing editor
+     * session left its checkpoint trail sitting on disk, and the very
+     * next time the editor opened, `NativeEditorStep` read that leftover
+     * log and reported "the native editor crashed last time" — a false
+     * positive, not a real crash. Call this from every normal exit path
+     * (export complete, cancel) so only a GENUINE crash ever leaves
+     * something for the next session to find.
+     */
+    fun clear(context: Context) {
+        try {
+            File(context.filesDir, FILE_NAME).delete()
+        } catch (e: Exception) {
+            // Best-effort only.
+        }
+    }
 }
