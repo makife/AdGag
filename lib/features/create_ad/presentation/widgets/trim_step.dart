@@ -152,6 +152,11 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   Duration? _pendingMusicSeek;
   bool _musicSeekInFlight = false;
   bool _pendingMusicPlayAfter = false;
+  // See _requestMusicSeek's own doc comment: distinguishes an ordinary
+  // per-tick drift correction (seek only, no forced play() — the player
+  // is presumed already playing) from a confirmed-stall recovery (seek
+  // AND force a fresh play(), since the player has genuinely stopped).
+  bool _pendingMusicForcePlay = false;
 
   final _log = AppLogger.named("TrimStepPlayback");
 
@@ -341,6 +346,10 @@ class _TrimStepState extends ConsumerState<TrimStep> {
           _requestMusicSeek(
             EditorTransport.musicLocalTimeAt(bg, transport.currentTime, project.trimmedDuration) ?? Duration.zero,
             playAfter: true,
+            // Confirmed stall (position frozen across an 800ms watchdog
+            // tick, not just ordinary drift) — bypass the cache so a
+            // genuinely stopped player actually gets a fresh play().
+            forcePlay: true,
           );
         }
       } else {
@@ -869,9 +878,29 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   /// time; newer calls just update the pending target/intent, and the
   /// loop naturally converges to the latest one instead of firing
   /// concurrent, self-invalidating seeks.
-  void _requestMusicSeek(Duration target, {required bool playAfter}) {
+  ///
+  /// [forcePlay] distinguishes two genuinely different situations that
+  /// both end up calling this method with `playAfter: true`, found via
+  /// a real user report after this distinction was missing: an ordinary
+  /// per-tick DRIFT correction during otherwise-healthy playback (two
+  /// independently-clocked `VideoPlayerController`s naturally drift
+  /// apart by more than the 150ms threshold every second or so — this
+  /// is normal, not a failure) only needs a `seekTo()`; forcing a fresh
+  /// `play()` on every one of these (which is what happens dozens of
+  /// times per second of healthy playback, confirmed via the on-screen
+  /// debug overlay's `PLAY/POST_SEEK` log firing every ~150-200ms) was
+  /// itself audibly disruptive — "kesik kesik çalıyor" (choppy,
+  /// stop-start playback), a regression introduced by an earlier fix
+  /// that removed the play()-call gate entirely to solve a DIFFERENT
+  /// problem (a genuine stall never resuming). A CONFIRMED STALL
+  /// (position frozen across multiple 800ms watchdog ticks) is the
+  /// opposite case — the player has actually stopped, so only that path
+  /// should pass `forcePlay: true` to bypass the cache and guarantee a
+  /// real play() call actually reaches it.
+  void _requestMusicSeek(Duration target, {required bool playAfter, bool forcePlay = false}) {
     _pendingMusicSeek = target;
     _pendingMusicPlayAfter = playAfter;
+    _pendingMusicForcePlay = forcePlay;
     if (_musicSeekInFlight) {
       return;
     }
@@ -889,6 +918,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
         }
         final Duration target = _pendingMusicSeek!;
         final bool playAfter = _pendingMusicPlayAfter;
+        final bool forcePlay = _pendingMusicForcePlay;
         _pendingMusicSeek = null;
         if (kDebugMode) {
           _log.fine("MUSIC_SEEK_BEGIN target=$target");
@@ -909,38 +939,30 @@ class _TrimStepState extends ConsumerState<TrimStep> {
           // stale ones — see this class's own doc comment on the bug.
           continue;
         }
-        // Real bug found via user report ("music plays correctly for ~1s
-        // after a scrub, then goes silent for the rest of the clip while
-        // video keeps playing fine"): this branch used to gate the
-        // post-seek play() call on `_lastAppliedMusicPlaying != true` —
-        // the same "only tell the controller what changed" optimization
-        // the video side uses. That's correct for the *steady-state, no
-        // seek needed* case (_onTransportChanged's own no-seekTarget
-        // branch below still does this, correctly). But THIS branch runs
-        // after every seek, and once the native player silently stalls
-        // (a real, confirmed-on-device failure mode — see the playback
-        // watchdog's own doc comment), drift between musicPlayerPosition
-        // and the expected position grows without bound every tick,
-        // which means `decideMusicSync` requests a fresh seek+playAfter
-        // on essentially every subsequent transport tick (~100ms) — yet
-        // the cache, already `true` from the first successful play(),
-        // silently swallowed every one of those play() calls, so nothing
-        // could ever actually resume audible output short of a full
-        // controller rebuild (2.4s+ away via the watchdog). A seek is
-        // already a "something needs correcting" event — always
-        // reasserting play()/pause() after one is cheap/idempotent when
-        // the player is already in the right state, and is exactly what
-        // lets a silently-stalled player recover in under a second
-        // instead of only via the slow rebuild path.
+        // See _requestMusicSeek's own doc comment for the two-path
+        // history behind this exact condition. Short version: ordinary
+        // per-tick drift correction (forcePlay: false) must NOT force a
+        // fresh play() every time — two independently-clocked
+        // VideoPlayerControllers drift apart by >150ms naturally, many
+        // times a second, during entirely healthy playback, and forcing
+        // play() on every one of those was itself audibly disruptive
+        // (confirmed via user report + the debug overlay's PLAY/POST_SEEK
+        // firing every ~150-200ms). Only a CONFIRMED STALL (forcePlay:
+        // true, only ever set by the playback watchdog after 3
+        // consecutive 800ms ticks of zero position movement) bypasses
+        // the cache to guarantee a real play() reaches a genuinely
+        // stopped player.
         if (playAfter) {
-          _lastAppliedMusicPlaying = true;
-          if (kDebugMode) {
-            _log.fine("MUSIC_PLAY reason=POST_SEEK");
-            _dbgMusicPlayCount++;
-            _logMusicEvent("PLAY/POST_SEEK");
+          if (forcePlay || _lastAppliedMusicPlaying != true) {
+            _lastAppliedMusicPlaying = true;
+            if (kDebugMode) {
+              _log.fine("MUSIC_PLAY reason=POST_SEEK forced=$forcePlay");
+              _dbgMusicPlayCount++;
+              _logMusicEvent("PLAY/POST_SEEK${forcePlay ? '/FORCED' : ''}");
+            }
+            await music.play();
           }
-          await music.play();
-        } else {
+        } else if (_lastAppliedMusicPlaying != false) {
           _lastAppliedMusicPlaying = false;
           if (kDebugMode) {
             _dbgMusicPauseCount++;
