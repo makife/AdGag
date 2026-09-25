@@ -178,6 +178,26 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   String? _dbgLastError;
   Timer? _dbgReportTimer;
 
+  // A rolling history (not just the current instant) of every music
+  // play/pause transition, each with the exact positions at that
+  // moment — added because catching the precise instant music cuts out
+  // in a single manually-timed screenshot is genuinely hard (a real,
+  // fair complaint). Whatever caused the last cutout is now always
+  // visible on screen afterward, no perfect timing required.
+  final List<String> _dbgMusicEvents = <String>[];
+
+  void _logMusicEvent(String event) {
+    if (!kDebugMode) {
+      return;
+    }
+    final Duration? t = _transport?.currentTime;
+    final Duration? mPos = _musicController?.value.position;
+    _dbgMusicEvents.add("$event t=${t?.inMilliseconds} mPos=${mPos?.inMilliseconds}");
+    if (_dbgMusicEvents.length > 6) {
+      _dbgMusicEvents.removeAt(0);
+    }
+  }
+
   void _startDebugInstrumentation() {
     if (!kDebugMode) {
       return;
@@ -290,6 +310,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       if (musicFrozen) {
         if (kDebugMode) {
           _log.warning("MUSIC_WATCHDOG: position hasn't advanced in 800ms while it should be playing — resyncing");
+          _logMusicEvent("WATCHDOG_FROZEN");
         }
         _requestMusicSeek(
           EditorTransport.musicLocalTimeAt(bg, transport.currentTime, project.trimmedDuration) ?? Duration.zero,
@@ -665,6 +686,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
         if (kDebugMode) {
           _log.fine("MUSIC_PAUSE reason=NO_MUSIC");
           _dbgMusicPauseCount++;
+          _logMusicEvent("PAUSE/NO_MUSIC");
         }
         unawaited(music.pause());
       }
@@ -696,15 +718,30 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     _musicInRegion = !transport.isScrubbing &&
         EditorTransport.musicLocalTimeAt(bg, transport.currentTime, project.trimmedDuration) != null;
 
-    // Section 7 debug invariant: music must never be observed playing
-    // while the decision says it shouldn't be.
+    // Section 7 debug invariant: originally forced a pause whenever
+    // `music.value.isPlaying` read true while the decision said it
+    // shouldn't be. DOWNGRADED to log-only (never acts) after a real
+    // user report of music unexpectedly going silent mid-playback,
+    // combined with direct evidence (two screenshots, see the playback
+    // watchdog's own history) that `VideoPlayerController.value.isPlaying`
+    // is an UNRELIABLE flag on the reporting device — it read `false`
+    // for many consecutive seconds while a controller was demonstrably,
+    // continuously playing. This invariant trusted that exact same
+    // flag as grounds to force a real `.pause()` call; if it's
+    // similarly unreliable in the "stuck true" direction (or simply
+    // wrong at the moment it's read), this would have been actively
+    // CAUSING the reported cutout, not just failing to prevent one.
+    // `_onTransportChanged`'s own regular seekTarget/no-seek branches
+    // already pause music correctly when genuinely needed, gated on
+    // `_lastAppliedMusicPlaying` (this screen's own reliable intent
+    // cache), so this defensive extra pause was never load-bearing.
     if (kDebugMode && music.value.isPlaying && decision.playback == MusicPlaybackIntent.paused) {
       _log.warning(
-        "INVARIANT VIOLATION: music was playing but decision says paused "
+        "INVARIANT OBSERVATION (not acted on): music.value.isPlaying=true but decision says paused "
         "(t=${transport.currentTime}, isPlaying=${transport.isPlaying}, "
-        "isScrubbing=${transport.isScrubbing}) — forcing pause",
+        "isScrubbing=${transport.isScrubbing})",
       );
-      unawaited(music.pause());
+      _logMusicEvent("INVARIANT_OBSERVED_NOT_ACTED");
     }
 
     if (decision.seekTarget != null) {
@@ -719,14 +756,17 @@ class _TrimStepState extends ConsumerState<TrimStep> {
           if (kDebugMode) {
             _log.fine("MUSIC_PLAY reason=RESUME");
             _dbgMusicPlayCount++;
+            _logMusicEvent("PLAY/RESUME");
           }
           unawaited(music.play());
         }
       } else if (_lastAppliedMusicPlaying != false) {
         _lastAppliedMusicPlaying = false;
         if (kDebugMode) {
-          _log.fine("MUSIC_PAUSE reason=${transport.isScrubbing ? 'SCRUB' : 'OUT_OF_REGION'}");
+          final String reason = transport.isScrubbing ? 'SCRUB' : 'OUT_OF_REGION';
+          _log.fine("MUSIC_PAUSE reason=$reason");
           _dbgMusicPauseCount++;
+          _logMusicEvent("PAUSE/$reason");
         }
         unawaited(music.pause());
       }
@@ -799,12 +839,16 @@ class _TrimStepState extends ConsumerState<TrimStep> {
             if (kDebugMode) {
               _log.fine("MUSIC_PLAY reason=POST_SEEK");
               _dbgMusicPlayCount++;
+              _logMusicEvent("PLAY/POST_SEEK");
             }
             await music.play();
           }
         } else if (_lastAppliedMusicPlaying != false) {
           _lastAppliedMusicPlaying = false;
-          if (kDebugMode) _dbgMusicPauseCount++;
+          if (kDebugMode) {
+            _dbgMusicPauseCount++;
+            _logMusicEvent("PAUSE/POST_SEEK");
+          }
           await music.pause();
         }
       }
@@ -1860,7 +1904,13 @@ class _DebugOverlayState extends State<_DebugOverlay> {
         // is transport.currentTime for direct side-by-side comparison
         // against bgStart/bgEnd.
         "bgStart=${bg?.startSec.inMilliseconds} bgEnd=${bgEnd?.inMilliseconds} "
-        "tPos=${transport?.currentTime.inMilliseconds}"
+        "tPos=${transport?.currentTime.inMilliseconds}\n"
+        // Rolling history of the last several music play/pause
+        // transitions (see _logMusicEvent) — catching the exact instant
+        // audio cuts out in a single manually-timed screenshot is
+        // genuinely hard; this shows what just happened even if the
+        // screenshot lands slightly after the fact.
+        "${s._dbgMusicEvents.join('\n')}"
         "${s._dbgLastError != null ? '\n${s._dbgLastError}' : ''}",
         style: TextStyle(
           color: s._dbgErrorCount > 0 ? Colors.redAccent : Colors.greenAccent,
