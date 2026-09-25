@@ -1809,6 +1809,10 @@ class _DebugOverlayState extends State<_DebugOverlay> {
     final VideoPlayerController? controller = s._controller;
     final EditorTransport? transport = s._transport;
     final VideoPlayerController? music = s._musicController;
+    final BackgroundAudio? bg = s.ref.read(editorControllerProvider)?.bgAudio;
+    final Duration? bgEnd = bg == null
+        ? null
+        : bg.startSec + (bg.duration ?? (s._trimmedDuration - bg.startSec));
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       color: Colors.black54,
@@ -1825,7 +1829,15 @@ class _DebugOverlayState extends State<_DebugOverlay> {
         // decoder is truly frozen vs. just unreported.
         "v=${controller?.value.isPlaying} t=${transport?.isPlaying} m=${music?.value.isPlaying}\n"
         "lastV=${s._lastAppliedIsPlaying} lastM=${s._lastAppliedMusicPlaying}\n"
-        "vPos=${controller?.value.position.inMilliseconds} mPos=${music?.value.position.inMilliseconds}"
+        "vPos=${controller?.value.position.inMilliseconds} mPos=${music?.value.position.inMilliseconds}\n"
+        // Added after a report of music audibly cutting out ~500ms into
+        // playback while video keeps going: distinguishes "the music's
+        // own assigned window on the timeline is genuinely that short"
+        // (bgStart/bgEnd would show it) from an actual sync bug — tPos
+        // is transport.currentTime for direct side-by-side comparison
+        // against bgStart/bgEnd.
+        "bgStart=${bg?.startSec.inMilliseconds} bgEnd=${bgEnd?.inMilliseconds} "
+        "tPos=${transport?.currentTime.inMilliseconds}"
         "${s._dbgLastError != null ? '\n${s._dbgLastError}' : ''}",
         style: TextStyle(
           color: s._dbgErrorCount > 0 ? Colors.redAccent : Colors.greenAccent,
