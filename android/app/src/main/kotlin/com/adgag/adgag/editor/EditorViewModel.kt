@@ -55,7 +55,16 @@ import java.io.File
 @UnstableApi
 class EditorViewModel(private val context: Context, private val sourcePath: String) : ViewModel() {
 
-    val player: CompositionPlayer = CompositionPlayer.Builder(context).build()
+    init {
+        DebugLog.log(context, "EditorViewModel: constructor start, sourcePath=$sourcePath")
+    }
+
+    val player: CompositionPlayer = run {
+        DebugLog.log(context, "EditorViewModel: building CompositionPlayer")
+        val built = CompositionPlayer.Builder(context).build()
+        DebugLog.log(context, "EditorViewModel: CompositionPlayer built OK")
+        built
+    }
 
     var durationMs by mutableStateOf(0L)
         private set
@@ -131,17 +140,25 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
 
     /** Rebuilds [Composition] from current trim/music state and reloads it into [player]. */
     private fun rebuildAndPrepare(startAt: Long, playWhenReady: Boolean) {
+        DebugLog.log(context, "rebuildAndPrepare: start startAt=$startAt playWhenReady=$playWhenReady")
         val composition = buildComposition()
+        DebugLog.log(context, "rebuildAndPrepare: composition built, calling player.stop()")
         player.stop()
+        DebugLog.log(context, "rebuildAndPrepare: player.stop() done, calling setComposition")
         player.setComposition(composition)
+        DebugLog.log(context, "rebuildAndPrepare: setComposition done, calling prepare()")
         player.prepare()
+        DebugLog.log(context, "rebuildAndPrepare: prepare() done")
         if (startAt > 0) {
             player.seekTo(startAt)
+            DebugLog.log(context, "rebuildAndPrepare: seekTo done")
         }
         player.playWhenReady = playWhenReady
+        DebugLog.log(context, "rebuildAndPrepare: playWhenReady set, done")
     }
 
     private fun buildComposition(): Composition {
+        DebugLog.log(context, "buildComposition: start trimStartMs=$trimStartMs trimEndMs=$trimEndMs")
         val clippedVideo = MediaItem.Builder()
             .setUri(Uri.fromFile(File(sourcePath)))
             .setClippingConfiguration(
@@ -151,7 +168,9 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
                     .build(),
             )
             .build()
+        DebugLog.log(context, "buildComposition: clippedVideo MediaItem built")
         val videoItem = EditedMediaItem.Builder(clippedVideo).build()
+        DebugLog.log(context, "buildComposition: videoItem built")
         // EditedMediaItemSequence has no public constructor as of media3
         // 1.11.0 (confirmed by reading the real sources jar downloaded
         // from Google's Maven repo, after an initial guess at a plain
@@ -168,15 +187,20 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         // a plain stable Android API, not Media3-specific) and only
         // requesting audio+video when an audio track actually exists
         // fixes this at the source instead of guessing at a workaround.
-        val videoSequence = if (sourceHasAudioTrack(sourcePath)) {
+        val hasAudio = sourceHasAudioTrack(sourcePath)
+        DebugLog.log(context, "buildComposition: sourceHasAudioTrack=$hasAudio")
+        val videoSequence = if (hasAudio) {
             EditedMediaItemSequence.withAudioAndVideoFrom(ImmutableList.of(videoItem))
         } else {
             EditedMediaItemSequence.withVideoFrom(ImmutableList.of(videoItem))
         }
+        DebugLog.log(context, "buildComposition: videoSequence built")
 
         val uri = musicUri
         if (uri == null) {
-            return Composition.Builder(ImmutableList.of(videoSequence)).build()
+            val composition = Composition.Builder(ImmutableList.of(videoSequence)).build()
+            DebugLog.log(context, "buildComposition: composition built (no music), returning")
+            return composition
         }
 
         // Volume/gain control (GainProcessor) is a deliberate phase-2

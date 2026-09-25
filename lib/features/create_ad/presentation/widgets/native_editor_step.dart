@@ -29,11 +29,35 @@ class NativeEditorStep extends ConsumerStatefulWidget {
 class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
   String? _error;
   bool _launching = true;
+  bool _isCrashLogFromLastAttempt = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_open()));
+    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_checkForLeftoverCrashThenOpen()));
+  }
+
+  /// A hard native crash (see `native_editor_bridge.dart`'s own doc
+  /// comment on `readAndClearDebugLog`) kills the whole app process —
+  /// there is no live Dart callback to catch it, only a checkpoint log
+  /// written to disk that survives the crash and can be read back the
+  /// NEXT time this screen is reached. Checked first, before attempting
+  /// to auto-launch the native editor again, so a real crash trace is
+  /// never silently lost.
+  Future<void> _checkForLeftoverCrashThenOpen() async {
+    final String? leftoverLog = await NativeEditorBridge.readAndClearDebugLog();
+    if (!mounted) {
+      return;
+    }
+    if (leftoverLog != null) {
+      setState(() {
+        _error = leftoverLog;
+        _isCrashLogFromLastAttempt = true;
+        _launching = false;
+      });
+      return;
+    }
+    unawaited(_open());
   }
 
   Future<void> _open() async {
@@ -44,6 +68,7 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
     setState(() {
       _launching = true;
       _error = null;
+      _isCrashLogFromLastAttempt = false;
     });
     try {
       final NativeEditorResult? result = await NativeEditorBridge.openEditor(draft.filePath);
@@ -82,9 +107,11 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
                     children: <Widget>[
                       const Icon(Icons.error_outline, size: 40),
                       const SizedBox(height: 12),
-                      const Text(
-                        "Native editor failed",
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      Text(
+                        _isCrashLogFromLastAttempt
+                            ? "The native editor crashed last time — here's the checkpoint log leading up to it"
+                            : "Native editor failed",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),

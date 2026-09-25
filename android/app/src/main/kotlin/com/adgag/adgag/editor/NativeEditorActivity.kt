@@ -50,7 +50,9 @@ class NativeEditorActivity : ComponentActivity() {
     private var previousExceptionHandler: Thread.UncaughtExceptionHandler? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        DebugLog.log(applicationContext, "onCreate: start")
         super.onCreate(savedInstanceState)
+        DebugLog.log(applicationContext, "onCreate: super.onCreate done")
         // Real user report: this screen crashed the whole app on first
         // physical-device test with no way to see why (no ADB access in
         // this dev environment, only the user's own screenshot of the
@@ -89,7 +91,9 @@ class NativeEditorActivity : ComponentActivity() {
         }
 
         try {
+            DebugLog.log(applicationContext, "onCreate: about to call setContent")
             setContent {
+                DebugLog.log(applicationContext, "setContent: composing EditorScreen")
                 EditorScreen(
                     viewModel = viewModel,
                     onCancel = {

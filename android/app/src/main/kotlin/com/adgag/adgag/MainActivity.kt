@@ -2,6 +2,7 @@ package com.adgag.adgag
 
 import android.app.Activity
 import android.content.Intent
+import com.adgag.adgag.editor.DebugLog
 import com.adgag.adgag.editor.NativeEditorActivity
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -47,7 +48,22 @@ class MainActivity : FlutterActivity() {
                     val intent = Intent(this, NativeEditorActivity::class.java).apply {
                         putExtra(NativeEditorActivity.EXTRA_VIDEO_PATH, videoPath)
                     }
+                    DebugLog.log(applicationContext, "MainActivity: about to startActivityForResult")
                     startActivityForResult(intent, editorRequestCode)
+                }
+                // Diagnostic for a real, unexplained problem: the native
+                // editor reportedly closes the whole app with NO visible
+                // error at all — not even the Kotlin-level crash recovery
+                // NativeEditorActivity installs. That signature points at
+                // a NATIVE (not JVM) crash, invisible to
+                // Thread.UncaughtExceptionHandler by construction — see
+                // DebugLog's own doc comment. Reads back whatever
+                // checkpoint log survived to disk from the last attempt,
+                // even a hard-crashed one (a process death kills the
+                // whole app, so this is only ever read on the NEXT
+                // launch, not within the same crashed session).
+                "readAndClearNativeEditorDebugLog" -> {
+                    result.success(DebugLog.readAndClear(applicationContext))
                 }
                 else -> result.notImplemented()
             }
