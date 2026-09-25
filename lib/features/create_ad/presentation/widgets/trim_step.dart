@@ -206,6 +206,76 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     });
   }
 
+  Timer? _playbackWatchdog;
+
+  /// Recovers from a GENUINE (sustained) mismatch between what this
+  /// screen last told a controller to be and what it actually reports —
+  /// confirmed via two real user screenshots showing the exact pattern
+  /// on both sides: `lastV=true v=false` (video) in one, `lastM=true
+  /// m=false` (music) in the other, each persisting with music/video
+  /// respectively still advancing normally.
+  ///
+  /// Why this can't live inside `_onTransportChanged`: that method only
+  /// runs in reaction to `_transport` notifying, which itself only
+  /// happens when `_reportPlayerPosition` sees the *video's* position
+  /// actually change. If the video controller genuinely stops
+  /// advancing (not just a transient buffering flicker — a real
+  /// decoder failure/resource contention, plausibly from running two
+  /// simultaneous `VideoPlayerController`-backed decoders on the same
+  /// device), position reports stop entirely, so `_onTransportChanged`
+  /// would never run again to notice or retry — exactly the deadlock
+  /// this round's screenshots caught in the act. This watchdog is
+  /// intentionally independent of `_transport`'s own notification
+  /// stream (same reasoning as `_DebugOverlay`'s own timer) and runs on
+  /// a deliberately slow cadence (800ms, not every ~100ms tick) so it
+  /// corrects a SUSTAINED mismatch without reintroducing the original
+  /// play()-restart-latency stutter a single transient flicker would
+  /// cause if retried immediately.
+  void _startPlaybackWatchdog() {
+    _playbackWatchdog?.cancel();
+    _playbackWatchdog = Timer.periodic(const Duration(milliseconds: 800), (_) {
+      final EditorTransport? transport = _transport;
+      final VideoPlayerController? controller = _controller;
+      if (transport == null || controller == null || !controller.value.isInitialized) {
+        return;
+      }
+      if (transport.isPlaying && !controller.value.isPlaying) {
+        if (kDebugMode) {
+          _log.warning("VIDEO_WATCHDOG: transport wants playing, native reports paused — retrying play()");
+        }
+        unawaited(controller.play());
+      }
+
+      final VideoPlayerController? music = _musicController;
+      final VideoProject? project = ref.read(editorControllerProvider);
+      final BackgroundAudio? bg = project?.bgAudio;
+      if (music == null || !music.value.isInitialized || project == null || bg == null) {
+        return;
+      }
+      // Recompute the decision fresh (not just "call play() blindly") so
+      // a recovery after a sustained stall lands on the mathematically
+      // correct position, not wherever it happened to be stuck.
+      final MusicSyncDecision decision = EditorTransport.decideMusicSync(
+        bg: bg,
+        currentTime: transport.currentTime,
+        trimmedDuration: project.trimmedDuration,
+        isPlaying: transport.isPlaying,
+        isScrubbing: transport.isScrubbing,
+        wasInRegion: _musicInRegion,
+        musicPlayerPosition: music.value.position,
+      );
+      if (decision.playback == MusicPlaybackIntent.playing && !music.value.isPlaying) {
+        if (kDebugMode) {
+          _log.warning("MUSIC_WATCHDOG: should be playing, native reports paused — resyncing");
+        }
+        _requestMusicSeek(
+          EditorTransport.musicLocalTimeAt(bg, transport.currentTime, project.trimmedDuration) ?? Duration.zero,
+          playAfter: true,
+        );
+      }
+    });
+  }
+
   /// Tears down EVERY normal-mode playback resource (not gated/early-
   /// returned — actually disposed and un-listened) and constructs a
   /// second `VideoPlayerController` whose only operations, anywhere in
@@ -223,6 +293,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       return;
     }
     _dbgReportTimer?.cancel();
+    _playbackWatchdog?.cancel();
     _controller?.removeListener(_reportPlayerPosition);
     _controller?.dispose().ignore();
     _controller = null;
@@ -346,6 +417,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     _transport?.removeListener(_onTransportChanged);
     _transport?.dispose();
     _dbgReportTimer?.cancel();
+    _playbackWatchdog?.cancel();
     _lastAppliedMute = false;
     _lastAppliedPreviewSpeed = 1.0;
     _lastAppliedIsPlaying = false;
@@ -399,6 +471,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     _transport = transport;
     transport.addListener(_onTransportChanged);
     _startDebugInstrumentation();
+    _startPlaybackWatchdog();
 
     setState(() {});
     unawaited(controller.setLooping(true));
@@ -430,6 +503,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   void dispose() {
     _progressSub?.cancel();
     _dbgReportTimer?.cancel();
+    _playbackWatchdog?.cancel();
     _rawController?.dispose().ignore();
     _controller?.removeListener(_reportPlayerPosition);
     _controller?.dispose().ignore();
