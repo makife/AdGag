@@ -136,11 +136,22 @@ class _TrimStepState extends ConsumerState<TrimStep> {
   // tick is always treated as a fresh entry needing exactly one seek.
   bool _musicInRegion = false;
 
-  // Bumped on any event that invalidates an in-flight async music
-  // seek/play chain (scrub begin, pause, region exit, source change,
-  // dispose) so a slow, stale seek/play completion can never apply
-  // itself after the fact — section 6's generation-token requirement.
-  int _audioSyncGeneration = 0;
+  // Latest-wins coalescing for music seeks — the EXACT same pattern
+  // EditorTransport._drainSeeks already uses for the video controller
+  // (only one seek ever in flight; a newer request while one is
+  // pending just updates the pending target, the loop drains to the
+  // latest instead of firing concurrent seeks). Replaced an earlier
+  // per-dispatch generation-token approach after a real bug: bumping a
+  // generation counter on EVERY seek dispatch meant a rapid sequence of
+  // drift-correction seeks kept invalidating each other before any
+  // single one could ever reach its own play() call afterward — music
+  // got seeked repeatedly but never actually played, confirmed live via
+  // the on-screen debug overlay (mSeek=42, mPlay=0, errors=0, during a
+  // session where music never once produced audible playback). See
+  // _requestMusicSeek/_drainMusicSeeks.
+  Duration? _pendingMusicSeek;
+  bool _musicSeekInFlight = false;
+  bool _pendingMusicPlayAfter = false;
 
   final _log = AppLogger.named("TrimStepPlayback");
 
@@ -218,7 +229,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     _transport?.removeListener(_onTransportChanged);
     _transport?.dispose();
     _transport = null;
-    _audioSyncGeneration++; // invalidate any in-flight music seek/play chain
+    _pendingMusicSeek = null; // the drain loop (if any) exits on its own via the controller-identity check
     _musicController?.dispose().ignore();
     _musicController = null;
 
@@ -424,7 +435,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     _controller?.dispose().ignore();
     _transport?.removeListener(_onTransportChanged);
     _transport?.dispose();
-    _audioSyncGeneration++; // invalidate any in-flight music seek/play chain
+    _pendingMusicSeek = null;
     _musicController?.dispose().ignore();
     // Stops an in-flight thumbnail generation and deletes whatever it
     // had already written — leaving the editor before generation
@@ -600,41 +611,10 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     }
 
     if (decision.seekTarget != null) {
-      final Duration target = decision.seekTarget!;
-      final bool playAfter = decision.playback == MusicPlaybackIntent.playing;
-      final int generation = ++_audioSyncGeneration;
       if (kDebugMode) {
-        _log.fine("MUSIC_SEEK target=$target reason=${wasInRegion ? 'DRIFT' : 'ENTER_REGION'}");
-        _dbgMusicSeekCount++;
+        _log.fine("MUSIC_SEEK_REQUEST target=${decision.seekTarget} reason=${wasInRegion ? 'DRIFT' : 'ENTER_REGION'}");
       }
-      // Fire-and-forget on purpose (section 6): video playback and
-      // transport updates must never wait on this. The generation check
-      // after the await is what stops a slow/stale seek from applying
-      // itself once a newer tick has already moved on (e.g. the user
-      // scrubbed again, or left the region, before this one finished).
-      unawaited(() async {
-        await music.seekTo(target);
-        if (!mounted || _musicController != music || generation != _audioSyncGeneration) {
-          return;
-        }
-        // Same fix as the video side: gated on what WE last told the
-        // music controller, not on music.value.isPlaying — a transient
-        // stall right after this seek must not look like "not playing
-        // yet, needs another play() call."
-        if (playAfter) {
-          if (_lastAppliedMusicPlaying != true) {
-            _lastAppliedMusicPlaying = true;
-            if (kDebugMode) {
-              _log.fine("MUSIC_PLAY reason=POST_SEEK");
-              _dbgMusicPlayCount++;
-            }
-            await music.play();
-          }
-        } else if (_lastAppliedMusicPlaying != false) {
-          _lastAppliedMusicPlaying = false;
-          await music.pause();
-        }
-      }());
+      _requestMusicSeek(decision.seekTarget!, playAfter: decision.playback == MusicPlaybackIntent.playing);
     } else {
       if (decision.playback == MusicPlaybackIntent.playing) {
         if (_lastAppliedMusicPlaying != true) {
@@ -663,6 +643,79 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     }
   }
 
+  /// Requests that the music controller end up seeked to [target] and
+  /// playing/paused per [playAfter] — coalesced exactly like
+  /// [EditorTransport]'s own video-seek drain loop (see
+  /// `_pendingMusicSeek`'s own doc comment for the bug this replaced).
+  /// Calling this rapidly (every tick while drift keeps getting
+  /// re-evaluated) only ever results in ONE seek being in flight at a
+  /// time; newer calls just update the pending target/intent, and the
+  /// loop naturally converges to the latest one instead of firing
+  /// concurrent, self-invalidating seeks.
+  void _requestMusicSeek(Duration target, {required bool playAfter}) {
+    _pendingMusicSeek = target;
+    _pendingMusicPlayAfter = playAfter;
+    if (_musicSeekInFlight) {
+      return;
+    }
+    unawaited(_drainMusicSeeks());
+  }
+
+  Future<void> _drainMusicSeeks() async {
+    _musicSeekInFlight = true;
+    try {
+      while (_pendingMusicSeek != null) {
+        final VideoPlayerController? music = _musicController;
+        if (music == null) {
+          _pendingMusicSeek = null;
+          return;
+        }
+        final Duration target = _pendingMusicSeek!;
+        final bool playAfter = _pendingMusicPlayAfter;
+        _pendingMusicSeek = null;
+        if (kDebugMode) {
+          _log.fine("MUSIC_SEEK_BEGIN target=$target");
+          _dbgMusicSeekCount++;
+        }
+        await music.seekTo(target);
+        if (_musicController != music) {
+          // The controller was torn down/replaced (source change)
+          // while this seek was in flight — nothing left to apply it to.
+          return;
+        }
+        if (_pendingMusicSeek != null) {
+          // A newer target arrived while this seek was in flight — go
+          // straight to it instead of applying this now-superseded
+          // one's play/pause outcome. This is the exact mechanism that
+          // used to be handled (incorrectly) by a generation-token
+          // check that invalidated EVERY dispatch, not just genuinely
+          // stale ones — see this class's own doc comment on the bug.
+          continue;
+        }
+        // Same fix as the video side: gated on what WE last told the
+        // music controller, not on music.value.isPlaying — a transient
+        // stall right after this seek must not look like "not playing
+        // yet, needs another play() call."
+        if (playAfter) {
+          if (_lastAppliedMusicPlaying != true) {
+            _lastAppliedMusicPlaying = true;
+            if (kDebugMode) {
+              _log.fine("MUSIC_PLAY reason=POST_SEEK");
+              _dbgMusicPlayCount++;
+            }
+            await music.play();
+          }
+        } else if (_lastAppliedMusicPlaying != false) {
+          _lastAppliedMusicPlaying = false;
+          if (kDebugMode) _dbgMusicPauseCount++;
+          await music.pause();
+        }
+      }
+    } finally {
+      _musicSeekInFlight = false;
+    }
+  }
+
   /// Creates/replaces/tears down `_musicController` to match [audio], and
   /// writes [audio] into [VideoProject] via [EditorController] — the
   /// single place background music should be written from, so the
@@ -683,7 +736,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
     _musicController = null;
     _musicInRegion = false;
     _lastAppliedMusicPlaying = null;
-    _audioSyncGeneration++; // invalidates any in-flight seek/play chain on `old`
+    _pendingMusicSeek = null; // the drain loop (if any) exits on its own via the controller-identity check
     await old?.pause();
     await old?.dispose();
     if (audio == null) {
@@ -1156,6 +1209,41 @@ class _TrimStepState extends ConsumerState<TrimStep> {
             );
         final Duration outputDuration = await ref.read(localVideoProberProvider).probeDuration(outputPath);
         finalDraft = LocalVideoDraft(filePath: outputPath, duration: outputDuration);
+      }
+
+      // Real, direct user complaint: "quality drops a lot on Next, no
+      // matter what I raise the export bitrate to." Rather than keep
+      // guessing at FFmpeg args, surface the actual evidence needed to
+      // tell "the requested bitrate isn't being honored by this
+      // device's hardware encoder" (a real, well-documented Android
+      // MediaCodec limitation on some devices — a software fallback
+      // would fix it but costs GPL licensing or export speed, not a
+      // change to make blindly) apart from any other cause. Debug-only,
+      // shown directly on screen (not just logcat) so it's visible
+      // without a connected computer.
+      if (kDebugMode && finalDraft.filePath != draft.filePath) {
+        try {
+          final int sourceBytes = await File(draft.filePath).length();
+          final int outputBytes = await File(finalDraft.filePath).length();
+          final double sourceMbps =
+              sourceBytes * 8 / 1000000 / (draft.duration.inMilliseconds / 1000.0);
+          final double outputMbps =
+              outputBytes * 8 / 1000000 / (finalDraft.duration.inMilliseconds / 1000.0);
+          _log.info(
+            "EXPORT_QUALITY_CHECK source=${(sourceBytes / 1000000).toStringAsFixed(1)}MB "
+            "(${sourceMbps.toStringAsFixed(1)}Mbps) -> "
+            "output=${(outputBytes / 1000000).toStringAsFixed(1)}MB (${outputMbps.toStringAsFixed(1)}Mbps) "
+            "requested=50Mbps",
+          );
+          if (mounted) {
+            _showSnack(
+              "DEBUG: source ${sourceMbps.toStringAsFixed(1)}Mbps -> "
+              "output ${outputMbps.toStringAsFixed(1)}Mbps (requested 50Mbps)",
+            );
+          }
+        } catch (_) {
+          // Best-effort diagnostic only — never block publishing on it.
+        }
       }
 
       ref.read(createAdFlowControllerProvider.notifier).onVideoTrimmed(finalDraft);
