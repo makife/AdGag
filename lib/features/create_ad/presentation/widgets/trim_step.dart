@@ -909,21 +909,38 @@ class _TrimStepState extends ConsumerState<TrimStep> {
           // stale ones — see this class's own doc comment on the bug.
           continue;
         }
-        // Same fix as the video side: gated on what WE last told the
-        // music controller, not on music.value.isPlaying — a transient
-        // stall right after this seek must not look like "not playing
-        // yet, needs another play() call."
+        // Real bug found via user report ("music plays correctly for ~1s
+        // after a scrub, then goes silent for the rest of the clip while
+        // video keeps playing fine"): this branch used to gate the
+        // post-seek play() call on `_lastAppliedMusicPlaying != true` —
+        // the same "only tell the controller what changed" optimization
+        // the video side uses. That's correct for the *steady-state, no
+        // seek needed* case (_onTransportChanged's own no-seekTarget
+        // branch below still does this, correctly). But THIS branch runs
+        // after every seek, and once the native player silently stalls
+        // (a real, confirmed-on-device failure mode — see the playback
+        // watchdog's own doc comment), drift between musicPlayerPosition
+        // and the expected position grows without bound every tick,
+        // which means `decideMusicSync` requests a fresh seek+playAfter
+        // on essentially every subsequent transport tick (~100ms) — yet
+        // the cache, already `true` from the first successful play(),
+        // silently swallowed every one of those play() calls, so nothing
+        // could ever actually resume audible output short of a full
+        // controller rebuild (2.4s+ away via the watchdog). A seek is
+        // already a "something needs correcting" event — always
+        // reasserting play()/pause() after one is cheap/idempotent when
+        // the player is already in the right state, and is exactly what
+        // lets a silently-stalled player recover in under a second
+        // instead of only via the slow rebuild path.
         if (playAfter) {
-          if (_lastAppliedMusicPlaying != true) {
-            _lastAppliedMusicPlaying = true;
-            if (kDebugMode) {
-              _log.fine("MUSIC_PLAY reason=POST_SEEK");
-              _dbgMusicPlayCount++;
-              _logMusicEvent("PLAY/POST_SEEK");
-            }
-            await music.play();
+          _lastAppliedMusicPlaying = true;
+          if (kDebugMode) {
+            _log.fine("MUSIC_PLAY reason=POST_SEEK");
+            _dbgMusicPlayCount++;
+            _logMusicEvent("PLAY/POST_SEEK");
           }
-        } else if (_lastAppliedMusicPlaying != false) {
+          await music.play();
+        } else {
           _lastAppliedMusicPlaying = false;
           if (kDebugMode) {
             _dbgMusicPauseCount++;
