@@ -1379,6 +1379,30 @@ class _TrimStepState extends ConsumerState<TrimStep> {
       _progress = 0;
       _error = null;
     });
+    // Real user report: background music mixed correctly into the export
+    // (confirmed present in the published file) didn't play in the very
+    // next screen's (CaptionPublishStep) preview. This editor keeps two
+    // live VideoPlayerControllers (_controller, _musicController) whose
+    // teardown in dispose() is fire-and-forget (`.dispose().ignore()`),
+    // so their native audio session can still be releasing when the next
+    // screen's own controller starts playing moments later — a plausible
+    // audio-focus handoff race on Android. Explicitly pausing both here,
+    // awaited, before doing anything else, both starts releasing that
+    // session earlier and stops two silent audio decoders competing with
+    // FFmpeg for device resources during the export itself. The watchdog
+    // is stopped first — otherwise, since it drives off `transport.
+    // isPlaying` (untouched by a direct controller.pause()) rather than
+    // these controllers, its own freeze-recovery logic would see
+    // "supposed to be playing, position stalled" on its very next tick
+    // and call controller.play() again, undoing this pause.
+    _playbackWatchdog?.cancel();
+    _transport?.pause();
+    _watchdogLastMusicPos = null;
+    _watchdogLastVideoPos = null;
+    await Future.wait(<Future<void>>[
+      if (_controller != null) _controller!.pause().catchError((_) {}),
+      if (_musicController != null) _musicController!.pause().catchError((_) {}),
+    ]);
 
     try {
       final bool needsTrim = project.trimStart > Duration.zero || project.trimEnd < draft.duration;
@@ -3761,11 +3785,26 @@ class _BackgroundAudioDialogState extends State<_BackgroundAudioDialog> {
   @override
   Widget build(BuildContext context) {
     final double maxFade = (widget.maxDuration.inMilliseconds / 1000.0).clamp(0, 5);
+    final double detectedSec = widget.audioDuration.inMilliseconds / 1000.0;
+    final double usedSec =
+        (widget.audioDuration < widget.maxDuration ? widget.audioDuration : widget.maxDuration).inMilliseconds /
+            1000.0;
     return AlertDialog(
       title: const Text("Background music"),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
+          // Directly surfaces what the app detected as the file's own
+          // length (not just what gets used after clamping to the clip)
+          // — real user reports of music cutting out early are otherwise
+          // impossible to distinguish from "the detected length was
+          // wrong" without this being visible up front.
+          Text(
+            "Detected length: ${detectedSec.toStringAsFixed(1)}s"
+            "${usedSec < detectedSec ? " (using first ${usedSec.toStringAsFixed(1)}s to fit the clip)" : ""}",
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
           Text("Volume: ${(_volume * 100).round()}%"),
           Slider(value: _volume, onChanged: (double v) => setState(() => _volume = v)),
           Text("Fade in: ${_fadeIn.toStringAsFixed(1)}s"),

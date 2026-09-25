@@ -54,21 +54,21 @@ abstract final class VideoFilterGraphBuilder {
       "-map", "[vout]",
       if (!project.removeAudio) ...<String>["-map", "[aout]"] else "-an",
       "-c:v", videoEncoder,
-      // Mobile hardware encoders (mediacodec/videotoolbox) don't pick a
-      // sensible default bitrate on their own — without an explicit
-      // target the output is visibly low-quality regardless of source
-      // resolution. Real user report: 16M/20M (a prior round's fix)
-      // still visibly degraded quality relative to the source — modern
-      // phone cameras routinely record 1080p at 20-50+ Mbps, so a 16M
-      // re-encode ceiling was itself the lossy step for higher-bitrate
-      // source footage, before this file was ever handed to Mux (which
-      // re-transcodes for delivery, but can't recover quality already
-      // lost here). Raised well above typical phone-camera bitrates so
-      // this re-encode is no longer the bottleneck for ordinary source
-      // footage; -maxrate/-bufsize bound the encoder's own rate-control
-      // instead of leaving it to decide how strictly to honor -b:v. A
-      // 10s clip at this ceiling is a worst-case ~62MB temp file, not a
-      // meaningful storage/upload-time concern for a local pre-Mux step.
+      // ROOT CAUSE, confirmed via direct research (FFmpeg's own
+      // mediacodecenc.c AVOption table, cross-referenced against
+      // Android's MediaCodecInfo.EncoderCapabilities constants):
+      // h264_mediacodec defaults to BITRATE_MODE_CQ (constant-quality),
+      // which IGNORES -b:v entirely — the encoder picks its own bitrate
+      // from an internal quality target. This is why raising -b:v
+      // 16M -> 50M (a prior round's fix) measurably did nothing: a real
+      // user debug snackbar showed source 17.9Mbps -> output 1.6Mbps
+      // despite requesting 50Mbps, on both bitrates — the flag was never
+      // being read. `-bitrate_mode cbr` forces the mediacodec encoder to
+      // actually target the requested rate (this flag doesn't exist on
+      // h264_videotoolbox/mpeg4 as a valid AVOption, so it's only passed
+      // for the encoder that needs it). -maxrate/-bufsize are kept as
+      // the ceiling this now-honored -b:v should stay under.
+      if (videoEncoder == "h264_mediacodec") ...<String>["-bitrate_mode", "cbr"],
       "-b:v", "50M",
       "-maxrate", "60M",
       "-bufsize", "60M",
