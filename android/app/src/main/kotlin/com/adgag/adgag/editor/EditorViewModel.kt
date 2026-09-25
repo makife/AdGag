@@ -17,9 +17,17 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.effect.ScaleAndRotateTransformation
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ClippingMediaSource
+import androidx.media3.exoplayer.source.ConcatenatingMediaSource
+import androidx.media3.exoplayer.source.FilteringMediaSource
+import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.source.SilenceMediaSource
 import androidx.media3.transformer.Composition
-import androidx.media3.transformer.CompositionPlayer
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.Effects
@@ -47,24 +55,42 @@ import java.io.File
  * each with its own native clock, and no amount of retry/watchdog
  * patching around periodic re-seeking ever fully eliminated audible
  * drift or stall recovery glitches — because two independent clocks are
- * structurally the wrong architecture for this. [CompositionPlayer]
- * (Media3's own composition-preview player) plays a video sequence and
- * an audio sequence through ONE Player instance / ONE native clock —
- * there is nothing to keep in sync from the outside, because there is
- * only one clock to begin with. The exact same [Composition] object is
- * later handed to [Transformer] for export, so preview and export are
- * built from literally the same definition, not two separate
- * approximations of each other.
+ * structurally the wrong architecture for this.
  *
- * Honesty note (do not remove): as of media3 1.11.0, CompositionPlayer
- * is still `@UnstableApi` inside Media3 itself — genuinely newer and
- * less battle-tested than ExoPlayer's core playback path, not a decade-
- * proven legacy API. It is Google's own official, actively-developed
- * path for exactly this (video + background audio, one clock) use case,
- * which is why it's used here instead of hand-rolling an
- * ExoPlayer.MergingMediaSource setup directly — but real-device
- * confirmation matters more here than for most other native APIs in
- * this app, precisely because it's young.
+ * PIVOT (this round): the live preview player was [androidx.media3.transformer.CompositionPlayer]
+ * (Media3's own composition-preview player, one Player/one clock playing
+ * a whole [Composition] directly) — confirmed via TWO independent real-
+ * device tests (6% battery, then fully charged, ruling out a power-
+ * saving cause) that `CompositionPlayer.Builder(context).build()` itself
+ * crashes on the user's real device, before any composition/video file
+ * is even involved. Reading its real decompiled source confirmed why
+ * it's a comparatively risky construction path: the constructor starts
+ * its own `HandlerThread` at `THREAD_PRIORITY_AUDIO` and sets up a GL-
+ * backed video graph pipeline immediately — genuinely heavy, newer,
+ * `@UnstableApi` machinery, unlike a plain player.
+ *
+ * The preview player is now a plain [ExoPlayer] — the same decade-old,
+ * extremely widely deployed core Media3/ExoPlayer architecture used in
+ * essentially every production Android video app — combined with
+ * [MergingMediaSource] (to attach a separate audio track to the video,
+ * the standard, long-established way to preview "video + different
+ * audio" with one Player/one clock) and [ClippingMediaSource] (trim).
+ * `ExoPlayer.Builder().build()` does NOT do CompositionPlayer's own
+ * heavy construction-time GL/video-graph setup — real rendering setup
+ * only happens once a Surface is attached and playback actually starts
+ * — making it a structurally lighter, safer construction path.
+ *
+ * IMPORTANT SCOPE NOTE (preview-only, does not affect the exported Ad):
+ * plain ExoPlayer has no equivalent of Composition's real N-way audio
+ * MIXING. When background music is attached, this preview plays ONLY
+ * the music track (the clip's own original audio is excluded from the
+ * live preview via [FilteringMediaSource] rather than left to an
+ * unpredictable two-audio-track-group tie-break). The final EXPORTED
+ * Ad is unaffected by any of this — [export] still goes through
+ * [Transformer]/[Composition] exactly as before (a completely separate,
+ * long-stable pipeline that never used CompositionPlayer and has never
+ * been implicated in any crash), which genuinely mixes the original
+ * audio (when not muted) together with the music, sample-accurately.
  */
 @UnstableApi
 class EditorViewModel(private val context: Context, private val sourcePath: String) : ViewModel() {
@@ -73,46 +99,17 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         DebugLog.log(context, "EditorViewModel: constructor start, sourcePath=$sourcePath")
     }
 
-    val player: CompositionPlayer = run {
-        DebugLog.log(context, "EditorViewModel: building CompositionPlayer")
-        // New crash found on a real device, at a genuinely different
-        // point than the two already fixed this session (video-clip/
-        // duration ones): the checkpoint log stopped right after this
-        // exact log line, with NOTHING after it — not even a "built OK"
-        // — meaning the crash is inside CompositionPlayer.Builder(context)
-        // .build() itself, before any composition/source file is even
-        // involved. That call does real, heavy native work internally
-        // (confirmed by reading CompositionPlayer's own constructor: it
-        // starts a new HandlerThread at THREAD_PRIORITY_AUDIO and sets
-        // up its own GL-backed video graph pipeline) — plausible to fail
-        // under real device resource pressure. The reporting screenshot
-        // showed the device at 6% battery, a real, non-code confounding
-        // factor worth ruling out before assuming this is a code bug —
-        // retest with the device charged before trusting this repros
-        // reliably. Splitting the builder/build() call in two here so
-        // the NEXT log, if it crashes again, at least confirms whether
-        // Builder(context) itself (construction) or .build() (which
-        // does the heavy HandlerThread/GL work) is the actual site.
-        val builder = CompositionPlayer.Builder(context)
-        DebugLog.log(context, "EditorViewModel: CompositionPlayer.Builder(context) constructed, calling build()")
-        val built = builder.build()
-        DebugLog.log(context, "EditorViewModel: builder.build() returned")
-        // REAL BUG found via user report ("video sürekli tekrarlı
-        // akmıyor... play butonu çalışmıyor"): repeatMode was never set
-        // anywhere, so a plain STATE_ENDED was reached at the end of
-        // every playthrough — and per standard ExoPlayer/Player
-        // semantics, calling play() again on an ENDED player does
-        // nothing at all without an explicit seekTo(0) first. This is
-        // very likely the SAME root cause behind "video stops when
-        // music is added" too: if the user attached music while
-        // scrubbed near the clip's own end, the rebuilt player could
-        // land in/near ENDED with no repeat mode to recover from it,
-        // looking exactly like "stopped and won't resume." The Flutter
-        // editor this replaces always called setLooping(true) on its
-        // preview controller — this is the direct Player-interface
-        // equivalent, just never carried over.
+    val player: ExoPlayer = run {
+        DebugLog.log(context, "EditorViewModel: building ExoPlayer")
+        val built = ExoPlayer.Builder(context).build()
+        DebugLog.log(context, "EditorViewModel: ExoPlayer.Builder(context).build() returned")
+        // Same fix as before the pivot, carried over unchanged: without
+        // an explicit repeat mode, a plain STATE_ENDED is reached at the
+        // end of every playthrough, and per standard Player semantics,
+        // calling play() again on an ENDED player does nothing without
+        // an explicit seekTo(0) first.
         built.repeatMode = Player.REPEAT_MODE_ONE
-        DebugLog.log(context, "EditorViewModel: CompositionPlayer built OK, repeatMode=ONE")
+        DebugLog.log(context, "EditorViewModel: ExoPlayer built OK, repeatMode=ONE")
         built
     }
 
@@ -259,12 +256,7 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         // Defensive: if music was already placed and the clip is now
         // SHORTER than before (the trim window shrank), re-clamp the
         // music's placement so it can never end up specifying a segment
-        // that no longer fits — buildComposition()'s own clamping would
-        // still keep the export correct even without this, but leaving
-        // stale, now-out-of-range values in musicStartOffsetMs/
-        // musicPlayDurationMs would make the timeline's own displayed
-        // numbers wrong until the user happened to touch the music
-        // segment again.
+        // that no longer fits.
         if (musicUri != null) {
             val newClipDurationMs = (endMs - startMs).coerceAtLeast(0L)
             val clampedStart = musicStartOffsetMs.coerceIn(0L, newClipDurationMs)
@@ -282,8 +274,7 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         musicDurationMs = probedMs
         val clipDurationMs = (trimEndMs - trimStartMs).coerceAtLeast(0L)
         // Default placement: start at the clip's own beginning, play
-        // for as much of the song as fits — the same sensible default
-        // the deleted Flutter editor used, now user-adjustable via the
+        // for as much of the song as fits — user-adjustable via the
         // timeline's music-segment drag handles (setMusicPlacement).
         musicStartOffsetMs = 0L
         musicPlayDurationMs = if (probedMs != null) minOf(probedMs, clipDurationMs) else 0L
@@ -312,27 +303,46 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
 
     fun rotateNinety() {
         rotationDegrees = (rotationDegrees + 90) % 360
-        val wasPlaying = player.isPlaying
-        val resumeAt = player.currentPosition
-        rebuildAndPrepare(startAt = resumeAt, playWhenReady = wasPlaying)
+        // No rebuildAndPrepare needed: rotation isn't part of the
+        // preview MediaSource anymore (plain ExoPlayer has no live
+        // Effects/Transformation pipeline — that's CompositionPlayer/
+        // Transformer-only). EditorScreen applies a Compose-level visual
+        // rotation to the PlayerSurface directly from this field. The
+        // real, pixel-accurate rotation is still applied at export time
+        // via ScaleAndRotateTransformation in buildComposition(), below
+        // — unaffected by this pivot.
     }
 
     fun toggleMute() {
         isMuted = !isMuted
-        val wasPlaying = player.isPlaying
-        val resumeAt = player.currentPosition
-        rebuildAndPrepare(startAt = resumeAt, playWhenReady = wasPlaying)
+        applyPreviewVolume()
     }
 
-    /** Rebuilds [Composition] from current trim/music state and reloads it into [player]. */
+    /**
+     * Preview audio routing: when music is attached, the preview plays
+     * ONLY the music (see this class's own doc comment on why — no live
+     * N-way mixing on plain ExoPlayer), so the mute toggle has nothing
+     * left to mute there; it still governs the ORIGINAL clip's audio at
+     * export time via buildComposition()'s own hasAudio check,
+     * unaffected by this. With no music attached, mute genuinely
+     * silences the live preview via player volume — the most direct,
+     * reliable way to mute a single already-playing audio track,
+     * without needing to rebuild/reprepare the MediaSource at all.
+     */
+    private fun applyPreviewVolume() {
+        player.volume = if (musicUri == null && isMuted) 0f else 1f
+    }
+
+    /** Rebuilds the preview [MediaSource] from current trim/music state and reloads it into [player]. */
     private fun rebuildAndPrepare(startAt: Long, playWhenReady: Boolean) {
         DebugLog.log(context, "rebuildAndPrepare: start startAt=$startAt playWhenReady=$playWhenReady")
-        val composition = buildComposition()
-        DebugLog.log(context, "rebuildAndPrepare: composition built, calling player.stop()")
+        val mediaSource = buildPreviewMediaSource()
+        DebugLog.log(context, "rebuildAndPrepare: preview MediaSource built, calling player.stop()")
         player.stop()
-        DebugLog.log(context, "rebuildAndPrepare: player.stop() done, calling setComposition")
-        player.setComposition(composition)
-        DebugLog.log(context, "rebuildAndPrepare: setComposition done, calling prepare()")
+        DebugLog.log(context, "rebuildAndPrepare: player.stop() done, calling setMediaSource")
+        player.setMediaSource(mediaSource)
+        applyPreviewVolume()
+        DebugLog.log(context, "rebuildAndPrepare: setMediaSource done, calling prepare()")
         player.prepare()
         DebugLog.log(context, "rebuildAndPrepare: prepare() done")
         if (startAt > 0) {
@@ -343,26 +353,59 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         DebugLog.log(context, "rebuildAndPrepare: playWhenReady set, done")
     }
 
+    /**
+     * Builds the ExoPlayer [MediaSource] graph for live preview only —
+     * see this class's own doc comment for the full pivot rationale.
+     * Trim: [ClippingMediaSource], the standard, long-stable ExoPlayer
+     * trim mechanism (constructor takes start/end in microseconds,
+     * confirmed via the real media3-exoplayer 1.11.0 sources). Music:
+     * [FilteringMediaSource] (confirmed real/public in the same sources
+     * — "publishes tracks of one type") strips the clip's own audio
+     * deterministically, [SilenceMediaSource] + [ConcatenatingMediaSource]
+     * reproduce the same "start N ms into the clip" gap the old
+     * Composition-based `addGap` gave us, and [MergingMediaSource]
+     * combines the video-only branch with the (possibly gapped +
+     * clipped) music branch into one Player/one clock — the standard,
+     * long-established "video from one source, audio from another"
+     * ExoPlayer pattern.
+     */
+    private fun buildPreviewMediaSource(): MediaSource {
+        val dataSourceFactory = DefaultDataSource.Factory(context)
+        val mediaSourceFactory = ProgressiveMediaSource.Factory(dataSourceFactory)
+
+        val hasRealTrimWindow = trimEndMs > trimStartMs
+        var videoSource: MediaSource =
+            mediaSourceFactory.createMediaSource(MediaItem.fromUri(Uri.fromFile(File(sourcePath))))
+        if (hasRealTrimWindow) {
+            videoSource = ClippingMediaSource(videoSource, trimStartMs * 1000, trimEndMs * 1000)
+        }
+
+        val uri = musicUri
+        val musicDur = musicDurationMs
+        if (uri == null || musicDur == null) {
+            return videoSource
+        }
+
+        val videoOnlySource = FilteringMediaSource(videoSource, C.TRACK_TYPE_VIDEO)
+        var musicSource: MediaSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(uri))
+        val playDurationMs = musicPlayDurationMs.coerceAtLeast(1L)
+        musicSource = ClippingMediaSource(musicSource, 0L, playDurationMs * 1000)
+        if (musicStartOffsetMs > 0) {
+            musicSource = ConcatenatingMediaSource(SilenceMediaSource(musicStartOffsetMs * 1000), musicSource)
+        }
+        return MergingMediaSource(videoOnlySource, musicSource)
+    }
+
+    /**
+     * Builds the EXPORT-time [Composition] — this path is completely
+     * unaffected by the preview pivot above: it never used
+     * CompositionPlayer, only [Transformer], a separate, long-stable
+     * pipeline that has never been implicated in any crash this
+     * session. Still the one source of truth for what actually gets
+     * mixed/rendered into the published Ad.
+     */
     private fun buildComposition(): Composition {
         DebugLog.log(context, "buildComposition: start trimStartMs=$trimStartMs trimEndMs=$trimEndMs")
-        // REAL CRASH FOUND via the on-device checkpoint log: the very
-        // FIRST call to this method (from init{}'s initial
-        // rebuildAndPrepare, called before the player has ever reported
-        // a real duration) ran with trimStartMs=0 and trimEndMs=0 — the
-        // untouched defaults. The old code below always applied SOME
-        // clipping configuration regardless, falling back to
-        // `trimStartMs + 1` when trimEndMs wasn't yet meaningfully set,
-        // which meant this first-ever composition was clipped to
-        // [0ms, 1ms] — a degenerate, near-zero-length clip handed
-        // straight into CompositionPlayer.setComposition(). The
-        // checkpoint log confirmed the crash happens exactly at that
-        // call, immediately after logging trimStartMs=0/trimEndMs=0 —
-        // consistent with this being the actual cause, not just a
-        // plausible theory. Fixed: only apply a ClippingConfiguration
-        // once there's a genuine, positive-length trim window (either
-        // the real duration has been learned and trimEndMs defaulted to
-        // it, or the user actually dragged a trim handle) — otherwise
-        // play the source unclipped, exactly like "no edit yet" should.
         val hasRealTrimWindow = trimEndMs > trimStartMs
         DebugLog.log(context, "buildComposition: hasRealTrimWindow=$hasRealTrimWindow")
         val clippedVideo = MediaItem.Builder()
@@ -379,31 +422,11 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
             }
             .build()
         DebugLog.log(context, "buildComposition: clippedVideo MediaItem built")
-        // SECOND real crash found via the checkpoint log, after the 1ms-
-        // clip fix (above) didn't actually resolve it: read
-        // CompositionPlayer's own source directly
-        // (createNonLoopingMediaSource in CompositionPlayer.java) and
-        // found `checkArgument(editedMediaItem.durationUs != C.TIME_UNSET)`
-        // — unlike Transformer (export), where setDurationUs is optional
-        // and can be inferred from the file itself,
-        // EditedMediaItem.Builder's own doc comment confirms this is
-        // NOT optional for the player: it needs every item's duration
-        // known upfront to build its internal playback graph before
-        // decoding starts. This project's EditedMediaItems never called
-        // setDurationUs at all — every single setComposition() call was
-        // hitting this checkArgument. Probed with MediaMetadataRetriever
-        // (durationUs must reflect the SOURCE's full, untrimmed length
-        // per the setter's own doc comment, not the clipped range).
         val sourceDurationUs = probeDurationUs(context, Uri.fromFile(File(sourcePath)))
         DebugLog.log(context, "buildComposition: sourceDurationUs=$sourceDurationUs")
         val videoItem = EditedMediaItem.Builder(clippedVideo)
             .apply { if (sourceDurationUs != null) setDurationUs(sourceDurationUs) }
             .apply {
-                // ScaleAndRotateTransformation confirmed usable here by
-                // reading its real source: it implements
-                // MatrixTransformation -> GlMatrixTransformation ->
-                // GlEffect -> Effect, so it's a valid Effects.videoEffects
-                // entry directly — not guessed.
                 if (rotationDegrees != 0) {
                     val rotateEffect: Effect =
                         ScaleAndRotateTransformation.Builder().setRotationDegrees(rotationDegrees.toFloat()).build()
@@ -412,26 +435,6 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
             }
             .build()
         DebugLog.log(context, "buildComposition: videoItem built rotationDegrees=$rotationDegrees")
-        // EditedMediaItemSequence has no public constructor as of media3
-        // 1.11.0 (confirmed by reading the real sources jar downloaded
-        // from Google's Maven repo, after an initial guess at a plain
-        // constructor failed to compile) — withAudioAndVideoFrom/
-        // withAudioFrom are the current, non-deprecated static factories
-        // over EditedMediaItemSequence.Builder.
-        //
-        // Real crash found on first physical-device test: unconditionally
-        // calling withAudioAndVideoFrom REQUIRES the sequence to produce
-        // an audio track — if the captured source clip genuinely has no
-        // audio track (silent recording, muted gallery import), Media3's
-        // internal pipeline has nothing to satisfy that requirement with
-        // and throws. Probing the real source file first (MediaExtractor,
-        // a plain stable Android API, not Media3-specific) and only
-        // requesting audio+video when an audio track actually exists
-        // fixes this at the source instead of guessing at a workaround.
-        // Mute forces video-only regardless of what the source actually
-        // has, reusing the exact same withVideoFrom path already proven
-        // safe for a genuinely audio-less source above — no new API
-        // surface for this feature.
         val hasAudio = !isMuted && sourceHasAudioTrack(sourcePath)
         DebugLog.log(context, "buildComposition: sourceHasAudioTrack(effective)=$hasAudio isMuted=$isMuted")
         val videoSequence = if (hasAudio) {
@@ -448,25 +451,12 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
             return composition
         }
 
-        // Volume/gain control (GainProcessor) is a deliberate phase-2
-        // follow-up, not shipped blind here — its exact constructor
-        // needs verifying against the real media3-common 1.11.0 sources
-        // (same verification method used for EditedMediaItemSequence
-        // above) rather than guessed, since a wrong signature is a build
-        // break, not a soft failure. Music plays at its own source level
-        // for now.
         val musicDurationUs = probeDurationUs(context, uri)
         DebugLog.log(
             context,
             "buildComposition: musicDurationUs=$musicDurationUs musicStartOffsetMs=$musicStartOffsetMs " +
                 "musicPlayDurationMs=$musicPlayDurationMs",
         )
-        // Real feature added via user report ("eklenen müziği
-        // kesemiyorum" / can't cut the added music): the music
-        // MediaItem is now clipped to [0, musicPlayDurationMs] — the
-        // exact same ClippingConfiguration pattern already proven safe
-        // for the video above — so a user-shortened segment actually
-        // only plays that much of the song, not the whole file.
         val playDurationMs = musicPlayDurationMs.coerceAtLeast(1L)
         val clippedMusic = MediaItem.Builder()
             .setUri(uri)
@@ -480,14 +470,6 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         val musicItem = EditedMediaItem.Builder(clippedMusic)
             .apply { if (musicDurationUs != null) setDurationUs(musicDurationUs) }
             .build()
-        // Real feature added: musicStartOffsetMs positions the segment
-        // within the clip's own timeline via addGap — confirmed usable
-        // here by reading EditedMediaItemSequence's own real source
-        // (Builder.addGap(durationUs), the same mechanism
-        // withAudioFrom's own implementation is built on internally),
-        // not guessed. isLooping=false (unchanged): this app's
-        // BackgroundAudio model never asked for the music to loop past
-        // the clip's own end.
         val musicSequence = EditedMediaItemSequence.Builder(ImmutableSet.of(C.TRACK_TYPE_AUDIO))
             .apply { if (musicStartOffsetMs > 0) addGap(musicStartOffsetMs * 1000) }
             .addItem(musicItem)
@@ -577,13 +559,10 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         /**
          * Probes [uri]'s real duration synchronously via
          * [MediaMetadataRetriever] (a plain, stable platform API — not
-         * Media3-specific), needed because [CompositionPlayer] requires
-         * every [EditedMediaItem]'s `durationUs` known upfront (see the
-         * call site's own comment on the real crash this fixes).
-         * `setDataSource(Context, Uri)` — not the plain-`String`
-         * overload — handles both `file://` (the captured clip) and
-         * `content://` (a music file picked via the system audio
-         * picker) URIs uniformly.
+         * Media3-specific). `setDataSource(Context, Uri)` — not the
+         * plain-`String` overload — handles both `file://` (the
+         * captured clip) and `content://` (a music file picked via the
+         * system audio picker) URIs uniformly.
          */
         fun probeDurationUs(context: Context, uri: Uri): Long? {
             val retriever = MediaMetadataRetriever()

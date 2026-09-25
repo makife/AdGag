@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -75,8 +76,23 @@ fun EditorScreen(
         Box(modifier = Modifier.fillMaxSize().background(AdGagColors.Background)) {
             // Full-bleed video — the dominant visual element, per this
             // app's own standing rule everywhere else in the product.
+            //
+            // Rotation preview note: since the pivot away from
+            // CompositionPlayer (plain ExoPlayer has no live Effects/
+            // Transformation pipeline — that's CompositionPlayer/
+            // Transformer-only), this is a visual-only Compose rotation
+            // of the rendered surface, not a re-decoded rotated frame.
+            // It's a reasonable approximation for feedback while
+            // editing; the real, pixel-accurate rotation is still what
+            // gets baked into the exported Ad (EditorViewModel.
+            // buildComposition's ScaleAndRotateTransformation, entirely
+            // unaffected by this pivot).
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                PlayerSurface(player = viewModel.player, surfaceType = SURFACE_TYPE_SURFACE_VIEW)
+                PlayerSurface(
+                    player = viewModel.player,
+                    surfaceType = SURFACE_TYPE_SURFACE_VIEW,
+                    modifier = Modifier.rotate(viewModel.rotationDegrees.toFloat()),
+                )
             }
 
             // Center play/pause — only shown while paused, so it never
