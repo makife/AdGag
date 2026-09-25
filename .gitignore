@@ -15,13 +15,48 @@ build/
 # source of truth is the ARB files, not this output.
 /lib/core/localization/generated/
 
-# Platform folders (generated via `flutter create .` — see README)
-/android/
-/ios/
+# Platform folders (generated via `flutter create .` — see README).
+# android/ and ios/ used to be excluded here in full, back when they were
+# pure, disposable `flutter create` boilerplate. That's no longer true —
+# android/app/src/main/kotlin/com/adgag/adgag/editor/ (the native Phase 1
+# editor, see CLAUDE.md's 2026-09-25 checkpoint) is real, hand-written,
+# non-regenerable source, and the planned parallel iOS native editor will
+# add the same kind of real Swift source under ios/. Only the two
+# platforms' actual generated/build artifacts are excluded below now —
+# everything else (build.gradle.kts, AndroidManifest.xml, *.kt, Info.plist,
+# AppDelegate.swift, *.swift, the Xcode project) is tracked, matching a
+# standard Flutter project's own default .gitignore. macOS/Windows/Linux/
+# web platform folders are still pure boilerplate this project doesn't
+# use — left excluded in full.
 /macos/
 /windows/
 /linux/
 /web/
+
+# Android generated/build artifacts (not the hand-written source above)
+android/.gradle/
+android/app/build/
+android/build/
+android/captures/
+android/local.properties
+android/key.properties
+android/**/GeneratedPluginRegistrant.java
+*.jks
+
+# iOS generated/build artifacts (not the hand-written source above)
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Flutter/flutter_export_environment.sh
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+ios/**/*.xcuserdata
+ios/**/xcuserdata/
+ios/**/DerivedData/
 
 # IDE
 .idea/
