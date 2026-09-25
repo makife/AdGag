@@ -272,7 +272,19 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         musicUri = uri
         val probedMs = if (uri != null) probeDurationUs(context, uri)?.let { it / 1000 } else null
         musicDurationMs = probedMs
-        val clipDurationMs = (trimEndMs - trimStartMs).coerceAtLeast(0L)
+        // Real bug found via user report: music could be added before
+        // trimEndMs had ever been defaulted from the player's own
+        // learned duration (still its untouched 0 default at that
+        // moment) — computing clipDurationMs from trimEndMs alone then
+        // degenerated to 0, making the timeline's Music segment render
+        // at only its minimum handle width (effectively invisible/easy
+        // to miss) until an unrelated setTrim() call happened to
+        // re-clamp it. Falling back to the player's own already-known
+        // durationMs whenever trimEndMs hasn't been established yet
+        // closes this race at the source instead of only papering over
+        // it downstream.
+        val effectiveClipEnd = if (trimEndMs > trimStartMs) trimEndMs else durationMs
+        val clipDurationMs = (effectiveClipEnd - trimStartMs).coerceAtLeast(0L)
         // Default placement: start at the clip's own beginning, play
         // for as much of the song as fits — user-adjustable via the
         // timeline's music-segment drag handles (setMusicPlacement).
@@ -393,7 +405,17 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         if (musicStartOffsetMs > 0) {
             musicSource = ConcatenatingMediaSource(SilenceMediaSource(musicStartOffsetMs * 1000), musicSource)
         }
-        return MergingMediaSource(videoOnlySource, musicSource)
+        // adjustPeriodTimeOffsets=true (confirmed real/public via the
+        // downloaded media3-exoplayer 1.11.0 sources — "whether to
+        // adjust timestamps of the merged media sources to all start at
+        // the same time"): the video branch's sample timestamps come
+        // from a ClippingMediaSource over the ORIGINAL captured file
+        // (offset by trimStartMs), while the music branch's come from a
+        // freshly-clipped/possibly-gap-prefixed file starting at its own
+        // local zero — without this flag ExoPlayer isn't told these two
+        // periods should be treated as co-starting, a plausible source
+        // of the reported freeze/stutter right when music is attached.
+        return MergingMediaSource(/* adjustPeriodTimeOffsets = */ true, videoOnlySource, musicSource)
     }
 
     /**

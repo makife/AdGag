@@ -6,6 +6,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -87,7 +89,21 @@ fun EditorScreen(
             // gets baked into the exported Ad (EditorViewModel.
             // buildComposition's ScaleAndRotateTransformation, entirely
             // unaffected by this pivot).
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // Direct user request: tapping the video itself
+                    // should pause it, tapping again should resume it —
+                    // not only the center play button (which only ever
+                    // shows while already paused). Placed on this outer
+                    // Box, declared before the center play button below,
+                    // so the button (a later sibling, drawn on top) still
+                    // gets first claim on taps within its own bounds.
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = { viewModel.togglePlayPause() })
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
                 PlayerSurface(
                     player = viewModel.player,
                     surfaceType = SURFACE_TYPE_SURFACE_VIEW,

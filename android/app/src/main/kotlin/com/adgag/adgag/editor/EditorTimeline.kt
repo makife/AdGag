@@ -29,7 +29,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -67,7 +66,7 @@ import kotlinx.coroutines.delay
  * - Dragging a handle updates ONLY local Compose state continuously (so
  *   the drag feels immediate); the real, comparatively expensive
  *   [EditorViewModel] mutation (which rebuilds and reloads the whole
- *   native [androidx.media3.transformer.CompositionPlayer] composition)
+ *   native [androidx.media3.exoplayer.ExoPlayer] preview MediaSource)
  *   only fires once, on drag END — not on every pixel of movement.
  *
  * A real, specific Compose pitfall avoided deliberately, not by luck:
@@ -226,13 +225,15 @@ private fun ClipRow(viewModel: EditorViewModel, density: Density, positionMs: Lo
 
         // Playhead — purely a read-only indicator of
         // rememberPlayheadPositionMs's polled value; never itself
-        // triggers a seek.
+        // triggers a seek. Colored with the brand gradient per direct
+        // user request ("timeline ilerleme çizgisini renkli yapalım"),
+        // replacing the previous plain white line.
         Box(
             modifier = Modifier
                 .offset(x = with(density) { msToPx(positionMs.coerceIn(0L, durationMs)).toDp() } - 1.dp)
-                .width(2.dp)
+                .width(3.dp)
                 .fillMaxHeight()
-                .background(Color.White),
+                .background(AdGagColors.BrandGradient),
         )
 
         TrimHandle(
@@ -296,7 +297,7 @@ private fun TrimHandle(xPx: Float, density: Density, onDrag: (deltaPx: Float) ->
                 .width(HandleWidthDp.dp)
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                .background(Color.White),
+                .background(AdGagColors.GradientPink),
         )
     }
 }
@@ -380,14 +381,14 @@ private fun MusicRow(viewModel: EditorViewModel, density: Density) {
                     .width(HandleWidthDp.dp)
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                    .background(Color.White),
+                    .background(AdGagColors.GradientPink),
             )
         }
     }
 }
 
 /**
- * [CompositionPlayer] (like ExoPlayer) doesn't push continuous position
+ * [ExoPlayer] doesn't push continuous position
  * updates through [androidx.media3.common.Player.Listener] — position
  * must be polled. This is read-only: it never writes back to the
  * player, only reads, so it cannot participate in the position-drives-
