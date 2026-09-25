@@ -43,35 +43,15 @@ class AppShell extends ConsumerWidget {
     _TabSpec(icon: Icons.person_outline, selectedIcon: Icons.person, label: "Profile"),
   ];
 
-  /// The AD tab's index in [_tabs] — the one screen ([TrimStep]) that can
-  /// have in-progress, losable edits when the user switches away from it.
+  /// The AD tab's index in [_tabs].
   static const int _createTabIndex = 2;
 
   Future<void> _onTabTap(BuildContext context, WidgetRef ref, int index) async {
     final bool leavingCreateTab = navigationShell.currentIndex == _createTabIndex && index != _createTabIndex;
-    // Also require the *internal* step to actually be the edit screen —
-    // hasUnsavedCreateEditsProvider is only meaningful while TrimStep is
-    // mounted. Keying the dialog on tab index alone meant a flag that
-    // hadn't yet been reset (or a rebuild ordering edge case) could pop
-    // the "lose your edits" warning on the subject picker, capture, or
-    // caption screen too, where there's nothing to lose.
-    final bool onTrimStep = ref.read(createAdFlowControllerProvider).step == CreateAdStep.trim;
-    if (leavingCreateTab && onTrimStep && ref.read(hasUnsavedCreateEditsProvider)) {
-      final bool? leave = await showDialog<bool>(
-        context: context,
-        builder: (BuildContext dialogContext) => AlertDialog(
-          title: const Text("Leave without finishing?"),
-          content: const Text("You'll lose the edits you made to this Ad."),
-          actions: <Widget>[
-            TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text("Stay")),
-            TextButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text("Leave")),
-          ],
-        ),
-      );
-      if (leave != true) {
-        return;
-      }
-    }
+    // No "lose your edits?" confirmation needed here — editing itself
+    // now happens entirely in a native Activity (see NativeEditorStep),
+    // which owns and can discard its own in-progress state; nothing
+    // losable is ever held in Flutter/Dart state.
     if (leavingCreateTab) {
       // Whether or not there were edits to confirm: leaving the AD tab
       // always starts the flow over from subject selection next time,

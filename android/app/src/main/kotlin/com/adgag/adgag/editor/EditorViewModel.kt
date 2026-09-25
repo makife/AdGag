@@ -10,13 +10,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.CompositionPlayer
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
+import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
@@ -75,6 +79,11 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         private set
     var musicUri by mutableStateOf<Uri?>(null)
     var musicVolume by mutableStateOf(1.0f)
+    /** 0/90/180/270 — [rotateNinety] is the only mutator, so it can never drift off a multiple of 90. */
+    var rotationDegrees by mutableStateOf(0)
+        private set
+    var isMuted by mutableStateOf(false)
+        private set
 
     // Export state, surfaced to the Compose UI.
     var isExporting by mutableStateOf(false)
@@ -134,6 +143,20 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
 
     fun setMusic(uri: Uri?) {
         musicUri = uri
+        val wasPlaying = player.isPlaying
+        val resumeAt = player.currentPosition
+        rebuildAndPrepare(startAt = resumeAt, playWhenReady = wasPlaying)
+    }
+
+    fun rotateNinety() {
+        rotationDegrees = (rotationDegrees + 90) % 360
+        val wasPlaying = player.isPlaying
+        val resumeAt = player.currentPosition
+        rebuildAndPrepare(startAt = resumeAt, playWhenReady = wasPlaying)
+    }
+
+    fun toggleMute() {
+        isMuted = !isMuted
         val wasPlaying = player.isPlaying
         val resumeAt = player.currentPosition
         rebuildAndPrepare(startAt = resumeAt, playWhenReady = wasPlaying)
@@ -213,8 +236,20 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         DebugLog.log(context, "buildComposition: sourceDurationUs=$sourceDurationUs")
         val videoItem = EditedMediaItem.Builder(clippedVideo)
             .apply { if (sourceDurationUs != null) setDurationUs(sourceDurationUs) }
+            .apply {
+                // ScaleAndRotateTransformation confirmed usable here by
+                // reading its real source: it implements
+                // MatrixTransformation -> GlMatrixTransformation ->
+                // GlEffect -> Effect, so it's a valid Effects.videoEffects
+                // entry directly — not guessed.
+                if (rotationDegrees != 0) {
+                    val rotateEffect: Effect =
+                        ScaleAndRotateTransformation.Builder().setRotationDegrees(rotationDegrees.toFloat()).build()
+                    setEffects(Effects(ImmutableList.of<AudioProcessor>(), ImmutableList.of(rotateEffect)))
+                }
+            }
             .build()
-        DebugLog.log(context, "buildComposition: videoItem built")
+        DebugLog.log(context, "buildComposition: videoItem built rotationDegrees=$rotationDegrees")
         // EditedMediaItemSequence has no public constructor as of media3
         // 1.11.0 (confirmed by reading the real sources jar downloaded
         // from Google's Maven repo, after an initial guess at a plain
@@ -231,8 +266,12 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         // a plain stable Android API, not Media3-specific) and only
         // requesting audio+video when an audio track actually exists
         // fixes this at the source instead of guessing at a workaround.
-        val hasAudio = sourceHasAudioTrack(sourcePath)
-        DebugLog.log(context, "buildComposition: sourceHasAudioTrack=$hasAudio")
+        // Mute forces video-only regardless of what the source actually
+        // has, reusing the exact same withVideoFrom path already proven
+        // safe for a genuinely audio-less source above — no new API
+        // surface for this feature.
+        val hasAudio = !isMuted && sourceHasAudioTrack(sourcePath)
+        DebugLog.log(context, "buildComposition: sourceHasAudioTrack(effective)=$hasAudio isMuted=$isMuted")
         val videoSequence = if (hasAudio) {
             EditedMediaItemSequence.withAudioAndVideoFrom(ImmutableList.of(videoItem))
         } else {

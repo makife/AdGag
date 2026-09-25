@@ -51,46 +51,18 @@ dependencies:
   # installed Flutter SDK requires — let `flutter pub get` dictate this).
   intl: ^0.20.3
 
-  # Media: capture, playback, gallery import, trimming
+  # Media: capture, playback, gallery import. Editing/trimming/export
+  # itself is entirely native (Kotlin/Media3 CompositionPlayer on
+  # Android, Swift/AVFoundation on iOS — see
+  # lib/core/media/native_editor_bridge.dart) — no Flutter-side video-
+  # editing package is needed anymore. easy_video_editor,
+  # ffmpeg_kit_flutter_new_video, and file_picker (background-music
+  # selection) were removed along with the Flutter editor they backed;
+  # see git history for that whole prior architecture if ever needed
+  # again.
   camera: ^0.11.0+2
   video_player: ^2.9.5
   image_picker: ^1.1.2
-  # NOTE: package is still pre-1.0 (0.1.6 as of 2026-06); pub.dev score
-  # 160/160, 53 likes, ~7.2k downloads/30d, actively maintained — but pin
-  # tightly since a 0.x package can introduce breaking changes on any
-  # minor bump per semver. Verified against pub.dev API before pinning
-  # (a prior pin of ^1.1.0 here was wrong — that version never existed).
-  easy_video_editor: ^0.1.6
-
-  # Timeline export (filter_complex: setpts speed ramps, amix/afade music
-  # mixing, drawtext/overlay text+image compositing, hardware H.264 encode).
-  # The original arthenica ffmpeg_kit_flutter is discontinued (pub.dev:
-  # isDiscontinued=true) and its native binaries were pulled from Maven
-  # Central/CocoaPods on 2025-04-01 — do not reintroduce it. This is the
-  # `sk3llo/ffmpeg_kit_flutter` community fork instead, verified live
-  # against pub.dev before pinning: license:lgpl-3.0 (NOT the -gpl variant
-  # — no x264/x265/xvidcore/vid.stab), actively published (2026-07),
-  # Dart-3-compatible, 130/160 pub points. Specifically the "_video" tier,
-  # not "_min": min excludes freetype/fontconfig/libass, which drawtext
-  # needs to render text at all — video adds exactly those while still
-  # being GPL-free. Hardware encoders (MediaCodec/VideoToolbox) are OS
-  # system libraries in every tier, GPL-irrelevant.
-  ffmpeg_kit_flutter_new_video: ^2.5.2
-
-  # Background-music file selection. The first attempt at this (session
-  # notes: see CLAUDE.md checkpoint) used file_picker ^11.0.3 to dodge a
-  # windows_file_picker/win32 version conflict with share_plus — but
-  # 11.0.3 predates file_picker's federated-plugin rewrite and still
-  # applies its own embedded Kotlin Gradle Plugin at a version (1.8.22)
-  # older than this project's, which is what actually broke the Android
-  # build ("cannot find symbol FilePickerPlugin"), not the package's
-  # size/scope. The current federated version's Android implementation
-  # (android_file_picker) properly defers to AGP 9's built-in Kotlin
-  # instead of forcing its own — verified by reading its actual
-  # android/build.gradle.kts before pinning this, not assumed. Needs
-  # share_plus bumped to ^13.3.0 (above) to resolve the win32 conflict
-  # instead.
-  file_picker: ^13.1.0
 
   # Media delivery / rendering
   cached_network_image: ^3.4.1
@@ -120,18 +92,6 @@ dependencies:
   # Used only inside lib/core/video/ — never leaks past that boundary.
   dio: ^5.7.0
 
-# The published easy_video_editor 0.1.6's iOS Swift sources don't import
-# Dispatch (three files use DispatchWorkItem/DispatchQueue without it) —
-# fails to compile on the newer Swift toolchain GitHub Actions' macos-15
-# runner uses ("Cannot find type 'DispatchWorkItem' in scope"), confirmed
-# via this project's own first-ever iOS CI run. No newer pub.dev version
-# fixes this yet; see third_party/easy_video_editor/PATCH_NOTES.md for
-# the full diagnosis, the exact three-file/one-line-each fix applied, and
-# removal instructions once upstream ships a real fix.
-dependency_overrides:
-  easy_video_editor:
-    path: third_party/easy_video_editor
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -148,34 +108,6 @@ flutter:
 
   assets:
     - assets/branding/
-    - assets/fonts/
-
-  # Text-overlay font choices (CLAUDE.md-adjacent video-editor spec,
-  # section 4: distinct visual categories, not size/weight variations of
-  # one family). Each also needs its own raw asset entry above (already
-  # covered by the blanket assets/fonts/ line) since
-  # FfmpegVideoExportService extracts these to real files for drawtext's
-  # fontfile= — Flutter's own font-family registration here only governs
-  # the *live preview*'s rendering, a separate mechanism from FFmpeg's.
-  # All four are Google Fonts, Open Font License — verified as genuine
-  # TrueType data via the `file` command before committing, the same
-  # verification this project already applies to every font asset.
-  fonts:
-    - family: AdGagRoboto
-      fonts:
-        - asset: assets/fonts/Roboto-Regular.ttf
-    - family: Anton
-      fonts:
-        - asset: assets/fonts/Anton-Regular.ttf
-    - family: Caveat
-      fonts:
-        - asset: assets/fonts/Caveat-Bold.ttf
-    - family: Bangers
-      fonts:
-        - asset: assets/fonts/Bangers-Regular.ttf
-    - family: PlayfairDisplay
-      fonts:
-        - asset: assets/fonts/PlayfairDisplay-Bold.ttf
 
 # flutter_launcher_icons config (CLAUDE.md section 65: brand assets stay
 # swappable — this is the one place the launcher icon source is named).

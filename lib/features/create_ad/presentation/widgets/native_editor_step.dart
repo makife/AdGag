@@ -7,18 +7,17 @@ import "../../../../core/media/native_editor_bridge.dart";
 import "../../domain/local_video_draft.dart";
 import "../providers/create_ad_flow_controller.dart";
 
-/// Real editing entry point on Android: opens the native editor
-/// (`NativeEditorActivity`, Kotlin/Media3 CompositionPlayer) as soon as
-/// this step is reached, instead of asking the user to find it behind a
-/// menu. See `native_editor_bridge.dart`'s own doc comment for why the
-/// native editor exists at all.
+/// The real (only) editing entry point: opens the native editor
+/// (`NativeEditorActivity` on Android, Swift/AVFoundation on iOS) the
+/// instant this step is reached. See `native_editor_bridge.dart`'s own
+/// doc comment for why editing is entirely native — there is no
+/// Flutter-side editor to fall back to anymore.
 ///
 /// This screen itself is just a thin launcher + loading/error state —
 /// all the actual editing UI lives in the native Activity. If the
 /// native editor fails (a real, caught, surfaced crash — not silence,
 /// see `NativeEditorActivity`'s own uncaught-exception handling), this
-/// screen shows the real error and offers "Use classic editor instead"
-/// so a native-side bug never fully blocks publishing.
+/// screen shows the real error with a Retry.
 class NativeEditorStep extends ConsumerStatefulWidget {
   const NativeEditorStep({super.key});
 
@@ -121,11 +120,6 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
                       SelectableText(_error!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
                       const SizedBox(height: 20),
                       FilledButton(onPressed: () => unawaited(_open()), child: const Text("Retry")),
-                      const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: () => ref.read(useClassicEditorProvider.notifier).state = true,
-                        child: const Text("Use classic editor instead"),
-                      ),
                     ],
                   ),
                 )

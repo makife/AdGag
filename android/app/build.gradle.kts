@@ -101,4 +101,10 @@ dependencies {
     implementation("androidx.media3:media3-transformer:1.11.0")
     implementation("androidx.media3:media3-ui-compose:1.11.0")
     implementation("androidx.media3:media3-common:1.11.0")
+    // ScaleAndRotateTransformation (rotate tool) — confirmed via its own
+    // real source (implements MatrixTransformation -> GlMatrixTransformation
+    // -> GlEffect -> Effect, so it's usable directly in Effects.videoEffects)
+    // before adding, per this project's own standing verify-before-use
+    // discipline for every Media3 API.
+    implementation("androidx.media3:media3-effect:1.11.0")
 }
