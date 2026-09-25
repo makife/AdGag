@@ -1388,25 +1388,7 @@ class _TrimStepState extends ConsumerState<TrimStep> {
                                   Positioned(
                                     top: 4,
                                     left: 4,
-                                    child: AnimatedBuilder(
-                                      animation: _transport!,
-                                      builder: (BuildContext context, Widget? child) => Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                        color: Colors.black54,
-                                        child: Text(
-                                          "seek=$_dbgSeekCount play=$_dbgPlayCount pause=$_dbgPauseCount\n"
-                                          "speed=$_dbgSpeedChangeCount mute=$_dbgMuteChangeCount\n"
-                                          "tl=$_dbgTimelineUpdateCount rebuild=$_dbgEditorRebuildCount\n"
-                                          "mSeek=$_dbgMusicSeekCount mPlay=$_dbgMusicPlayCount mPause=$_dbgMusicPauseCount\n"
-                                          "musicInRegion=$_musicInRegion errors=$_dbgErrorCount"
-                                          "${_dbgLastError != null ? '\n$_dbgLastError' : ''}",
-                                          style: TextStyle(
-                                            color: _dbgErrorCount > 0 ? Colors.redAccent : Colors.greenAccent,
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
+                                    child: _DebugOverlay(state: this),
                                   ),
                                 for (final VideoOverlay overlay in project.overlays)
                                   // BUG 7 fix, now transport-driven
@@ -1706,6 +1688,77 @@ class _VideoPreview extends StatelessWidget {
       video = ColorFiltered(colorFilter: colorFilter.previewFilter, child: video);
     }
     return RepaintBoundary(child: Center(child: video));
+  }
+}
+
+/// Debug-only, on-screen live state readout (`kDebugMode` only) — added
+/// after a reported oscillation where a first Play press only moved the
+/// video and a second Play press only played music, with nothing
+/// incrementing at all. Deliberately driven by its OWN `Timer.periodic`
+/// rather than `_transport`'s notifications: the exact bug under
+/// investigation is a scenario where `_transport` itself might stop
+/// notifying (a frozen video), which would otherwise freeze this
+/// overlay's own display too and hide the very evidence needed to see
+/// it. Isolated into its own small widget so this periodic refresh never
+/// costs a rebuild of the rest of the editor tree.
+class _DebugOverlay extends StatefulWidget {
+  const _DebugOverlay({required this.state});
+  final _TrimStepState state;
+
+  @override
+  State<_DebugOverlay> createState() => _DebugOverlayState();
+}
+
+class _DebugOverlayState extends State<_DebugOverlay> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    // 300ms: fast enough to feel live for manual play/pause testing,
+    // cheap enough (one small Text rebuild) to not matter even though
+    // it's unconditional while this overlay is mounted.
+    _timer = Timer.periodic(const Duration(milliseconds: 300), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final _TrimStepState s = widget.state;
+    final VideoPlayerController? controller = s._controller;
+    final EditorTransport? transport = s._transport;
+    final VideoPlayerController? music = s._musicController;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      color: Colors.black54,
+      child: Text(
+        "seek=${s._dbgSeekCount} play=${s._dbgPlayCount} pause=${s._dbgPauseCount}\n"
+        "speed=${s._dbgSpeedChangeCount} mute=${s._dbgMuteChangeCount}\n"
+        "tl=${s._dbgTimelineUpdateCount} rebuild=${s._dbgEditorRebuildCount}\n"
+        "mSeek=${s._dbgMusicSeekCount} mPlay=${s._dbgMusicPlayCount} mPause=${s._dbgMusicPauseCount}\n"
+        "musicInRegion=${s._musicInRegion} errors=${s._dbgErrorCount}\n"
+        // Real-state flags (not counts): v/m are the NATIVE controllers'
+        // own reported isPlaying; t is the transport's; lastV/lastM are
+        // what this screen last actually told each controller to be;
+        // vPos/mPos are raw positions, to see directly whether either
+        // decoder is truly frozen vs. just unreported.
+        "v=${controller?.value.isPlaying} t=${transport?.isPlaying} m=${music?.value.isPlaying}\n"
+        "lastV=${s._lastAppliedIsPlaying} lastM=${s._lastAppliedMusicPlaying}\n"
+        "vPos=${controller?.value.position.inMilliseconds} mPos=${music?.value.position.inMilliseconds}"
+        "${s._dbgLastError != null ? '\n${s._dbgLastError}' : ''}",
+        style: TextStyle(
+          color: s._dbgErrorCount > 0 ? Colors.redAccent : Colors.greenAccent,
+          fontSize: 10,
+        ),
+      ),
+    );
   }
 }
 
