@@ -10,6 +10,7 @@ analyzer:
     - "**/*.freezed.dart"
     - "lib/l10n/**"
     - build/**
+    - third_party/**
     - android/**
     - ios/**
     - web/**

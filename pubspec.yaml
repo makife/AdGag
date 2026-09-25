@@ -120,6 +120,18 @@ dependencies:
   # Used only inside lib/core/video/ — never leaks past that boundary.
   dio: ^5.7.0
 
+# The published easy_video_editor 0.1.6's iOS Swift sources don't import
+# Dispatch (three files use DispatchWorkItem/DispatchQueue without it) —
+# fails to compile on the newer Swift toolchain GitHub Actions' macos-15
+# runner uses ("Cannot find type 'DispatchWorkItem' in scope"), confirmed
+# via this project's own first-ever iOS CI run. No newer pub.dev version
+# fixes this yet; see third_party/easy_video_editor/PATCH_NOTES.md for
+# the full diagnosis, the exact three-file/one-line-each fix applied, and
+# removal instructions once upstream ships a real fix.
+dependency_overrides:
+  easy_video_editor:
+    path: third_party/easy_video_editor
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
