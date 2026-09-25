@@ -1,6 +1,7 @@
 package com.adgag.adgag.editor
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
@@ -10,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.media3.common.C
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -26,6 +28,13 @@ import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import com.google.common.collect.ImmutableList
+import com.google.common.collect.ImmutableSet
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -67,7 +76,22 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
     val player: CompositionPlayer = run {
         DebugLog.log(context, "EditorViewModel: building CompositionPlayer")
         val built = CompositionPlayer.Builder(context).build()
-        DebugLog.log(context, "EditorViewModel: CompositionPlayer built OK")
+        // REAL BUG found via user report ("video sürekli tekrarlı
+        // akmıyor... play butonu çalışmıyor"): repeatMode was never set
+        // anywhere, so a plain STATE_ENDED was reached at the end of
+        // every playthrough — and per standard ExoPlayer/Player
+        // semantics, calling play() again on an ENDED player does
+        // nothing at all without an explicit seekTo(0) first. This is
+        // very likely the SAME root cause behind "video stops when
+        // music is added" too: if the user attached music while
+        // scrubbed near the clip's own end, the rebuilt player could
+        // land in/near ENDED with no repeat mode to recover from it,
+        // looking exactly like "stopped and won't resume." The Flutter
+        // editor this replaces always called setLooping(true) on its
+        // preview controller — this is the direct Player-interface
+        // equivalent, just never carried over.
+        built.repeatMode = Player.REPEAT_MODE_ONE
+        DebugLog.log(context, "EditorViewModel: CompositionPlayer built OK, repeatMode=ONE")
         built
     }
 
@@ -82,11 +106,37 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
     /** The music file's own real duration, probed once when attached — drives the timeline's music segment width (see EditorScreen's TimelineSection). Null while no music is attached. */
     var musicDurationMs by mutableStateOf<Long?>(null)
         private set
+    /**
+     * Where in the CLIP's own timeline (0 = clip/trim start) the music
+     * begins playing, and for how long — real, user-report-driven
+     * additions ("eklenen müziği kesemiyorum" / "can't cut the music I
+     * added"): previously music always started at 0 with no way to
+     * shorten it. [EditorScreen]'s timeline lets both be dragged
+     * directly. Both are relative to the CLIP's timeline, not the music
+     * file's own (possibly much longer) runtime — trimming means
+     * "how much of the song, from its own start, plays and where,"
+     * matching this phase's actual scope, not implying arbitrary in-
+     * song scrubbing that doesn't exist yet.
+     */
+    var musicStartOffsetMs by mutableStateOf(0L)
+        private set
+    var musicPlayDurationMs by mutableStateOf(0L)
+        private set
     /** 0/90/180/270 — [rotateNinety] is the only mutator, so it can never drift off a multiple of 90. */
     var rotationDegrees by mutableStateOf(0)
         private set
     var isMuted by mutableStateOf(false)
         private set
+
+    /** A handful of evenly-spaced frames from the source clip, for the timeline's filmstrip — see [generateThumbnails]. Empty until generation finishes; the timeline simply shows a plain track until then, never blocks on it. */
+    var thumbnails by mutableStateOf<List<Bitmap>>(emptyList())
+        private set
+
+    // Deliberately not named viewModelScope and not the real Jetpack
+    // extension property of that name (which needs lifecycle-viewmodel-
+    // ktx, a dependency this module doesn't otherwise need) — a plain,
+    // manually-cancelled scope is simpler for the one call site that needs it.
+    private val editorScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     // Export state, surfaced to the Compose UI.
     var isExporting by mutableStateOf(false)
@@ -126,6 +176,52 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
             }
         })
         rebuildAndPrepare(startAt = 0L, playWhenReady = true)
+        generateThumbnails()
+    }
+
+    /**
+     * Real feature gap found via user report ("timelineda thumbnail
+     * yok" / no thumbnails in the timeline): reads a handful of evenly-
+     * spaced frames directly from the source file with
+     * [MediaMetadataRetriever.getFrameAtTime] — a plain, long-stable
+     * platform API (available since API 10), not Media3-specific, so no
+     * new-API verification risk here. Runs on [Dispatchers.IO] since
+     * decoding several frames synchronously is real work; publishes to
+     * [thumbnails] on the main thread once done. Best-effort: any
+     * failure just leaves the timeline without thumbnails rather than
+     * blocking or crashing the editor over a cosmetic feature.
+     */
+    private fun generateThumbnails() {
+        editorScope.launch {
+            val frames = withContext(Dispatchers.IO) {
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(sourcePath)
+                    val totalMs = retriever
+                        .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                        ?.toLongOrNull()
+                    if (totalMs == null || totalMs <= 0) {
+                        emptyList()
+                    } else {
+                        val count = 10
+                        (0 until count).mapNotNull { i ->
+                            val timeUs = (totalMs * i / count) * 1000
+                            try {
+                                retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("EditorViewModel", "Thumbnail generation failed", e)
+                    emptyList()
+                } finally {
+                    retriever.release()
+                }
+            }
+            thumbnails = frames
+        }
     }
 
     fun togglePlayPause() {
@@ -139,6 +235,21 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
     fun setTrim(startMs: Long, endMs: Long) {
         trimStartMs = startMs
         trimEndMs = endMs
+        // Defensive: if music was already placed and the clip is now
+        // SHORTER than before (the trim window shrank), re-clamp the
+        // music's placement so it can never end up specifying a segment
+        // that no longer fits — buildComposition()'s own clamping would
+        // still keep the export correct even without this, but leaving
+        // stale, now-out-of-range values in musicStartOffsetMs/
+        // musicPlayDurationMs would make the timeline's own displayed
+        // numbers wrong until the user happened to touch the music
+        // segment again.
+        if (musicUri != null) {
+            val newClipDurationMs = (endMs - startMs).coerceAtLeast(0L)
+            val clampedStart = musicStartOffsetMs.coerceIn(0L, newClipDurationMs)
+            musicStartOffsetMs = clampedStart
+            musicPlayDurationMs = musicPlayDurationMs.coerceIn(0L, newClipDurationMs - clampedStart)
+        }
         val wasPlaying = player.isPlaying
         val resumeAt = player.currentPosition.coerceIn(0L, endMs - startMs)
         rebuildAndPrepare(startAt = resumeAt, playWhenReady = wasPlaying)
@@ -146,7 +257,33 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
 
     fun setMusic(uri: Uri?) {
         musicUri = uri
-        musicDurationMs = if (uri != null) probeDurationUs(context, uri)?.let { it / 1000 } else null
+        val probedMs = if (uri != null) probeDurationUs(context, uri)?.let { it / 1000 } else null
+        musicDurationMs = probedMs
+        val clipDurationMs = (trimEndMs - trimStartMs).coerceAtLeast(0L)
+        // Default placement: start at the clip's own beginning, play
+        // for as much of the song as fits — the same sensible default
+        // the deleted Flutter editor used, now user-adjustable via the
+        // timeline's music-segment drag handles (setMusicPlacement).
+        musicStartOffsetMs = 0L
+        musicPlayDurationMs = if (probedMs != null) minOf(probedMs, clipDurationMs) else 0L
+        val wasPlaying = player.isPlaying
+        val resumeAt = player.currentPosition
+        rebuildAndPrepare(startAt = resumeAt, playWhenReady = wasPlaying)
+    }
+
+    /**
+     * Moves and/or resizes the attached music's placement within the
+     * clip's own timeline — [EditorScreen]'s draggable music segment is
+     * the caller. Both values are clamped so the segment can never sit
+     * outside the clip or exceed the music file's own real length.
+     */
+    fun setMusicPlacement(startOffsetMs: Long, playDurationMs: Long) {
+        val durationMs = musicDurationMs ?: return
+        val clipDurationMs = (trimEndMs - trimStartMs).coerceAtLeast(0L)
+        val clampedStart = startOffsetMs.coerceIn(0L, clipDurationMs)
+        val maxDuration = (clipDurationMs - clampedStart).coerceAtLeast(0L)
+        musicStartOffsetMs = clampedStart
+        musicPlayDurationMs = playDurationMs.coerceIn(0L, minOf(durationMs, maxDuration))
         val wasPlaying = player.isPlaying
         val resumeAt = player.currentPosition
         rebuildAndPrepare(startAt = resumeAt, playWhenReady = wasPlaying)
@@ -298,17 +435,42 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         // break, not a soft failure. Music plays at its own source level
         // for now.
         val musicDurationUs = probeDurationUs(context, uri)
-        DebugLog.log(context, "buildComposition: musicDurationUs=$musicDurationUs")
-        val musicItem = EditedMediaItem.Builder(MediaItem.fromUri(uri))
+        DebugLog.log(
+            context,
+            "buildComposition: musicDurationUs=$musicDurationUs musicStartOffsetMs=$musicStartOffsetMs " +
+                "musicPlayDurationMs=$musicPlayDurationMs",
+        )
+        // Real feature added via user report ("eklenen müziği
+        // kesemiyorum" / can't cut the added music): the music
+        // MediaItem is now clipped to [0, musicPlayDurationMs] — the
+        // exact same ClippingConfiguration pattern already proven safe
+        // for the video above — so a user-shortened segment actually
+        // only plays that much of the song, not the whole file.
+        val playDurationMs = musicPlayDurationMs.coerceAtLeast(1L)
+        val clippedMusic = MediaItem.Builder()
+            .setUri(uri)
+            .setClippingConfiguration(
+                MediaItem.ClippingConfiguration.Builder()
+                    .setStartPositionMs(0)
+                    .setEndPositionMs(playDurationMs)
+                    .build(),
+            )
+            .build()
+        val musicItem = EditedMediaItem.Builder(clippedMusic)
             .apply { if (musicDurationUs != null) setDurationUs(musicDurationUs) }
             .build()
-        // isLooping=false (withAudioFrom's default): this app's
-        // BackgroundAudio model (see the Flutter side's VideoProject)
-        // never asked for the music to loop past the clip's own end —
-        // the mix simply ends when the video sequence does, matching
-        // amix=duration=first in the FFmpeg export pipeline this
-        // replaces.
-        val musicSequence = EditedMediaItemSequence.withAudioFrom(ImmutableList.of(musicItem))
+        // Real feature added: musicStartOffsetMs positions the segment
+        // within the clip's own timeline via addGap — confirmed usable
+        // here by reading EditedMediaItemSequence's own real source
+        // (Builder.addGap(durationUs), the same mechanism
+        // withAudioFrom's own implementation is built on internally),
+        // not guessed. isLooping=false (unchanged): this app's
+        // BackgroundAudio model never asked for the music to loop past
+        // the clip's own end.
+        val musicSequence = EditedMediaItemSequence.Builder(ImmutableSet.of(C.TRACK_TYPE_AUDIO))
+            .apply { if (musicStartOffsetMs > 0) addGap(musicStartOffsetMs * 1000) }
+            .addItem(musicItem)
+            .build()
 
         return Composition.Builder(ImmutableList.of(videoSequence, musicSequence)).build()
     }
@@ -362,6 +524,7 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
     }
 
     override fun onCleared() {
+        editorScope.cancel()
         player.release()
     }
 

@@ -8,7 +8,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,11 +15,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,8 +32,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RangeSlider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -155,7 +150,7 @@ fun EditorScreen(
                     .padding(horizontal = AdGagSpacing.lg.dp, vertical = AdGagSpacing.lg.dp),
             ) {
                 if (viewModel.durationMs > 0) {
-                    TimelineSection(viewModel)
+                    EditorTimeline(viewModel = viewModel)
                     Spacer(modifier = Modifier.height(AdGagSpacing.lg.dp))
                 }
 
@@ -177,87 +172,6 @@ fun EditorScreen(
             }
         }
     }
-}
-
-/**
- * Real user report: "eklediğim müziği timelineda göremiyorum, timeline
- * yapmamışsın" (can't see the music I added in a timeline, you didn't
- * build one) — the previous version was just a trim slider with no
- * visual track at all. This is a real, if minimal, two-row timeline: a
- * Clip row (the trim slider itself, functionally unchanged — already
- * proven to work) and a Music row directly beneath it, drawn to scale
- * against the SAME ruler, showing exactly where the attached music
- * plays relative to the clip. Music always starts at the trim window's
- * own start (this phase's `EditorViewModel` has no per-track start-
- * offset concept yet — matches the actual composition logic, not an
- * idealized picture of it) and runs for its own real probed duration,
- * clamped to the trim window's end.
- */
-@Composable
-private fun TimelineSection(viewModel: EditorViewModel) {
-    Column {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(text = "Clip", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
-            Text(
-                text = "${formatSeconds(viewModel.trimStartMs)} – ${formatSeconds(viewModel.trimEndMs)}",
-                color = AdGagColors.OnSurfaceMuted,
-                style = MaterialTheme.typography.labelMedium,
-            )
-        }
-        Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
-        // The plain value/onValueChange/valueRange overload — proven to
-        // compile against this project's pinned Compose BOM (2026.06.01)
-        // earlier this session; the newer state-hoisting RangeSliderState
-        // API's availability at that exact BOM wasn't verified, so this
-        // is the safer, confirmed choice, not a downgrade.
-        RangeSlider(
-            value = viewModel.trimStartMs.toFloat()..viewModel.trimEndMs.toFloat(),
-            valueRange = 0f..viewModel.durationMs.toFloat(),
-            onValueChange = { range ->
-                viewModel.setTrim(range.start.toLong(), range.endInclusive.toLong())
-            },
-            colors = SliderDefaults.colors(
-                activeTrackColor = AdGagColors.GradientPink,
-                inactiveTrackColor = AdGagColors.Border,
-                thumbColor = Color.White,
-            ),
-        )
-
-        val musicDurationMs = viewModel.musicDurationMs
-        if (viewModel.musicUri != null && musicDurationMs != null && viewModel.durationMs > 0) {
-            Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
-            Text(text = "Music", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
-            Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
-            val totalMs = viewModel.durationMs.toFloat()
-            val segmentStartFraction = (viewModel.trimStartMs / totalMs).coerceIn(0f, 1f)
-            val segmentEndMs = (viewModel.trimStartMs + musicDurationMs).coerceAtMost(viewModel.trimEndMs)
-            val segmentEndFraction = (segmentEndMs / totalMs).coerceIn(segmentStartFraction, 1f)
-            BoxWithConstraints(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(20.dp)
-                    .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                    .background(AdGagColors.Surface),
-            ) {
-                val trackWidth = maxWidth
-                Box(
-                    modifier = Modifier
-                        .offset(x = trackWidth * segmentStartFraction)
-                        .width(trackWidth * (segmentEndFraction - segmentStartFraction))
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                        .background(AdGagColors.GradientBlue.copy(alpha = 0.55f)),
-                )
-            }
-        }
-    }
-}
-
-private fun formatSeconds(ms: Long): String {
-    val totalSeconds = ms / 1000
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
 }
 
 @Composable
