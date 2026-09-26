@@ -16,6 +16,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.util.UnstableApi
@@ -41,7 +42,9 @@ import androidx.media3.transformer.Transformer
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableSet
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -96,9 +99,25 @@ class EditorViewModel(
     var selectedClipIndex by mutableStateOf(0)
         private set
 
+    /**
+     * Whole-video speed (slow motion down to 0.25x). Clip trims and the
+     * clip strip stay in SOURCE time; the 30s cap, the music row and the
+     * transitions are in OUTPUT time (source / speed).
+     */
+    var videoSpeed by mutableStateOf(initialState.videoSpeed)
+        private set
+
+    /** Sum of the clips' kept parts, SOURCE time. */
     val totalDurationMs: Long get() = clips.sumOf { it.keptDurationMs }
-    val remainingMs: Long get() = (MaxTotalDurationMs - totalDurationMs).coerceAtLeast(0L)
+    /** How long the finished Ad plays. */
+    val outputDurationMs: Long get() = (totalDurationMs / videoSpeed).toLong()
+    /** How much SOURCE time fits under the 30s OUTPUT cap at the current speed. */
+    val sourceBudgetMs: Long get() = (MaxTotalDurationMs * videoSpeed).toLong()
+    /** SOURCE time still free — also the camera's limit for an extra take. */
+    val remainingMs: Long get() = (sourceBudgetMs - totalDurationMs).coerceAtLeast(0L)
     val canAddClip: Boolean get() = remainingMs >= MinClipDurationMs
+
+    fun canUseVideoSpeed(speed: Float): Boolean = (totalDurationMs / speed).toLong() <= MaxTotalDurationMs
 
     var isPlaying by mutableStateOf(false)
         private set
@@ -116,6 +135,29 @@ class EditorViewModel(
     /** Where in the SONG the used part begins — the music row's LEFT trim handle. */
     var musicSourceStartMs by mutableStateOf(initialState.musicSourceStartMs)
         private set
+    /** The picked song, untouched; [musicPath] is this re-timed to [musicSpeed]. */
+    var musicOriginalPath by mutableStateOf(initialState.musicOriginalPath)
+        private set
+    var musicSpeed by mutableStateOf(initialState.musicSpeed)
+        private set
+    var musicFadeInMs by mutableStateOf(initialState.musicFadeInMs)
+        private set
+    var musicFadeOutMs by mutableStateOf(initialState.musicFadeOutMs)
+        private set
+
+    /**
+     * PREVIEW-ONLY song file. The preview player runs at [videoSpeed] and
+     * that slows/speeds EVERYTHING it plays, music included — so the
+     * preview gets the original re-timed to musicSpeed / videoSpeed, which
+     * the player then plays back at exactly musicSpeed. (Positions inside
+     * it are musicPath positions × videoSpeed.) Null = not ready yet;
+     * the preview plays silence meanwhile. Not persisted — rebuilt.
+     */
+    private var musicPreviewPath: String? = null
+    private var musicPreviewDurationMs = 0L
+    private var musicJob: Job? = null
+
+    /** A music operation (copy, re-timing) is running. */
     var isAttachingMusic by mutableStateOf(false)
         private set
 
@@ -168,6 +210,7 @@ class EditorViewModel(
         DebugLog.log(context, "EditorViewModel: init clips=${clips.size}")
         musicDurationMs = musicPath?.let { probeDurationUs(context, Uri.fromFile(File(it)))?.div(1000) }
         if (musicPath != null && musicDurationMs == null) musicPath = null
+        if (musicOriginalPath == null) musicOriginalPath = musicPath
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
@@ -210,17 +253,24 @@ class EditorViewModel(
         }
         rebuildAndPrepare(startGlobalMs = startAt, playWhenReady = true)
         clips.forEach { generateThumbnails(it.path) }
+        // The preview music file isn't persisted across the "+" relaunch.
+        if (musicPath != null) refreshPreviewMusic()
     }
 
     fun sessionState(): EditorSessionState = EditorSessionState(
         clips = clips,
         transitions = transitions,
         musicPath = musicPath,
+        musicOriginalPath = musicOriginalPath,
+        musicSpeed = musicSpeed,
+        musicFadeInMs = musicFadeInMs,
+        musicFadeOutMs = musicFadeOutMs,
         musicStartOffsetMs = musicStartOffsetMs,
         musicSourceStartMs = musicSourceStartMs,
         musicPlayDurationMs = musicPlayDurationMs,
         rotationDegrees = rotationDegrees,
         isMuted = isMuted,
+        videoSpeed = videoSpeed,
     )
 
     fun clipStartMs(index: Int): Long = clips.take(index).sumOf { it.keptDurationMs }
@@ -252,7 +302,7 @@ class EditorViewModel(
         // The other clips' kept time is fixed; this one may use whatever
         // is left of the 30s cap.
         val othersMs = totalDurationMs - clip.keptDurationMs
-        val maxKept = (MaxTotalDurationMs - othersMs).coerceAtLeast(MinClipDurationMs)
+        val maxKept = (sourceBudgetMs - othersMs).coerceAtLeast(MinClipDurationMs)
         val start = startMs.coerceIn(0L, clip.sourceDurationMs)
         val end = endMs.coerceIn(start, minOf(clip.sourceDurationMs, start + maxKept))
         clips = clips.toMutableList().also { it[index] = clip.copy(trimStartMs = start, trimEndMs = end) }
@@ -305,7 +355,8 @@ class EditorViewModel(
     fun replayTransition(boundaryIndex: Int) {
         val spec = transitions.getOrNull(boundaryIndex) ?: return
         val start = clipStartMs(boundaryIndex + 1)
-        val lead = maxOf(1000L, spec.durationMs + 500L)
+        // Lead-in is in OUTPUT time; the timeline position is SOURCE time.
+        val lead = (maxOf(1000L, spec.durationMs + 500L) * videoSpeed).toLong()
         seekToGlobal((start - lead).coerceAtLeast(0L))
         player.play()
     }
@@ -317,13 +368,12 @@ class EditorViewModel(
      */
     fun setMusic(uri: Uri?) {
         if (uri == null) {
-            musicPath = null
-            musicDurationMs = null
-            rebuildAndPrepare(startGlobalMs = globalPositionMs(), playWhenReady = player.playWhenReady)
+            removeMusic()
             return
         }
         isAttachingMusic = true
-        editorScope.launch {
+        musicJob?.cancel()
+        musicJob = editorScope.launch {
             val copied = withContext(Dispatchers.IO) {
                 try {
                     val dest = File(context.filesDir, "editor_music_${System.currentTimeMillis()}")
@@ -342,18 +392,140 @@ class EditorViewModel(
                     null
                 }
             }
-            isAttachingMusic = false
             if (copied == null) {
+                isAttachingMusic = false
                 previewError = "Couldn't read that audio file."
                 return@launch
             }
+            musicOriginalPath = copied.first
             musicPath = copied.first
             musicDurationMs = copied.second
+            musicSpeed = 1f
+            musicFadeInMs = 0L
+            musicFadeOutMs = 0L
             musicStartOffsetMs = 0L
             musicSourceStartMs = 0L
-            musicPlayDurationMs = minOf(copied.second, totalDurationMs)
-            rebuildAndPrepare(startGlobalMs = globalPositionMs(), playWhenReady = player.playWhenReady)
+            musicPlayDurationMs = minOf(copied.second, outputDurationMs)
+            preparePreviewMusicAndRebuild()
         }
+    }
+
+    fun removeMusic() {
+        musicJob?.cancel()
+        isAttachingMusic = false
+        musicPath = null
+        musicOriginalPath = null
+        musicPreviewPath = null
+        musicDurationMs = null
+        musicSpeed = 1f
+        musicFadeInMs = 0L
+        musicFadeOutMs = 0L
+        rebuildAndPrepare(startGlobalMs = globalPositionMs(), playWhenReady = player.playWhenReady)
+    }
+
+    /**
+     * Re-times the music (pitch kept). The kept part of the song stays the
+     * same stretch of the SONG, so its in-point and length scale by
+     * old/new speed.
+     */
+    fun changeMusicSpeed(speed: Float) {
+        val original = musicOriginalPath ?: return
+        if (speed == musicSpeed) return
+        val oldSpeed = musicSpeed
+        isAttachingMusic = true
+        musicJob?.cancel()
+        musicJob = editorScope.launch {
+            try {
+                val retimed = if (speed == 1f) original else bakeMusicSpeed(context, original, speed)
+                val songMs = probeDurationUs(context, Uri.fromFile(File(retimed)))?.div(1000) ?: return@launch
+                musicSpeed = speed
+                musicPath = retimed
+                musicDurationMs = songMs
+                val factor = oldSpeed / speed
+                musicSourceStartMs = (musicSourceStartMs * factor).toLong().coerceIn(0L, (songMs - 1).coerceAtLeast(0L))
+                musicPlayDurationMs = (musicPlayDurationMs * factor).toLong()
+                clampMusicToTimeline()
+                preparePreviewMusicAndRebuild()
+            } catch (e: CancellationException) {
+                throw e // superseded by a newer music change — not an error
+            } catch (e: Exception) {
+                Log.w("EditorViewModel", "Re-timing music failed", e)
+                previewError = "Couldn't change the music speed."
+                isAttachingMusic = false
+            }
+        }
+    }
+
+    fun setMusicFade(fadeInMs: Long, fadeOutMs: Long) {
+        val play = musicPlayDurationMs.coerceAtLeast(0L)
+        musicFadeInMs = fadeInMs.coerceIn(0L, minOf(MaxMusicFadeMs, play))
+        musicFadeOutMs = fadeOutMs.coerceIn(0L, minOf(MaxMusicFadeMs, play))
+        // No rebuild: the preview applies fades through player volume.
+    }
+
+    fun changeVideoSpeed(speed: Float) {
+        if (speed == videoSpeed || !canUseVideoSpeed(speed)) return
+        videoSpeed = speed
+        clampMusicToTimeline()
+        if (musicPath != null) {
+            refreshPreviewMusic()
+        } else {
+            rebuildAndPrepare(startGlobalMs = 0L, playWhenReady = true)
+        }
+    }
+
+    /**
+     * Drives the music's fade-in/out in the PREVIEW via player volume (the
+     * preview's only audio while music is attached), once per frame from
+     * EditorScreen. [globalMs] is the SOURCE-time playhead.
+     */
+    fun updatePreviewVolume(globalMs: Long) {
+        if (musicPath == null) {
+            player.volume = if (isMuted) 0f else 1f
+            return
+        }
+        val local = (globalMs / videoSpeed).toLong() - musicStartOffsetMs
+        player.volume = if (local in 0 until musicPlayDurationMs) {
+            fadeGain(local, musicFadeInMs, musicFadeOutMs, musicPlayDurationMs)
+        } else {
+            1f
+        }
+    }
+
+    private fun refreshPreviewMusic() {
+        isAttachingMusic = true
+        musicJob?.cancel()
+        musicJob = editorScope.launch {
+            try {
+                preparePreviewMusicAndRebuild()
+            } catch (e: CancellationException) {
+                throw e // superseded by a newer music change — not an error
+            } catch (e: Exception) {
+                Log.w("EditorViewModel", "Preparing preview music failed", e)
+                previewError = "Couldn't prepare the music preview."
+                isAttachingMusic = false
+            }
+        }
+    }
+
+    /** See [musicPreviewPath]: the original re-timed to musicSpeed / videoSpeed. */
+    private suspend fun preparePreviewMusicAndRebuild() {
+        val original = musicOriginalPath
+        val retimed = musicPath
+        if (original == null || retimed == null) {
+            isAttachingMusic = false
+            return
+        }
+        val ratio = musicSpeed / videoSpeed
+        val preview = when {
+            videoSpeed == 1f -> retimed
+            ratio == 1f -> original
+            else -> bakeMusicSpeed(context, original, ratio)
+        }
+        musicPreviewPath = preview
+        musicPreviewDurationMs = probeDurationUs(context, Uri.fromFile(File(preview)))?.div(1000) ?: 0L
+        isAttachingMusic = false
+        rebuildAndPrepare(startGlobalMs = globalPositionMs(), playWhenReady = player.playWhenReady)
     }
 
     /**
@@ -363,7 +535,7 @@ class EditorViewModel(
      */
     fun setMusicPlacement(startOffsetMs: Long, sourceStartMs: Long, playDurationMs: Long) {
         val songMs = musicDurationMs ?: return
-        val total = totalDurationMs
+        val total = outputDurationMs
         val start = startOffsetMs.coerceIn(0L, total)
         val sourceStart = sourceStartMs.coerceIn(0L, (songMs - 1).coerceAtLeast(0L))
         musicStartOffsetMs = start
@@ -391,12 +563,12 @@ class EditorViewModel(
     private fun applyPreviewVolume() {
         // With music attached the preview carries only the music (no live
         // mixing), so mute only applies to the no-music preview.
-        player.volume = if (musicPath == null && isMuted) 0f else 1f
+        if (musicPath == null) player.volume = if (isMuted) 0f else 1f
     }
 
     private fun clampMusicToTimeline() {
         if (musicPath == null) return
-        val total = totalDurationMs
+        val total = outputDurationMs
         musicStartOffsetMs = musicStartOffsetMs.coerceIn(0L, total)
         musicPlayDurationMs = musicPlayDurationMs.coerceIn(0L, total - musicStartOffsetMs)
     }
@@ -459,8 +631,9 @@ class EditorViewModel(
      */
     private fun buildSegments(): List<Segment> {
         val music = musicPath != null && musicPlayDurationMs > 0
-        val mStart = musicStartOffsetMs
-        val mEnd = musicStartOffsetMs + musicPlayDurationMs
+        // Music placement is OUTPUT time; the playlist is SOURCE time.
+        val mStart = (musicStartOffsetMs * videoSpeed).toLong()
+        val mEnd = ((musicStartOffsetMs + musicPlayDurationMs) * videoSpeed).toLong()
         val result = mutableListOf<Segment>()
         var g = 0L
         clips.forEachIndexed { i, clip ->
@@ -494,6 +667,7 @@ class EditorViewModel(
             DefaultExtractorsFactory().setConstantBitrateSeekingEnabled(true),
         )
         val music = musicPath
+        val previewMusic = musicPreviewPath
         val sources = segments.map { seg ->
             val clip = clips[seg.clipIndex]
             val video: MediaSource = ClippingMediaSource(
@@ -504,18 +678,21 @@ class EditorViewModel(
             if (music == null) {
                 video
             } else {
+                val s = videoSpeed
                 val segEnd = seg.globalStartMs + seg.lengthMs
-                val mEnd = musicStartOffsetMs + musicPlayDurationMs
+                val mStart = (musicStartOffsetMs * s).toLong()
+                val mEnd = ((musicStartOffsetMs + musicPlayDurationMs) * s).toLong()
                 // Cuts within 50ms of a clip edge are skipped (buildSegments),
                 // so a segment can overlap the music range by all but a few
                 // ms — decide by majority overlap rather than full containment.
-                val overlap = minOf(segEnd, mEnd) - maxOf(seg.globalStartMs, musicStartOffsetMs)
-                val songMs = musicDurationMs ?: 0L
-                val audio: MediaSource = if (musicPlayDurationMs > 0 && overlap * 2 >= seg.lengthMs && songMs > 0) {
-                    val fromMs = (musicSourceStartMs + seg.globalStartMs - musicStartOffsetMs)
+                val overlap = minOf(segEnd, mEnd) - maxOf(seg.globalStartMs, mStart)
+                val songMs = musicPreviewDurationMs
+                val audio: MediaSource = if (previewMusic != null && musicPlayDurationMs > 0 && overlap * 2 >= seg.lengthMs && songMs > 0) {
+                    // Preview-file position = musicPath position × videoSpeed (see musicPreviewPath).
+                    val fromMs = ((musicSourceStartMs * s).toLong() + seg.globalStartMs - mStart)
                         .coerceIn(0L, (songMs - 1).coerceAtLeast(0L))
                     ClippingMediaSource(
-                        factory.createMediaSource(MediaItem.fromUri(Uri.fromFile(File(music)))),
+                        factory.createMediaSource(MediaItem.fromUri(Uri.fromFile(File(previewMusic)))),
                         fromMs * 1000,
                         minOf(fromMs + seg.lengthMs, songMs) * 1000,
                     )
@@ -534,6 +711,10 @@ class EditorViewModel(
         player.stop()
         player.setMediaSources(sources)
         applyPreviewVolume()
+        // With music attached the preview carries only the (pre-timed)
+        // music, which must keep its pitch; without music, lower the pitch
+        // with the speed like the export's slow motion does.
+        player.playbackParameters = PlaybackParameters(videoSpeed, if (music != null) 1f else videoSpeed)
         player.prepare()
         seekToGlobal(startGlobalMs)
         player.playWhenReady = playWhenReady
@@ -573,13 +754,17 @@ class EditorViewModel(
                 )
             }
             if (reducedSize) videoEffects += Presentation.createForShortSide(720)
+            // Transition timing is OUTPUT time: with setSpeed, Transformer
+            // re-times samples at the source (SpeedChangingMediaSource), so
+            // effects already see sped-up/slowed-down timestamps.
             videoEffects += clipTransitionEffects(
                 entry = transitions.getOrNull(i - 1),
                 exit = transitions.getOrNull(i),
-                keptMs = clip.keptDurationMs,
+                keptMs = (clip.keptDurationMs / videoSpeed).toLong(),
             )
             EditedMediaItem.Builder(mediaItem)
                 .setDurationUs(clip.sourceDurationMs * 1000)
+                .apply { if (videoSpeed != 1f) setSpeed(ConstantSpeedProvider(videoSpeed)) }
                 .apply {
                     if (videoEffects.isNotEmpty()) {
                         setEffects(Effects(ImmutableList.of<AudioProcessor>(), ImmutableList.copyOf(videoEffects)))
@@ -611,6 +796,18 @@ class EditorViewModel(
                 .build(),
         )
             .apply { probeDurationUs(context, musicUri)?.let { setDurationUs(it) } }
+            .apply {
+                if (musicFadeInMs > 0 || musicFadeOutMs > 0) {
+                    setEffects(
+                        Effects(
+                            ImmutableList.of<AudioProcessor>(
+                                MusicFadeAudioProcessor(musicFadeInMs, musicFadeOutMs, musicPlayDurationMs),
+                            ),
+                            ImmutableList.of(),
+                        ),
+                    )
+                }
+            }
             .build()
         val musicSequence = EditedMediaItemSequence.Builder(ImmutableSet.of(C.TRACK_TYPE_AUDIO))
             .apply { if (musicStartOffsetMs > 0) addGap(musicStartOffsetMs * 1000) }
@@ -709,11 +906,16 @@ class EditorViewModel(
                 clips = listOf(EditorClip(path, sourceMs, 0L, minOf(sourceMs, MaxTotalDurationMs))),
                 transitions = emptyList(),
                 musicPath = null,
+                musicOriginalPath = null,
+                musicSpeed = 1f,
+                musicFadeInMs = 0L,
+                musicFadeOutMs = 0L,
                 musicStartOffsetMs = 0L,
                 musicSourceStartMs = 0L,
                 musicPlayDurationMs = 0L,
                 rotationDegrees = 0,
                 isMuted = false,
+                videoSpeed = 1f,
             )
         }
 

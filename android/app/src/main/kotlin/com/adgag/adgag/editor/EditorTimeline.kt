@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -76,6 +77,7 @@ fun EditorTimeline(
     viewModel: EditorViewModel,
     onAddClip: () -> Unit,
     onPickTransition: (boundaryIndex: Int) -> Unit,
+    onOpenMusic: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -85,7 +87,9 @@ fun EditorTimeline(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(text = "Clips", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
             Text(
-                text = "${formatSeconds(viewModel.totalDurationMs)} / ${formatSeconds(MaxTotalDurationMs)}",
+                // OUTPUT length — what the 30s cap applies to (differs from the strip under slow motion).
+                text = (if (viewModel.videoSpeed != 1f) "${formatSpeed(viewModel.videoSpeed)} · " else "") +
+                    "${formatSeconds(viewModel.outputDurationMs)} / ${formatSeconds(MaxTotalDurationMs)}",
                 color = AdGagColors.OnSurfaceMuted,
                 style = MaterialTheme.typography.labelMedium,
             )
@@ -133,7 +137,11 @@ fun EditorTimeline(
         if (viewModel.musicPath != null && viewModel.musicDurationMs != null) {
             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(text = "Music", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
+                Text(
+                    text = "Music" + if (viewModel.musicSpeed != 1f) " · ${formatSpeed(viewModel.musicSpeed)}" else "",
+                    color = AdGagColors.OnSurfaceMuted,
+                    style = MaterialTheme.typography.labelMedium,
+                )
                 Text(
                     text = "${formatSeconds(viewModel.musicStartOffsetMs)} – " +
                         formatSeconds(viewModel.musicStartOffsetMs + viewModel.musicPlayDurationMs),
@@ -142,7 +150,9 @@ fun EditorTimeline(
                 )
             }
             Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
-            AlignedRow(trailing = null) { MusicRow(viewModel, density) }
+            // Same row layout as the clip strip (so the same width and time
+            // scale); the slot under "+" holds the music settings button.
+            AlignedRow(trailing = { MusicSettingsButton(onClick = onOpenMusic) }) { MusicRow(viewModel, density) }
         }
     }
 }
@@ -167,6 +177,25 @@ private fun AlignedRow(trailing: (@Composable () -> Unit)?, content: @Composable
         Box(modifier = Modifier.size(AddButtonSizeDp.dp), contentAlignment = Alignment.Center) {
             trailing?.invoke()
         }
+    }
+}
+
+@Composable
+private fun MusicSettingsButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(width = AddButtonSizeDp.dp, height = MusicRowHeightDp.dp)
+            .clip(RoundedCornerShape(AdGagRadius.sm.dp))
+            .background(AdGagColors.Surface)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Tune,
+            contentDescription = "Music settings",
+            tint = AdGagColors.OnBackground,
+            modifier = Modifier.size(18.dp),
+        )
     }
 }
 
@@ -328,7 +357,7 @@ private fun TrimRow(viewModel: EditorViewModel, index: Int, clip: EditorClip, de
         var localStart by remember(index, clip.trimStartMs) { mutableLongStateOf(clip.trimStartMs) }
         var localEnd by remember(index, clip.trimEndMs) { mutableLongStateOf(clip.trimEndMs) }
         // How long this clip may be, given the other clips and the 30s cap.
-        val maxKeptMs = (MaxTotalDurationMs - (viewModel.totalDurationMs - clip.keptDurationMs)).coerceAtLeast(MinTrimGapMs)
+        val maxKeptMs = (viewModel.sourceBudgetMs - (viewModel.totalDurationMs - clip.keptDurationMs)).coerceAtLeast(MinTrimGapMs)
 
         ThumbnailFill(viewModel.thumbnails[clip.path].orEmpty().map { it.second })
 
@@ -468,7 +497,8 @@ private fun RowScope.MusicRow(viewModel: EditorViewModel, density: Density) {
             .background(AdGagColors.Surface),
     ) {
         val widthPx = with(density) { maxWidth.toPx() }
-        val totalMs = viewModel.totalDurationMs.coerceAtLeast(1L)
+        // Music lives in OUTPUT time; the row spans the whole output, like the strip spans the whole source.
+        val totalMs = viewModel.outputDurationMs.coerceAtLeast(1L)
         fun msToPx(ms: Long): Float = ms.toFloat() / totalMs * widthPx
         fun pxDeltaToMsDelta(deltaPx: Float): Long = (deltaPx / widthPx * totalMs).toLong()
 

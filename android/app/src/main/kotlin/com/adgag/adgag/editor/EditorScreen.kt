@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.MusicOff
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.filled.SlowMotionVideo
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
@@ -91,6 +93,8 @@ fun EditorScreen(
         }
         // -1 = picker closed; otherwise the clip boundary being edited.
         var pickingTransitionFor by remember { mutableIntStateOf(-1) }
+        var showMusicSheet by remember { mutableStateOf(false) }
+        var showSpeedSheet by remember { mutableStateOf(false) }
 
         // Per-frame GLOBAL position, read ONLY inside the graphicsLayer /
         // drawBehind lambdas below — the entrance transitions animate
@@ -100,6 +104,8 @@ fun EditorScreen(
             while (true) {
                 withFrameMillis { }
                 frameGlobalMs.longValue = viewModel.globalPositionMs()
+                // Music fade-in/out in the preview is a per-frame volume envelope.
+                viewModel.updatePreviewVolume(frameGlobalMs.longValue)
             }
         }
 
@@ -131,7 +137,7 @@ fun EditorScreen(
                             outputPath = exportOutputPath,
                             onComplete = { path, _ ->
                                 if (path != null) {
-                                    onExported(path, viewModel.totalDurationMs)
+                                    onExported(path, viewModel.outputDurationMs)
                                 }
                                 // A non-null error is surfaced via
                                 // viewModel.exportError in the panel — the
@@ -218,10 +224,15 @@ fun EditorScreen(
                         onAddClip()
                     },
                     onPickTransition = { pickingTransitionFor = it },
+                    onOpenMusic = { showMusicSheet = true },
                 )
                 Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
 
-                ToolRow(viewModel = viewModel, onPickMusic = { pickMusic.launch("audio/*") })
+                ToolRow(
+                    viewModel = viewModel,
+                    onMusic = { if (viewModel.musicPath != null) showMusicSheet = true else pickMusic.launch("audio/*") },
+                    onSpeed = { showSpeedSheet = true },
+                )
 
                 if (viewModel.isExporting) {
                     Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
@@ -229,7 +240,7 @@ fun EditorScreen(
                 }
                 if (viewModel.isAttachingMusic) {
                     Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
-                    Text(text = "Adding music…", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.bodyMedium)
+                    Text(text = "Preparing music…", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.bodyMedium)
                 }
                 // Errors are capped at a few lines: a long codec dump used
                 // to grow the panel and squeeze the video away.
@@ -265,6 +276,19 @@ fun EditorScreen(
                 onDismiss = { pickingTransitionFor = -1 },
             )
         }
+        if (showMusicSheet && viewModel.musicPath != null) {
+            MusicSheet(
+                viewModel = viewModel,
+                onReplace = {
+                    showMusicSheet = false
+                    pickMusic.launch("audio/*")
+                },
+                onDismiss = { showMusicSheet = false },
+            )
+        }
+        if (showSpeedSheet) {
+            VideoSpeedSheet(viewModel = viewModel, onDismiss = { showSpeedSheet = false })
+        }
     }
 }
 
@@ -283,8 +307,9 @@ private fun transitionPoseAt(viewModel: EditorViewModel, globalMs: Long): Transi
             return TransitionMath.clipPose(
                 entry = viewModel.transitions.getOrNull(i - 1),
                 exit = viewModel.transitions.getOrNull(i),
-                keptMs = clips[i].keptDurationMs,
-                localMs = globalMs - start,
+                // Transition timing is OUTPUT time (matches the export).
+                keptMs = (clips[i].keptDurationMs / viewModel.videoSpeed).toLong(),
+                localMs = ((globalMs - start) / viewModel.videoSpeed).toLong(),
             )
         }
         start = end
@@ -293,7 +318,7 @@ private fun transitionPoseAt(viewModel: EditorViewModel, globalMs: Long): Transi
 }
 
 @Composable
-private fun ToolRow(viewModel: EditorViewModel, onPickMusic: () -> Unit) {
+private fun ToolRow(viewModel: EditorViewModel, onMusic: () -> Unit, onSpeed: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(AdGagSpacing.lg.dp),
@@ -311,10 +336,16 @@ private fun ToolRow(viewModel: EditorViewModel, onPickMusic: () -> Unit) {
             onClick = { viewModel.toggleMute() },
         )
         EditorToolButton(
+            icon = Icons.Filled.SlowMotionVideo,
+            label = if (viewModel.videoSpeed == 1f) "Speed" else formatSpeed(viewModel.videoSpeed),
+            active = viewModel.videoSpeed != 1f,
+            onClick = onSpeed,
+        )
+        EditorToolButton(
             icon = if (viewModel.musicPath != null) Icons.Filled.MusicNote else Icons.Filled.MusicOff,
-            label = if (viewModel.musicPath != null) "Music added" else "Add music",
+            label = if (viewModel.musicPath != null) "Music" else "Add music",
             active = viewModel.musicPath != null,
-            onClick = onPickMusic,
+            onClick = onMusic,
         )
     }
 }

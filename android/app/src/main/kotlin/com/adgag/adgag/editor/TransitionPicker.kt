@@ -132,8 +132,8 @@ private const val DemoClipMs = 1_400L
 private const val DemoTransitionMs = 800L
 
 /**
- * A card whose picture is a tiny looping animation of the effect: clip A
- * (blue, a sun) hands over to clip B (pink, a mountain), posed by the
+ * A card whose picture is a tiny looping animation of the effect (the
+ * outgoing then the incoming side, both drawn as the pink frame), posed by the
  * SAME [TransitionMath.clipPose] the real preview and export use — so the
  * thumbnail can't drift from what the effect actually does.
  */
@@ -170,7 +170,7 @@ private fun TransitionCard(type: ClipTransition, selected: Boolean, onClick: () 
                 } else {
                     TransitionMath.clipPose(entry = spec, exit = null, keptMs = DemoClipMs, localMs = local)
                 }
-                drawPosedFrame(pose, isA)
+                drawPosedFrame(pose)
             }
         }
         Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
@@ -184,29 +184,28 @@ private fun TransitionCard(type: ClipTransition, selected: Boolean, onClick: () 
     }
 }
 
-/** One mini "video frame" (A: blue with a sun, B: pink with a mountain) drawn at [pose], then a black veil for its brightness. */
-private fun DrawScope.drawPosedFrame(pose: TransitionMath.Pose, isA: Boolean) {
+/**
+ * One mini "video frame" (pink with a mountain) drawn at [pose], then a
+ * black veil for its brightness. Both sides of the transition use the same
+ * pink frame — by request, only the pink illustration moves.
+ */
+private fun DrawScope.drawPosedFrame(pose: TransitionMath.Pose) {
     val w = size.width
     val h = size.height
     translate(left = pose.translateX * w, top = pose.translateY * h) {
         rotate(degrees = pose.rotationDegrees, pivot = center) {
             scale(scale = pose.scale, pivot = center) {
-                if (isA) {
-                    drawRect(AdGagColors.GradientBlue)
-                    drawCircle(Color.White.copy(alpha = 0.9f), radius = w * 0.16f, center = Offset(w * 0.5f, h * 0.38f))
-                    drawRect(Color.White.copy(alpha = 0.35f), topLeft = Offset(0f, h * 0.72f), size = Size(w, h * 0.28f))
-                } else {
-                    drawRect(AdGagColors.GradientPink)
-                    val mountain = Path().apply {
-                        moveTo(w * 0.05f, h * 0.78f)
-                        lineTo(w * 0.40f, h * 0.36f)
-                        lineTo(w * 0.62f, h * 0.60f)
-                        lineTo(w * 0.75f, h * 0.48f)
-                        lineTo(w * 0.95f, h * 0.78f)
-                        close()
-                    }
-                    drawPath(mountain, Color.White.copy(alpha = 0.9f))
+                drawRect(AdGagColors.GradientPink)
+                val mountain = Path().apply {
+                    moveTo(w * 0.05f, h * 0.78f)
+                    lineTo(w * 0.40f, h * 0.36f)
+                    lineTo(w * 0.62f, h * 0.60f)
+                    lineTo(w * 0.75f, h * 0.48f)
+                    lineTo(w * 0.95f, h * 0.78f)
+                    close()
                 }
+                drawPath(mountain, Color.White.copy(alpha = 0.9f))
+                drawCircle(Color.White.copy(alpha = 0.9f), radius = w * 0.1f, center = Offset(w * 0.72f, h * 0.24f))
             }
         }
     }

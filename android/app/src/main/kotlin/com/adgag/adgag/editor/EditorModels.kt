@@ -14,6 +14,14 @@ const val DefaultTransitionDurationMs = 800L
 const val MinTransitionDurationMs = 200L
 const val MaxTransitionDurationMs = 2_000L
 
+/** Whole-video speed choices (slow motion down to 0.25x). The 30s cap applies to the OUTPUT, so slower speeds need shorter clips. */
+val VideoSpeedOptions = listOf(0.25f, 0.5f, 0.75f, 1f)
+
+/** Music speed choices (pitch kept). */
+val MusicSpeedOptions = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
+
+const val MaxMusicFadeMs = 5_000L
+
 /**
  * One recorded clip on the timeline. [trimStartMs]/[trimEndMs] are in
  * this clip's own SOURCE time (0 = start of its file); the kept part is
@@ -65,13 +73,21 @@ data class TransitionSpec(
 data class EditorSessionState(
     val clips: List<EditorClip>,
     val transitions: List<TransitionSpec>,
+    /** The song actually used — [musicOriginalPath] re-timed to [musicSpeed] (the same file when 1x). */
     val musicPath: String?,
+    /** Private copy of the picked song, untouched — re-timing always starts from here. */
+    val musicOriginalPath: String?,
+    val musicSpeed: Float,
+    val musicFadeInMs: Long,
+    val musicFadeOutMs: Long,
+    /** GLOBAL placement of the music, in OUTPUT time (after [videoSpeed]). */
     val musicStartOffsetMs: Long,
     /** Where in the SONG the used part begins (the music row's left trim). */
     val musicSourceStartMs: Long,
     val musicPlayDurationMs: Long,
     val rotationDegrees: Int,
     val isMuted: Boolean,
+    val videoSpeed: Float,
 ) {
     fun toJson(): String = JSONObject().apply {
         put("clips", JSONArray().apply {
@@ -93,6 +109,11 @@ data class EditorSessionState(
             }
         })
         if (musicPath != null) put("musicPath", musicPath)
+        if (musicOriginalPath != null) put("musicOriginalPath", musicOriginalPath)
+        put("musicSpeed", musicSpeed.toDouble())
+        put("musicFadeInMs", musicFadeInMs)
+        put("musicFadeOutMs", musicFadeOutMs)
+        put("videoSpeed", videoSpeed.toDouble())
         put("musicStartOffsetMs", musicStartOffsetMs)
         put("musicSourceStartMs", musicSourceStartMs)
         put("musicPlayDurationMs", musicPlayDurationMs)
@@ -127,15 +148,21 @@ data class EditorSessionState(
                     durationMs = duration.coerceIn(MinTransitionDurationMs, MaxTransitionDurationMs),
                 )
             }
+            val musicPath = if (o.has("musicPath")) o.getString("musicPath") else null
             return EditorSessionState(
                 clips = clips,
                 transitions = transitions,
-                musicPath = if (o.has("musicPath")) o.getString("musicPath") else null,
+                musicPath = musicPath,
+                musicOriginalPath = if (o.has("musicOriginalPath")) o.getString("musicOriginalPath") else musicPath,
+                musicSpeed = o.optDouble("musicSpeed", 1.0).toFloat(),
+                musicFadeInMs = o.optLong("musicFadeInMs", 0L),
+                musicFadeOutMs = o.optLong("musicFadeOutMs", 0L),
                 musicStartOffsetMs = o.optLong("musicStartOffsetMs", 0L),
                 musicSourceStartMs = o.optLong("musicSourceStartMs", 0L),
                 musicPlayDurationMs = o.optLong("musicPlayDurationMs", 0L),
                 rotationDegrees = o.optInt("rotationDegrees", 0),
                 isMuted = o.optBoolean("isMuted", false),
+                videoSpeed = o.optDouble("videoSpeed", 1.0).toFloat(),
             )
         }
     }
