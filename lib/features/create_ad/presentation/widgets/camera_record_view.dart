@@ -199,7 +199,32 @@ class _CameraRecordViewState extends State<CameraRecordView> {
       return;
     }
 
+    // Fully release the camera + recorder BEFORE handing off: the next
+    // screen is the native editor, which immediately needs hardware
+    // codecs of its own — a still-releasing camera session was one cause
+    // of the editor's DECODER_INIT_FAILED / crash-on-open reports.
+    await _releaseCamera();
     widget.onRecorded(file.path, duration);
+  }
+
+  /// Nulls the controller first (so build() never renders a disposed
+  /// one), then awaits its disposal.
+  Future<void> _releaseCamera() async {
+    final CameraController? controller = _controller;
+    if (controller == null) {
+      return;
+    }
+    if (mounted) {
+      setState(() => _controller = null);
+    } else {
+      _controller = null;
+    }
+    await controller.dispose();
+  }
+
+  Future<void> _cancel() async {
+    await _releaseCamera();
+    widget.onCancel?.call();
   }
 
   @override
@@ -224,7 +249,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
                 if (widget.onCancel != null) ...<Widget>[
                   const SizedBox(height: AppSpacing.lg),
                   TextButton(
-                    onPressed: widget.onCancel,
+                    onPressed: () => unawaited(_cancel()),
                     child: Text(AppLocalizations.of(context).captureCancelExtraClip),
                   ),
                 ],
@@ -271,7 +296,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
                 child: TextButton(
                   // Disabled mid-recording: stop first, so a take is never
                   // silently thrown away by a stray tap.
-                  onPressed: _isRecording ? null : widget.onCancel,
+                  onPressed: _isRecording ? null : () => unawaited(_cancel()),
                   style: TextButton.styleFrom(
                     backgroundColor: Colors.black38,
                     foregroundColor: Colors.white,

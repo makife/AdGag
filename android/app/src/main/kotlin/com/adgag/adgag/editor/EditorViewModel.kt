@@ -40,11 +40,15 @@ import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableSet
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -136,6 +140,27 @@ class EditorViewModel(
 
     private var segments: List<Segment> = emptyList()
 
+    /**
+     * HARDWARE CODEC BUDGET — the root cause behind three real-device
+     * reports at once (editor crashing while opening, preview
+     * DECODER_INIT_FAILED with format_supported=YES, export failing with
+     * a Codec exception on the Qualcomm encoder): phones have a small
+     * number of hardware codec instances, and this screen was asking for
+     * too many at the same time — the preview player's decoders, one
+     * MediaMetadataRetriever decoder PER CLIP for thumbnails (launched in
+     * parallel), and at export time the still-allocated preview decoders
+     * plus Transformer's own decoders and encoder. Rules now:
+     * - thumbnails wait until the preview is up ([previewReady]) and run
+     *   one clip at a time ([thumbnailMutex]);
+     * - export releases the preview's codecs first (player.stop()) and
+     *   rebuilds the preview afterwards;
+     * - a decoder that fails to initialize is retried (codecs released by
+     *   a previous screen, e.g. the camera, can take a moment).
+     */
+    private val previewReady = CompletableDeferred<Unit>()
+    private val thumbnailMutex = Mutex()
+    private var decoderRetries = 0
+
     init {
         DebugLog.log(context, "EditorViewModel: init clips=${clips.size}")
         musicDurationMs = musicPath?.let { probeDurationUs(context, Uri.fromFile(File(it)))?.div(1000) }
@@ -145,11 +170,33 @@ class EditorViewModel(
                 isPlaying = playing
             }
 
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    decoderRetries = 0
+                    previewReady.complete(Unit)
+                }
+            }
+
             override fun onPlayerError(error: PlaybackException) {
-                // Surfaced, not swallowed — a silent player error is
-                // exactly what "the video froze" looks like to a user.
                 Log.e("EditorViewModel", "Preview player error", error)
                 DebugLog.log(context, "player error: ${error.errorCodeName} ${error.message}")
+                // Don't hold thumbnails back forever behind a broken preview.
+                previewReady.complete(Unit)
+                val codecBusy = error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED
+                if (codecBusy && decoderRetries < 3) {
+                    // A codec just released elsewhere (camera, export,
+                    // thumbnails) may not be free yet — back off and retry.
+                    decoderRetries++
+                    val resumeAt = globalPositionMs()
+                    editorScope.launch {
+                        delay(400L * decoderRetries)
+                        rebuildAndPrepare(startGlobalMs = resumeAt, playWhenReady = true)
+                    }
+                    return
+                }
+                // Surfaced, not swallowed — a silent player error is
+                // exactly what "the video froze" looks like to a user.
                 previewError = "${error.errorCodeName}: ${error.message}"
             }
         })
@@ -330,39 +377,46 @@ class EditorViewModel(
     private fun generateThumbnails(path: String) {
         if (thumbnails.containsKey(path)) return
         editorScope.launch {
-            val frames = withContext(Dispatchers.IO) {
-                val retriever = MediaMetadataRetriever()
-                try {
-                    retriever.setDataSource(path)
-                    val totalMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
-                    if (totalMs == null || totalMs <= 0) {
-                        emptyList()
-                    } else {
-                        val count = 10
-                        (0 until count).mapNotNull { i ->
-                            val timeMs = totalMs * i / count
-                            try {
-                                val frame = if (android.os.Build.VERSION.SDK_INT >= 27) {
-                                    retriever.getScaledFrameAtTime(timeMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 160, 284)
-                                } else {
-                                    retriever.getFrameAtTime(timeMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                                }
-                                frame?.let { timeMs to it }
-                            } catch (e: Exception) {
-                                null
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w("EditorViewModel", "Thumbnail generation failed for $path", e)
-                    emptyList()
-                } finally {
-                    retriever.release()
-                }
+            // See the codec budget note: after the preview is up, one clip at a time, never during export.
+            previewReady.await()
+            thumbnailMutex.withLock {
+                while (isExporting) delay(250)
+                if (!thumbnails.containsKey(path)) thumbnails[path] = extractThumbnails(path)
             }
-            thumbnails[path] = frames
         }
     }
+
+    private suspend fun extractThumbnails(path: String): List<Pair<Long, Bitmap>> =
+        withContext(Dispatchers.IO) {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(path)
+                val totalMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+                if (totalMs == null || totalMs <= 0) {
+                    emptyList()
+                } else {
+                    val count = 10
+                    (0 until count).mapNotNull { i ->
+                        val timeMs = totalMs * i / count
+                        try {
+                            val frame = if (android.os.Build.VERSION.SDK_INT >= 27) {
+                                retriever.getScaledFrameAtTime(timeMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 160, 284)
+                            } else {
+                                retriever.getFrameAtTime(timeMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                            }
+                            frame?.let { timeMs to it }
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("EditorViewModel", "Thumbnail generation failed for $path", e)
+                emptyList()
+            } finally {
+                retriever.release()
+            }
+        }
 
     /**
      * Splits the timeline into playlist items so music can be attached
@@ -455,10 +509,16 @@ class EditorViewModel(
         player.prepare()
         seekToGlobal(startGlobalMs)
         player.playWhenReady = playWhenReady
+        DebugLog.log(context, "rebuildAndPrepare: prepared, playWhenReady=$playWhenReady")
     }
 
-    /** The EXPORT composition — Transformer genuinely mixes clip audio with music here. */
-    private fun buildComposition(): Composition {
+    /**
+     * The EXPORT composition — Transformer genuinely mixes clip audio with
+     * music here. [reducedSize] is the automatic second attempt after an
+     * encoder failure: output capped at 720p on the short side, which a
+     * resource-starved hardware encoder is far more likely to accept.
+     */
+    private fun buildComposition(reducedSize: Boolean = false): Composition {
         val targetSize = if (clips.size > 1) exportFrameSize() else null
         val items = clips.mapIndexed { i, clip ->
             val mediaItem = MediaItem.Builder()
@@ -484,6 +544,7 @@ class EditorViewModel(
                     Presentation.LAYOUT_SCALE_TO_FIT,
                 )
             }
+            if (reducedSize) videoEffects += Presentation.createForShortSide(720)
             if (i > 0) videoEffects += transitionEffectsFor(transitions.getOrElse(i - 1) { ClipTransition.NONE })
             EditedMediaItem.Builder(mediaItem)
                 .setDurationUs(clip.sourceDurationMs * 1000)
@@ -549,25 +610,44 @@ class EditorViewModel(
         isExporting = true
         exportProgress = 0f
         exportError = null
-        player.pause()
+        // Release the preview's decoders (pause() keeps them allocated) so
+        // Transformer's decoders + encoder fit in the codec budget.
+        val resumeAt = globalPositionMs()
+        player.stop()
+        DebugLog.log(context, "export: preview stopped, starting transformer clips=${clips.size}")
+        startTransformer(outputPath, reducedSize = false, resumeAt = resumeAt, onComplete = onComplete)
+    }
 
+    private fun startTransformer(outputPath: String, reducedSize: Boolean, resumeAt: Long, onComplete: (String?, String?) -> Unit) {
+        File(outputPath).delete()
         val transformer = Transformer.Builder(context)
             .addListener(object : Transformer.Listener {
                 override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+                    DebugLog.log(context, "export: completed reducedSize=$reducedSize")
                     isExporting = false
                     onComplete(outputPath, null)
                 }
 
                 override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
+                    DebugLog.log(context, "export: error reducedSize=$reducedSize ${exportException.errorCodeName}")
+                    Log.e("EditorViewModel", "Export failed (reducedSize=$reducedSize)", exportException)
+                    if (!reducedSize) {
+                        // One automatic retry at 720p before bothering the user.
+                        exportProgress = 0f
+                        startTransformer(outputPath, reducedSize = true, resumeAt = resumeAt, onComplete = onComplete)
+                        return
+                    }
                     isExporting = false
-                    val message = exportException.message ?: "Export failed"
+                    val message = "${exportException.errorCodeName}: ${exportException.message ?: "Export failed"}"
                     exportError = message
+                    // Staying on this screen — bring the preview back.
+                    rebuildAndPrepare(startGlobalMs = resumeAt, playWhenReady = false)
                     onComplete(null, message)
                 }
             })
             .build()
 
-        transformer.start(buildComposition(), outputPath)
+        transformer.start(buildComposition(reducedSize), outputPath)
 
         // Transformer's progress is polled, not pushed.
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
