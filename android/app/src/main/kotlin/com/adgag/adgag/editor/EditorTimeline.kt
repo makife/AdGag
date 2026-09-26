@@ -59,7 +59,8 @@ import kotlinx.coroutines.delay
  * 2. Trim row for the SELECTED clip — its whole SOURCE with scrims over
  *    the cut parts and two handles.
  * 3. Music row (once music is attached) — on the GLOBAL timeline,
- *    aligned under the clip strip.
+ *    aligned under the clip strip; trim handles on both ends, drag the
+ *    middle to move it.
  *
  * Fits one screen width (≤30s) — no horizontal scrolling, which avoids
  * the scroll/seek feedback-loop bug class the old Flutter editor had.
@@ -256,7 +257,7 @@ private fun RowScope.ClipStrip(
         // Effect button on each boundary — tap opens the transition picker.
         for (b in 0 until viewModel.clips.size - 1) {
             val xPx = msToPx(viewModel.clipStartMs(b + 1))
-            val active = viewModel.transitions.getOrNull(b) != ClipTransition.NONE
+            val active = (viewModel.transitions.getOrNull(b)?.type ?: ClipTransition.NONE) != ClipTransition.NONE
             val sizePx = with(density) { TransitionButtonSizeDp.dp.toPx() }
             Box(
                 modifier = Modifier
@@ -449,7 +450,13 @@ private fun TrimHandle(
     }
 }
 
-/** Music on the GLOBAL timeline: drag the body to move it, drag its right edge to shorten/lengthen it. */
+/**
+ * Music on the GLOBAL timeline. Left handle trims the song's START (the
+ * segment's left edge moves, and the song is used from later on), right
+ * handle trims its END, and dragging the body moves the whole segment.
+ * All three only move local state while dragging; the real (preview-
+ * rebuilding) placement is committed once, on release.
+ */
 @UnstableApi
 @Composable
 private fun RowScope.MusicRow(viewModel: EditorViewModel, density: Density) {
@@ -466,31 +473,43 @@ private fun RowScope.MusicRow(viewModel: EditorViewModel, density: Density) {
         fun pxDeltaToMsDelta(deltaPx: Float): Long = (deltaPx / widthPx * totalMs).toLong()
 
         var localStart by remember(viewModel.musicStartOffsetMs) { mutableLongStateOf(viewModel.musicStartOffsetMs) }
+        var localSource by remember(viewModel.musicSourceStartMs) { mutableLongStateOf(viewModel.musicSourceStartMs) }
         var localDuration by remember(viewModel.musicPlayDurationMs) { mutableLongStateOf(viewModel.musicPlayDurationMs) }
-        val minWidthPx = with(density) { HandleHitWidthDp.dp.toPx() }
-        val segmentStartPx = msToPx(localStart)
-        val segmentWidthPx = msToPx(localDuration).coerceAtLeast(minWidthPx)
         val songMs = viewModel.musicDurationMs ?: Long.MAX_VALUE
+        val segmentStartPx = msToPx(localStart)
+        val segmentEndPx = msToPx(localStart + localDuration)
 
-        val commitPlacement by rememberUpdatedState({ viewModel.setMusicPlacement(localStart, localDuration) })
+        // Every gesture below goes through rememberUpdatedState — the
+        // pointerInput(Unit) blocks outlive the remember(key) state objects.
+        val commit by rememberUpdatedState({ viewModel.setMusicPlacement(localStart, localSource, localDuration) })
         val onBodyDrag by rememberUpdatedState({ deltaPx: Float ->
             localStart = (localStart + pxDeltaToMsDelta(deltaPx)).coerceIn(0L, (totalMs - localDuration).coerceAtLeast(0L))
         })
-        val onEdgeDrag by rememberUpdatedState({ deltaPx: Float ->
-            val maxMs = minOf(songMs, totalMs - localStart).coerceAtLeast(MinTrimGapMs)
+        val onLeftDrag by rememberUpdatedState({ deltaPx: Float ->
+            // Moving the left edge by d: the segment starts d later on the
+            // timeline AND d later in the song, and gets d shorter.
+            val lower = -minOf(localStart, localSource)
+            val upper = (localDuration - MinTrimGapMs).coerceAtLeast(lower)
+            val d = pxDeltaToMsDelta(deltaPx).coerceIn(lower, upper)
+            localStart += d
+            localSource += d
+            localDuration -= d
+        })
+        val onRightDrag by rememberUpdatedState({ deltaPx: Float ->
+            val maxMs = minOf(songMs - localSource, totalMs - localStart).coerceAtLeast(MinTrimGapMs)
             localDuration = (localDuration + pxDeltaToMsDelta(deltaPx)).coerceIn(MinTrimGapMs, maxMs)
         })
 
         Box(
             modifier = Modifier
                 .offset(x = with(density) { segmentStartPx.toDp() })
-                .width(with(density) { segmentWidthPx.toDp() })
+                .width(with(density) { (segmentEndPx - segmentStartPx).coerceAtLeast(1f).toDp() })
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(AdGagRadius.sm.dp))
                 .background(AdGagColors.GradientBlue.copy(alpha = 0.55f))
                 .pointerInput(Unit) {
                     detectDragGestures(
-                        onDragEnd = { commitPlacement() },
+                        onDragEnd = { commit() },
                         onDrag = { change, dragAmount ->
                             change.consume()
                             onBodyDrag(dragAmount.x)
@@ -499,30 +518,22 @@ private fun RowScope.MusicRow(viewModel: EditorViewModel, density: Density) {
                 },
         )
 
-        Box(
-            modifier = Modifier
-                .offset(x = with(density) { (segmentStartPx + segmentWidthPx).toDp() } - (HandleHitWidthDp / 2).dp)
-                .width(HandleHitWidthDp.dp)
-                .fillMaxHeight()
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragEnd = { commitPlacement() },
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            onEdgeDrag(dragAmount.x)
-                        },
-                    )
-                },
-            contentAlignment = Alignment.CenterEnd,
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(HandleWidthDp.dp)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                    .background(AdGagColors.GradientPink),
-            )
-        }
+        // Handles on both edges, drawn over the body so they win touches
+        // at the edges; the same clamped-hit-box handle as the trim row.
+        TrimHandle(
+            xPx = segmentStartPx,
+            rowWidthPx = widthPx,
+            density = density,
+            onDrag = { onLeftDrag(it) },
+            onDragEnd = { commit() },
+        )
+        TrimHandle(
+            xPx = segmentEndPx,
+            rowWidthPx = widthPx,
+            density = density,
+            onDrag = { onRightDrag(it) },
+            onDragEnd = { commit() },
+        )
     }
 }
 

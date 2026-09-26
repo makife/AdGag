@@ -40,10 +40,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -79,7 +75,7 @@ import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
  * restrained... avoid excessive gradients" directly, not just in name.
  */
 @UnstableApi
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorScreen(
     viewModel: EditorViewModel,
@@ -182,7 +178,7 @@ fun EditorScreen(
                         translationY = pose.translateY * size.height
                     },
                 )
-                // Fade-in transition: a black veil over the video.
+                // Fade transitions: a black veil over the video.
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -263,47 +259,20 @@ fun EditorScreen(
         }
 
         if (pickingTransitionFor >= 0) {
-            val boundary = pickingTransitionFor
-            ModalBottomSheet(
-                onDismissRequest = { pickingTransitionFor = -1 },
-                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-                containerColor = AdGagColors.SurfaceElevated,
-            ) {
-                Column(modifier = Modifier.padding(horizontal = AdGagSpacing.lg.dp).padding(bottom = AdGagSpacing.xl.dp)) {
-                    Text(
-                        text = "How clip ${boundary + 2} comes in",
-                        color = AdGagColors.OnBackground,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(AdGagSpacing.sm.dp),
-                        verticalArrangement = Arrangement.spacedBy(AdGagSpacing.sm.dp),
-                    ) {
-                        val current = viewModel.transitions.getOrNull(boundary)
-                        ClipTransition.entries.forEach { t ->
-                            val selected = t == current
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(AdGagRadius.pill.dp))
-                                    .background(if (selected) AdGagColors.GradientPink else AdGagColors.Surface)
-                                    .clickable {
-                                        viewModel.setTransition(boundary, t)
-                                        pickingTransitionFor = -1
-                                    }
-                                    .padding(horizontal = AdGagSpacing.lg.dp, vertical = AdGagSpacing.sm.dp),
-                            ) {
-                                Text(text = t.label, color = AdGagColors.OnBackground, style = MaterialTheme.typography.labelLarge)
-                            }
-                        }
-                    }
-                }
-            }
+            TransitionPickerSheet(
+                viewModel = viewModel,
+                boundary = pickingTransitionFor,
+                onDismiss = { pickingTransitionFor = -1 },
+            )
         }
     }
 }
 
-/** The incoming clip's transition pose at GLOBAL time [globalMs] — identity outside every transition window. */
+/**
+ * The pose of whichever clip is on screen at GLOBAL time [globalMs]: its
+ * entrance (from the boundary before it) and fade-out (from the boundary
+ * after it), via the same TransitionMath the export uses.
+ */
 @UnstableApi
 private fun transitionPoseAt(viewModel: EditorViewModel, globalMs: Long): TransitionMath.Pose {
     val clips = viewModel.clips
@@ -311,9 +280,12 @@ private fun transitionPoseAt(viewModel: EditorViewModel, globalMs: Long): Transi
     for (i in clips.indices) {
         val end = start + clips[i].keptDurationMs
         if (globalMs < end || i == clips.lastIndex) {
-            if (i == 0) return TransitionMath.Identity
-            val p = TransitionMath.progress(globalMs - start) ?: return TransitionMath.Identity
-            return TransitionMath.pose(viewModel.transitions.getOrElse(i - 1) { ClipTransition.NONE }, p)
+            return TransitionMath.clipPose(
+                entry = viewModel.transitions.getOrNull(i - 1),
+                exit = viewModel.transitions.getOrNull(i),
+                keptMs = clips[i].keptDurationMs,
+                localMs = globalMs - start,
+            )
         }
         start = end
     }

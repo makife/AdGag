@@ -89,7 +89,7 @@ class EditorViewModel(
 
     var clips by mutableStateOf(initialState.clips)
         private set
-    /** transitions[i] = how clip i+1 enters. Always clips.size - 1 long. */
+    /** transitions[i] = the boundary between clip i and clip i+1. Always clips.size - 1 long. */
     var transitions by mutableStateOf(normalizeTransitions(initialState.transitions, initialState.clips.size))
         private set
     /** Which clip the trim row below the clip strip is editing. */
@@ -112,6 +112,9 @@ class EditorViewModel(
     var musicStartOffsetMs by mutableStateOf(initialState.musicStartOffsetMs)
         private set
     var musicPlayDurationMs by mutableStateOf(initialState.musicPlayDurationMs)
+        private set
+    /** Where in the SONG the used part begins — the music row's LEFT trim handle. */
+    var musicSourceStartMs by mutableStateOf(initialState.musicSourceStartMs)
         private set
     var isAttachingMusic by mutableStateOf(false)
         private set
@@ -214,6 +217,7 @@ class EditorViewModel(
         transitions = transitions,
         musicPath = musicPath,
         musicStartOffsetMs = musicStartOffsetMs,
+        musicSourceStartMs = musicSourceStartMs,
         musicPlayDurationMs = musicPlayDurationMs,
         rotationDegrees = rotationDegrees,
         isMuted = isMuted,
@@ -279,14 +283,30 @@ class EditorViewModel(
         rebuildAndPrepare(startGlobalMs = 0L, playWhenReady = player.playWhenReady)
     }
 
-    /** [boundaryIndex] 0 = between clip 0 and clip 1. */
-    fun setTransition(boundaryIndex: Int, transition: ClipTransition) {
+    /** [boundaryIndex] 0 = between clip 0 and clip 1. Keeps that boundary's duration. */
+    fun setTransitionType(boundaryIndex: Int, type: ClipTransition) {
         if (boundaryIndex !in transitions.indices) return
-        transitions = transitions.toMutableList().also { it[boundaryIndex] = transition }
-        // Preview transitions are drawn by Compose on top of the player,
-        // so no rebuild — just replay the boundary so it can be seen.
+        transitions = transitions.toMutableList().also { it[boundaryIndex] = it[boundaryIndex].copy(type = type) }
+        replayTransition(boundaryIndex)
+    }
+
+    /** Updates the duration only (called continuously while the slider moves — no replay here). */
+    fun setTransitionDuration(boundaryIndex: Int, durationMs: Long) {
+        if (boundaryIndex !in transitions.indices) return
+        val d = durationMs.coerceIn(MinTransitionDurationMs, MaxTransitionDurationMs)
+        transitions = transitions.toMutableList().also { it[boundaryIndex] = it[boundaryIndex].copy(durationMs = d) }
+    }
+
+    /**
+     * Plays the boundary so the effect can be seen. Preview transitions
+     * are drawn by Compose over the player, so no rebuild — just seek to
+     * a bit before the boundary (far enough back to show a fade-out too).
+     */
+    fun replayTransition(boundaryIndex: Int) {
+        val spec = transitions.getOrNull(boundaryIndex) ?: return
         val start = clipStartMs(boundaryIndex + 1)
-        seekToGlobal((start - 1000).coerceAtLeast(0L))
+        val lead = maxOf(1000L, spec.durationMs + 500L)
+        seekToGlobal((start - lead).coerceAtLeast(0L))
         player.play()
     }
 
@@ -330,18 +350,25 @@ class EditorViewModel(
             musicPath = copied.first
             musicDurationMs = copied.second
             musicStartOffsetMs = 0L
+            musicSourceStartMs = 0L
             musicPlayDurationMs = minOf(copied.second, totalDurationMs)
             rebuildAndPrepare(startGlobalMs = globalPositionMs(), playWhenReady = player.playWhenReady)
         }
     }
 
-    /** Moves/resizes the music on the GLOBAL timeline, clamped to the timeline and the song's own length. */
-    fun setMusicPlacement(startOffsetMs: Long, playDurationMs: Long) {
+    /**
+     * Places the music: [startOffsetMs] on the GLOBAL timeline, using the
+     * song from [sourceStartMs] for [playDurationMs]. Clamped to the
+     * timeline and to the song's own length.
+     */
+    fun setMusicPlacement(startOffsetMs: Long, sourceStartMs: Long, playDurationMs: Long) {
         val songMs = musicDurationMs ?: return
         val total = totalDurationMs
         val start = startOffsetMs.coerceIn(0L, total)
+        val sourceStart = sourceStartMs.coerceIn(0L, (songMs - 1).coerceAtLeast(0L))
         musicStartOffsetMs = start
-        musicPlayDurationMs = playDurationMs.coerceIn(0L, minOf(songMs, total - start))
+        musicSourceStartMs = sourceStart
+        musicPlayDurationMs = playDurationMs.coerceIn(0L, minOf(songMs - sourceStart, total - start))
         rebuildAndPrepare(startGlobalMs = globalPositionMs(), playWhenReady = player.playWhenReady)
     }
 
@@ -485,7 +512,8 @@ class EditorViewModel(
                 val overlap = minOf(segEnd, mEnd) - maxOf(seg.globalStartMs, musicStartOffsetMs)
                 val songMs = musicDurationMs ?: 0L
                 val audio: MediaSource = if (musicPlayDurationMs > 0 && overlap * 2 >= seg.lengthMs && songMs > 0) {
-                    val fromMs = (seg.globalStartMs - musicStartOffsetMs).coerceIn(0L, (songMs - 1).coerceAtLeast(0L))
+                    val fromMs = (musicSourceStartMs + seg.globalStartMs - musicStartOffsetMs)
+                        .coerceIn(0L, (songMs - 1).coerceAtLeast(0L))
                     ClippingMediaSource(
                         factory.createMediaSource(MediaItem.fromUri(Uri.fromFile(File(music)))),
                         fromMs * 1000,
@@ -545,7 +573,11 @@ class EditorViewModel(
                 )
             }
             if (reducedSize) videoEffects += Presentation.createForShortSide(720)
-            if (i > 0) videoEffects += transitionEffectsFor(transitions.getOrElse(i - 1) { ClipTransition.NONE })
+            videoEffects += clipTransitionEffects(
+                entry = transitions.getOrNull(i - 1),
+                exit = transitions.getOrNull(i),
+                keptMs = clip.keptDurationMs,
+            )
             EditedMediaItem.Builder(mediaItem)
                 .setDurationUs(clip.sourceDurationMs * 1000)
                 .apply {
@@ -572,8 +604,8 @@ class EditorViewModel(
                 .setUri(musicUri)
                 .setClippingConfiguration(
                     MediaItem.ClippingConfiguration.Builder()
-                        .setStartPositionMs(0)
-                        .setEndPositionMs(musicPlayDurationMs)
+                        .setStartPositionMs(musicSourceStartMs)
+                        .setEndPositionMs(musicSourceStartMs + musicPlayDurationMs)
                         .build(),
                 )
                 .build(),
@@ -678,15 +710,16 @@ class EditorViewModel(
                 transitions = emptyList(),
                 musicPath = null,
                 musicStartOffsetMs = 0L,
+                musicSourceStartMs = 0L,
                 musicPlayDurationMs = 0L,
                 rotationDegrees = 0,
                 isMuted = false,
             )
         }
 
-        private fun normalizeTransitions(list: List<ClipTransition>, clipCount: Int): List<ClipTransition> {
+        private fun normalizeTransitions(list: List<TransitionSpec>, clipCount: Int): List<TransitionSpec> {
             val wanted = (clipCount - 1).coerceAtLeast(0)
-            return List(wanted) { i -> list.getOrElse(i) { ClipTransition.NONE } }
+            return List(wanted) { i -> list.getOrElse(i) { TransitionSpec() } }
         }
 
         private val audioTrackCache = mutableMapOf<String, Boolean>()

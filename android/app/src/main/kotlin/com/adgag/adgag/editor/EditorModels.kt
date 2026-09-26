@@ -9,8 +9,10 @@ const val MaxTotalDurationMs = 30_000L
 /** Shortest clip worth adding — mirrors Dart's `VideoConstraints.min`; the "+" button hides once less than this remains. */
 const val MinClipDurationMs = 1_500L
 
-/** How long every clip-entry transition runs, in both the live preview and the export. */
-const val TransitionDurationMs = 500L
+/** Transition length bounds and default (user-adjustable per boundary; 500ms read as "too fast" on a device). */
+const val DefaultTransitionDurationMs = 800L
+const val MinTransitionDurationMs = 200L
+const val MaxTransitionDurationMs = 2_000L
 
 /**
  * One recorded clip on the timeline. [trimStartMs]/[trimEndMs] are in
@@ -27,17 +29,18 @@ data class EditorClip(
 }
 
 /**
- * How a clip ENTERS, after the previous one — the effect sits between
- * two thumbnails on the timeline. Every one of these is an entrance
- * effect on the incoming clip (no overlap with the outgoing clip),
- * which is what lets the plain-ExoPlayer preview show it faithfully
- * (a Compose transform/overlay on the surface) and the export render it
- * as a per-item Media3 effect (see TransitionEffects.kt) — no dual-
- * decoder compositing needed on either side.
+ * What happens at the boundary between two clips. None of these overlap
+ * the two clips (no dual-decoder compositing): each is an effect on the
+ * END of the outgoing clip, the START of the incoming one, or both —
+ * which is what lets the plain-ExoPlayer preview show it faithfully (a
+ * Compose transform/veil on the surface) and the export render it as
+ * per-clip Media3 effects (TransitionEffects.kt).
  */
 enum class ClipTransition(val label: String) {
     NONE("Cut"),
     FADE("Fade in"),
+    FADE_OUT("Fade out"),
+    DIP_TO_BLACK("Dip to black"),
     SLIDE_FROM_RIGHT("Slide ←"),
     SLIDE_FROM_LEFT("Slide →"),
     SLIDE_FROM_BOTTOM("Slide ↑"),
@@ -47,6 +50,12 @@ enum class ClipTransition(val label: String) {
     SPIN("Spin"),
 }
 
+/** One boundary's transition: which effect, and how long it runs. */
+data class TransitionSpec(
+    val type: ClipTransition = ClipTransition.NONE,
+    val durationMs: Long = DefaultTransitionDurationMs,
+)
+
 /**
  * Everything needed to rebuild the editor after it's closed to record
  * another clip (the camera is Flutter's own, so the native Activity has
@@ -55,9 +64,11 @@ enum class ClipTransition(val label: String) {
  */
 data class EditorSessionState(
     val clips: List<EditorClip>,
-    val transitions: List<ClipTransition>,
+    val transitions: List<TransitionSpec>,
     val musicPath: String?,
     val musicStartOffsetMs: Long,
+    /** Where in the SONG the used part begins (the music row's left trim). */
+    val musicSourceStartMs: Long,
     val musicPlayDurationMs: Long,
     val rotationDegrees: Int,
     val isMuted: Boolean,
@@ -73,9 +84,17 @@ data class EditorSessionState(
                 })
             }
         })
-        put("transitions", JSONArray().apply { transitions.forEach { put(it.name) } })
+        put("transitions", JSONArray().apply {
+            transitions.forEach { t ->
+                put(JSONObject().apply {
+                    put("type", t.type.name)
+                    put("durationMs", t.durationMs)
+                })
+            }
+        })
         if (musicPath != null) put("musicPath", musicPath)
         put("musicStartOffsetMs", musicStartOffsetMs)
+        put("musicSourceStartMs", musicSourceStartMs)
         put("musicPlayDurationMs", musicPlayDurationMs)
         put("rotationDegrees", rotationDegrees)
         put("isMuted", isMuted)
@@ -96,13 +115,24 @@ data class EditorSessionState(
             }
             val tJson = o.optJSONArray("transitions") ?: JSONArray()
             val transitions = (0 until tJson.length()).map { i ->
-                runCatching { ClipTransition.valueOf(tJson.getString(i)) }.getOrDefault(ClipTransition.NONE)
+                val entry = tJson.opt(i)
+                // Older sessions stored just the type name.
+                val (name, duration) = if (entry is JSONObject) {
+                    entry.optString("type") to entry.optLong("durationMs", DefaultTransitionDurationMs)
+                } else {
+                    entry.toString() to DefaultTransitionDurationMs
+                }
+                TransitionSpec(
+                    type = runCatching { ClipTransition.valueOf(name) }.getOrDefault(ClipTransition.NONE),
+                    durationMs = duration.coerceIn(MinTransitionDurationMs, MaxTransitionDurationMs),
+                )
             }
             return EditorSessionState(
                 clips = clips,
                 transitions = transitions,
                 musicPath = if (o.has("musicPath")) o.getString("musicPath") else null,
                 musicStartOffsetMs = o.optLong("musicStartOffsetMs", 0L),
+                musicSourceStartMs = o.optLong("musicSourceStartMs", 0L),
                 musicPlayDurationMs = o.optLong("musicPlayDurationMs", 0L),
                 rotationDegrees = o.optInt("rotationDegrees", 0),
                 isMuted = o.optBoolean("isMuted", false),
