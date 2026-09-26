@@ -73,5 +73,6 @@
 
   "genericRetry": "Tekrar dene",
   "genericCancel": "İptal",
+  "captureCancelExtraClip": "Vazgeç",
   "genericOffline": "Çevrimdışısınız. Bazı içerikler kullanılamayabilir."
 }

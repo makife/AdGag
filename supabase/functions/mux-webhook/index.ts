@@ -123,7 +123,7 @@ async function handleEvent(adminClient: any, payload: MuxWebhookPayload): Promis
         .in("status", ["uploading", "processing"]);
 
       if (error) {
-        // Most likely the duration_range CHECK (video outside the 1.5-10s
+        // Most likely the duration_range CHECK (video outside the 1.5-31s
         // product constraint slipped past client-side trimming/validation).
         // Fail the ad with a clear, recoverable state rather than leaving
         // it stuck "processing" forever (section 19).

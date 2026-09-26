@@ -14,13 +14,13 @@ void main() {
       expect(draft.isWithinConstraints, isFalse);
     });
 
-    test("a 25s clip is too long", () {
-      const LocalVideoDraft draft = LocalVideoDraft(filePath: "x.mp4", duration: Duration(seconds: 25));
+    test("a 35s clip is too long", () {
+      const LocalVideoDraft draft = LocalVideoDraft(filePath: "x.mp4", duration: Duration(seconds: 35));
       expect(draft.isWithinConstraints, isFalse);
     });
 
-    test("exactly 10s is within constraints (inclusive upper bound)", () {
-      const LocalVideoDraft draft = LocalVideoDraft(filePath: "x.mp4", duration: Duration(seconds: 10));
+    test("exactly 30s is within constraints (inclusive upper bound)", () {
+      const LocalVideoDraft draft = LocalVideoDraft(filePath: "x.mp4", duration: Duration(seconds: 30));
       expect(draft.isWithinConstraints, isTrue);
     });
   });

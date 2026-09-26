@@ -4,12 +4,16 @@ import "package:camera/camera.dart";
 import "package:flutter/material.dart";
 import "package:permission_handler/permission_handler.dart";
 
+import "../../../../core/localization/generated/app_localizations.dart";
 import "../../../../core/theme/app_colors.dart";
 import "../../../../core/theme/app_spacing.dart";
 import "../../domain/video_constraints.dart";
 
-/// Fullscreen record UI communicating the 10s limit clearly (CLAUDE.md
-/// section 4). Tap to start, tap again (or auto-stop at 10s) to finish.
+/// Fullscreen record UI communicating the time limit clearly (CLAUDE.md
+/// section 4). Tap to start, tap again (or auto-stop at [maxDuration]) to
+/// finish. Used both for the first take (up to the full 30s) and for extra
+/// takes from the editor timeline's "+" (only the time that's left, with a
+/// Cancel button back to the editor).
 /// Recordings shorter than [VideoConstraints.min] are discarded with a
 /// message rather than silently accepted, since a sub-1.5s clip is very
 /// likely an accidental tap, not an intentional Ad.
@@ -19,9 +23,21 @@ import "../../domain/video_constraints.dart";
 /// which isn't available in this environment. Test this screen first and
 /// carefully once Flutter is installed.
 class CameraRecordView extends StatefulWidget {
-  const CameraRecordView({required this.onRecorded, super.key});
+  const CameraRecordView({
+    required this.onRecorded,
+    this.maxDuration = VideoConstraints.max,
+    this.onCancel,
+    super.key,
+  });
 
   final void Function(String filePath, Duration duration) onRecorded;
+
+  /// Recording auto-stops here — less than [VideoConstraints.max] for an
+  /// extra take, since all takes together share the 30s cap.
+  final Duration maxDuration;
+
+  /// When set, a Cancel button is shown top-left (extra-take mode).
+  final VoidCallback? onCancel;
 
   @override
   State<CameraRecordView> createState() => _CameraRecordViewState();
@@ -155,7 +171,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
       }
       final Duration elapsed = DateTime.now().difference(startedAt);
       setState(() => _elapsed = elapsed);
-      if (elapsed >= VideoConstraints.max) {
+      if (elapsed >= widget.maxDuration) {
         unawaited(_stopRecording());
       }
     });
@@ -201,7 +217,19 @@ class _CameraRecordViewState extends State<CameraRecordView> {
         child: Center(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.xl),
-            child: Text(_error!, style: const TextStyle(color: Colors.white), textAlign: TextAlign.center),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(_error!, style: const TextStyle(color: Colors.white), textAlign: TextAlign.center),
+                if (widget.onCancel != null) ...<Widget>[
+                  const SizedBox(height: AppSpacing.lg),
+                  TextButton(
+                    onPressed: widget.onCancel,
+                    child: Text(AppLocalizations.of(context).captureCancelExtraClip),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       );
@@ -215,7 +243,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
       );
     }
 
-    final double progress = _elapsed.inMilliseconds / VideoConstraints.max.inMilliseconds;
+    final double progress = _elapsed.inMilliseconds / widget.maxDuration.inMilliseconds;
 
     return ColoredBox(
       color: AppColors.darkBackground,
@@ -235,6 +263,24 @@ class _CameraRecordViewState extends State<CameraRecordView> {
               child: CameraPreview(controller),
             ),
           ),
+          if (widget.onCancel != null)
+            Positioned(
+              top: AppSpacing.md,
+              left: AppSpacing.md,
+              child: SafeArea(
+                child: TextButton(
+                  // Disabled mid-recording: stop first, so a take is never
+                  // silently thrown away by a stray tap.
+                  onPressed: _isRecording ? null : widget.onCancel,
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.black38,
+                    foregroundColor: Colors.white,
+                    shape: const StadiumBorder(),
+                  ),
+                  child: Text(AppLocalizations.of(context).captureCancelExtraClip),
+                ),
+              ),
+            ),
           if (_cameras.length > 1)
             Positioned(
               top: AppSpacing.md,
@@ -258,7 +304,8 @@ class _CameraRecordViewState extends State<CameraRecordView> {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 Text(
-                  "${(_elapsed.inMilliseconds / 1000.0).toStringAsFixed(1)}s / ${VideoConstraints.max.inSeconds}s",
+                  "${(_elapsed.inMilliseconds / 1000.0).toStringAsFixed(1)}s / "
+                  "${(widget.maxDuration.inMilliseconds / 1000.0).toStringAsFixed(1)}s",
                   style: const TextStyle(color: Colors.white),
                 ),
                 const SizedBox(height: AppSpacing.md),

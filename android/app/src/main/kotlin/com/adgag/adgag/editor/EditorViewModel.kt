@@ -8,25 +8,28 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.media3.common.C
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.effect.Presentation
 import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ClippingMediaSource
-import androidx.media3.exoplayer.source.ConcatenatingMediaSource
 import androidx.media3.exoplayer.source.FilteringMediaSource
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.source.SilenceMediaSource
+import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
@@ -46,286 +49,260 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Native editor state, phase 1 scope: play the captured clip, trim it,
- * optionally attach one background-music track, export.
+ * Native editor state: a sequence of recorded clips (each trimmable),
+ * an entrance transition between each pair, optional background music
+ * placed on the whole timeline, rotate, mute, export.
  *
- * The entire reason this exists (see AdGag's own CLAUDE.md checkpoint,
- * "why Instagram doesn't have this problem" discussion): the Flutter
- * editor kept two independent VideoPlayerControllers (video + music),
- * each with its own native clock, and no amount of retry/watchdog
- * patching around periodic re-seeking ever fully eliminated audible
- * drift or stall recovery glitches — because two independent clocks are
- * structurally the wrong architecture for this.
+ * TIME SYSTEMS — read this before touching any position math:
+ * - clip SOURCE time: position inside one clip's own file (trims live here).
+ * - GLOBAL time: position on the combined timeline, 0 = first kept frame
+ *   of the first clip; clip i starts at [clipStartMs]`(i)`. Music
+ *   placement and the timeline's playhead live here.
+ * - player time: the preview is an ExoPlayer PLAYLIST of [segments];
+ *   `currentPosition` is relative to the current playlist item.
+ *   [globalPositionMs]/[seekToGlobal] are the only conversions.
  *
- * PIVOT (this round): the live preview player was [androidx.media3.transformer.CompositionPlayer]
- * (Media3's own composition-preview player, one Player/one clock playing
- * a whole [Composition] directly) — confirmed via TWO independent real-
- * device tests (6% battery, then fully charged, ruling out a power-
- * saving cause) that `CompositionPlayer.Builder(context).build()` itself
- * crashes on the user's real device, before any composition/video file
- * is even involved. Reading its real decompiled source confirmed why
- * it's a comparatively risky construction path: the constructor starts
- * its own `HandlerThread` at `THREAD_PRIORITY_AUDIO` and sets up a GL-
- * backed video graph pipeline immediately — genuinely heavy, newer,
- * `@UnstableApi` machinery, unlike a plain player.
- *
- * The preview player is now a plain [ExoPlayer] — the same decade-old,
- * extremely widely deployed core Media3/ExoPlayer architecture used in
- * essentially every production Android video app — combined with
- * [MergingMediaSource] (to attach a separate audio track to the video,
- * the standard, long-established way to preview "video + different
- * audio" with one Player/one clock) and [ClippingMediaSource] (trim).
- * `ExoPlayer.Builder().build()` does NOT do CompositionPlayer's own
- * heavy construction-time GL/video-graph setup — real rendering setup
- * only happens once a Surface is attached and playback actually starts
- * — making it a structurally lighter, safer construction path.
- *
- * IMPORTANT SCOPE NOTE (preview-only, does not affect the exported Ad):
- * plain ExoPlayer has no equivalent of Composition's real N-way audio
- * MIXING. When background music is attached, this preview plays ONLY
- * the music track (the clip's own original audio is excluded from the
- * live preview via [FilteringMediaSource] rather than left to an
- * unpredictable two-audio-track-group tie-break). The final EXPORTED
- * Ad is unaffected by any of this — [export] still goes through
- * [Transformer]/[Composition] exactly as before (a completely separate,
- * long-stable pipeline that never used CompositionPlayer and has never
- * been implicated in any crash), which genuinely mixes the original
- * audio (when not muted) together with the music, sample-accurately.
+ * PREVIEW vs EXPORT (see the older checkpoint history for why the
+ * preview is plain ExoPlayer, not CompositionPlayer): the export goes
+ * through Transformer/[Composition] and genuinely mixes the clips' own
+ * audio with the music; the preview can't mix, so while music is
+ * attached it plays the music only.
  */
 @UnstableApi
-class EditorViewModel(private val context: Context, private val sourcePath: String) : ViewModel() {
+class EditorViewModel(
+    private val context: Context,
+    initialState: EditorSessionState,
+    /** A clip just recorded via the timeline's "+" — appended before the first preview build. */
+    newClipPath: String? = null,
+) : ViewModel() {
 
-    init {
-        DebugLog.log(context, "EditorViewModel: constructor start, sourcePath=$sourcePath")
+    val player: ExoPlayer = ExoPlayer.Builder(context).build().apply {
+        // The whole playlist loops (REPEAT_MODE_ONE would loop only the
+        // current segment). Without a repeat mode a finished player
+        // ignores play() — the original "play doesn't work" bug.
+        repeatMode = Player.REPEAT_MODE_ALL
     }
 
-    val player: ExoPlayer = run {
-        DebugLog.log(context, "EditorViewModel: building ExoPlayer")
-        val built = ExoPlayer.Builder(context).build()
-        DebugLog.log(context, "EditorViewModel: ExoPlayer.Builder(context).build() returned")
-        // Same fix as before the pivot, carried over unchanged: without
-        // an explicit repeat mode, a plain STATE_ENDED is reached at the
-        // end of every playthrough, and per standard Player semantics,
-        // calling play() again on an ENDED player does nothing without
-        // an explicit seekTo(0) first.
-        built.repeatMode = Player.REPEAT_MODE_ONE
-        DebugLog.log(context, "EditorViewModel: ExoPlayer built OK, repeatMode=ONE")
-        built
-    }
-
-    var durationMs by mutableStateOf(0L)
+    var clips by mutableStateOf(initialState.clips)
         private set
-    var trimStartMs by mutableStateOf(0L)
-    var trimEndMs by mutableStateOf(0L)
+    /** transitions[i] = how clip i+1 enters. Always clips.size - 1 long. */
+    var transitions by mutableStateOf(normalizeTransitions(initialState.transitions, initialState.clips.size))
+        private set
+    /** Which clip the trim row below the clip strip is editing. */
+    var selectedClipIndex by mutableStateOf(0)
+        private set
+
+    val totalDurationMs: Long get() = clips.sumOf { it.keptDurationMs }
+    val remainingMs: Long get() = (MaxTotalDurationMs - totalDurationMs).coerceAtLeast(0L)
+    val canAddClip: Boolean get() = remainingMs >= MinClipDurationMs
+
     var isPlaying by mutableStateOf(false)
         private set
-    var musicUri by mutableStateOf<Uri?>(null)
-    var musicVolume by mutableStateOf(1.0f)
-    /** The music file's own real duration, probed once when attached — drives the timeline's music segment width (see EditorScreen's TimelineSection). Null while no music is attached. */
+
+    /** Absolute path of a private COPY of the picked music (see [setMusic]) — survives the editor being relaunched to record another clip. */
+    var musicPath by mutableStateOf(initialState.musicPath)
+        private set
     var musicDurationMs by mutableStateOf<Long?>(null)
         private set
-    /**
-     * Where in the CLIP's own timeline (0 = clip/trim start) the music
-     * begins playing, and for how long — real, user-report-driven
-     * additions ("eklenen müziği kesemiyorum" / "can't cut the music I
-     * added"): previously music always started at 0 with no way to
-     * shorten it. [EditorScreen]'s timeline lets both be dragged
-     * directly. Both are relative to the CLIP's timeline, not the music
-     * file's own (possibly much longer) runtime — trimming means
-     * "how much of the song, from its own start, plays and where,"
-     * matching this phase's actual scope, not implying arbitrary in-
-     * song scrubbing that doesn't exist yet.
-     */
-    var musicStartOffsetMs by mutableStateOf(0L)
+    /** Global time where the music starts, and how much of the song (from its own start) plays. */
+    var musicStartOffsetMs by mutableStateOf(initialState.musicStartOffsetMs)
         private set
-    var musicPlayDurationMs by mutableStateOf(0L)
+    var musicPlayDurationMs by mutableStateOf(initialState.musicPlayDurationMs)
         private set
-    /** 0/90/180/270 — [rotateNinety] is the only mutator, so it can never drift off a multiple of 90. */
-    var rotationDegrees by mutableStateOf(0)
-        private set
-    var isMuted by mutableStateOf(false)
+    var isAttachingMusic by mutableStateOf(false)
         private set
 
-    /** A handful of evenly-spaced frames from the source clip, for the timeline's filmstrip — see [generateThumbnails]. Empty until generation finishes; the timeline simply shows a plain track until then, never blocks on it. */
-    var thumbnails by mutableStateOf<List<Bitmap>>(emptyList())
+    var rotationDegrees by mutableStateOf(initialState.rotationDegrees)
+        private set
+    var isMuted by mutableStateOf(initialState.isMuted)
         private set
 
-    // Deliberately not named viewModelScope and not the real Jetpack
-    // extension property of that name (which needs lifecycle-viewmodel-
-    // ktx, a dependency this module doesn't otherwise need) — a plain,
-    // manually-cancelled scope is simpler for the one call site that needs it.
+    /** Per clip path: frames evenly spaced across that clip's SOURCE, as (sourceTimeMs, bitmap). */
+    val thumbnails = mutableStateMapOf<String, List<Pair<Long, Bitmap>>>()
+
     private val editorScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    // Export state, surfaced to the Compose UI.
     var isExporting by mutableStateOf(false)
         private set
     var exportProgress by mutableStateOf(0f)
         private set
     var exportError by mutableStateOf<String?>(null)
         private set
-    var exportedFilePath by mutableStateOf<String?>(null)
+    var previewError by mutableStateOf<String?>(null)
         private set
 
-    private var probedDurationMs = 0L
+    /** One playlist item of the preview — see [buildSegments]. */
+    private data class Segment(val clipIndex: Int, val globalStartMs: Long, val lengthMs: Long, val sourceStartMs: Long)
+
+    private var segments: List<Segment> = emptyList()
 
     init {
+        DebugLog.log(context, "EditorViewModel: init clips=${clips.size}")
+        musicDurationMs = musicPath?.let { probeDurationUs(context, Uri.fromFile(File(it)))?.div(1000) }
+        if (musicPath != null && musicDurationMs == null) musicPath = null
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
             }
 
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_READY && probedDurationMs == 0L) {
-                    val d = player.duration
-                    if (d > 0) {
-                        probedDurationMs = d
-                        durationMs = d
-                        // Default trim window: the whole clip, capped the
-                        // same way the rest of this app caps a source
-                        // clip's usable window — the caller (Dart side)
-                        // is responsible for the exact max-duration rule;
-                        // this native screen just avoids defaulting to an
-                        // empty window.
-                        if (trimEndMs == 0L) {
-                            trimEndMs = d
-                        }
-                    }
-                }
+            override fun onPlayerError(error: PlaybackException) {
+                // Surfaced, not swallowed — a silent player error is
+                // exactly what "the video froze" looks like to a user.
+                Log.e("EditorViewModel", "Preview player error", error)
+                DebugLog.log(context, "player error: ${error.errorCodeName} ${error.message}")
+                previewError = "${error.errorCodeName}: ${error.message}"
             }
         })
-        rebuildAndPrepare(startAt = 0L, playWhenReady = true)
-        generateThumbnails()
+        var startAt = 0L
+        if (newClipPath != null && appendClip(newClipPath)) {
+            // Show the new clip (and the transition into it) right away.
+            startAt = (clipStartMs(clips.lastIndex) - 1000).coerceAtLeast(0L)
+        }
+        rebuildAndPrepare(startGlobalMs = startAt, playWhenReady = true)
+        clips.forEach { generateThumbnails(it.path) }
     }
 
-    /**
-     * Real feature gap found via user report ("timelineda thumbnail
-     * yok" / no thumbnails in the timeline): reads a handful of evenly-
-     * spaced frames directly from the source file with
-     * [MediaMetadataRetriever.getFrameAtTime] — a plain, long-stable
-     * platform API (available since API 10), not Media3-specific, so no
-     * new-API verification risk here. Runs on [Dispatchers.IO] since
-     * decoding several frames synchronously is real work; publishes to
-     * [thumbnails] on the main thread once done. Best-effort: any
-     * failure just leaves the timeline without thumbnails rather than
-     * blocking or crashing the editor over a cosmetic feature.
-     */
-    private fun generateThumbnails() {
-        editorScope.launch {
-            val frames = withContext(Dispatchers.IO) {
-                val retriever = MediaMetadataRetriever()
-                try {
-                    retriever.setDataSource(sourcePath)
-                    val totalMs = retriever
-                        .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                        ?.toLongOrNull()
-                    if (totalMs == null || totalMs <= 0) {
-                        emptyList()
-                    } else {
-                        val count = 10
-                        (0 until count).mapNotNull { i ->
-                            val timeUs = (totalMs * i / count) * 1000
-                            try {
-                                retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                            } catch (e: Exception) {
-                                null
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w("EditorViewModel", "Thumbnail generation failed", e)
-                    emptyList()
-                } finally {
-                    retriever.release()
-                }
-            }
-            thumbnails = frames
-        }
+    fun sessionState(): EditorSessionState = EditorSessionState(
+        clips = clips,
+        transitions = transitions,
+        musicPath = musicPath,
+        musicStartOffsetMs = musicStartOffsetMs,
+        musicPlayDurationMs = musicPlayDurationMs,
+        rotationDegrees = rotationDegrees,
+        isMuted = isMuted,
+    )
+
+    fun clipStartMs(index: Int): Long = clips.take(index).sumOf { it.keptDurationMs }
+
+    /** Current playback position on the GLOBAL timeline. */
+    fun globalPositionMs(): Long {
+        val seg = segments.getOrNull(player.currentMediaItemIndex) ?: return 0L
+        return seg.globalStartMs + player.currentPosition.coerceIn(0L, seg.lengthMs)
+    }
+
+    fun seekToGlobal(globalMs: Long) {
+        if (segments.isEmpty()) return
+        val g = globalMs.coerceIn(0L, (totalDurationMs - 1).coerceAtLeast(0L))
+        val index = segments.indexOfLast { it.globalStartMs <= g }.coerceAtLeast(0)
+        player.seekTo(index, g - segments[index].globalStartMs)
     }
 
     fun togglePlayPause() {
-        if (player.isPlaying) {
-            player.pause()
-        } else {
-            player.play()
-        }
+        if (player.isPlaying) player.pause() else player.play()
     }
 
-    fun setTrim(startMs: Long, endMs: Long) {
-        trimStartMs = startMs
-        trimEndMs = endMs
-        // Defensive: if music was already placed and the clip is now
-        // SHORTER than before (the trim window shrank), re-clamp the
-        // music's placement so it can never end up specifying a segment
-        // that no longer fits.
-        if (musicUri != null) {
-            val newClipDurationMs = (endMs - startMs).coerceAtLeast(0L)
-            val clampedStart = musicStartOffsetMs.coerceIn(0L, newClipDurationMs)
-            musicStartOffsetMs = clampedStart
-            musicPlayDurationMs = musicPlayDurationMs.coerceIn(0L, newClipDurationMs - clampedStart)
-        }
-        // Real bug (user report: dragging the LEFT trim handle "confused"
-        // the player and paused it): the old code resumed from the
-        // player's previous position, but that position is relative to
-        // the OLD trim start — after moving the start handle, the same
-        // number points at different content (or past the new end).
-        // Every mobile editor restarts from the new trim start after a
-        // trim edit; do the same. playWhenReady (the user's intent), not
-        // isPlaying (false while buffering — e.g. still preparing from a
-        // previous trim commit), so back-to-back trims don't pause.
-        rebuildAndPrepare(startAt = 0L, playWhenReady = player.playWhenReady)
+    fun selectClip(index: Int) {
+        if (index in clips.indices) selectedClipIndex = index
     }
 
-    fun setMusic(uri: Uri?) {
-        musicUri = uri
-        val probedMs = if (uri != null) probeDurationUs(context, uri)?.let { it / 1000 } else null
-        musicDurationMs = probedMs
-        // Real bug found via user report: music could be added before
-        // trimEndMs had ever been defaulted from the player's own
-        // learned duration (still its untouched 0 default at that
-        // moment) — computing clipDurationMs from trimEndMs alone then
-        // degenerated to 0, making the timeline's Music segment render
-        // at only its minimum handle width (effectively invisible/easy
-        // to miss) until an unrelated setTrim() call happened to
-        // re-clamp it. Falling back to the player's own already-known
-        // durationMs whenever trimEndMs hasn't been established yet
-        // closes this race at the source instead of only papering over
-        // it downstream.
-        val effectiveClipEnd = if (trimEndMs > trimStartMs) trimEndMs else durationMs
-        val clipDurationMs = (effectiveClipEnd - trimStartMs).coerceAtLeast(0L)
-        // Default placement: start at the clip's own beginning, play
-        // for as much of the song as fits — user-adjustable via the
-        // timeline's music-segment drag handles (setMusicPlacement).
-        musicStartOffsetMs = 0L
-        musicPlayDurationMs = if (probedMs != null) minOf(probedMs, clipDurationMs) else 0L
-        rebuildAndPrepare(startAt = player.currentPosition, playWhenReady = player.playWhenReady)
+    /** Trims clip [index] (both values in that clip's SOURCE time). */
+    fun setClipTrim(index: Int, startMs: Long, endMs: Long) {
+        val clip = clips.getOrNull(index) ?: return
+        // The other clips' kept time is fixed; this one may use whatever
+        // is left of the 30s cap.
+        val othersMs = totalDurationMs - clip.keptDurationMs
+        val maxKept = (MaxTotalDurationMs - othersMs).coerceAtLeast(MinClipDurationMs)
+        val start = startMs.coerceIn(0L, clip.sourceDurationMs)
+        val end = endMs.coerceIn(start, minOf(clip.sourceDurationMs, start + maxKept))
+        clips = clips.toMutableList().also { it[index] = clip.copy(trimStartMs = start, trimEndMs = end) }
+        clampMusicToTimeline()
+        // Restart from where the edited clip now begins: any old
+        // position refers to content that moved.
+        rebuildAndPrepare(startGlobalMs = clipStartMs(index), playWhenReady = player.playWhenReady)
+    }
+
+    /** Appends a recorded clip, trimmed to whatever is left of the 30s cap. Returns false if it couldn't be read or there's no room. */
+    private fun appendClip(path: String): Boolean {
+        val sourceMs = probeDurationUs(context, Uri.fromFile(File(path)))?.div(1000) ?: return false
+        val kept = minOf(sourceMs, remainingMs)
+        if (kept <= 0L) return false
+        clips = clips + EditorClip(path, sourceMs, 0L, kept)
+        transitions = normalizeTransitions(transitions, clips.size)
+        selectedClipIndex = clips.lastIndex
+        return true
+    }
+
+    fun removeClip(index: Int) {
+        if (clips.size <= 1 || index !in clips.indices) return
+        clips = clips.toMutableList().also { it.removeAt(index) }
+        // Drop the transition INTO the removed clip (or out of it, for the first clip).
+        transitions = transitions.toMutableList().also { if (it.isNotEmpty()) it.removeAt((index - 1).coerceAtLeast(0)) }
+        selectedClipIndex = selectedClipIndex.coerceIn(0, clips.lastIndex)
+        clampMusicToTimeline()
+        rebuildAndPrepare(startGlobalMs = 0L, playWhenReady = player.playWhenReady)
+    }
+
+    /** [boundaryIndex] 0 = between clip 0 and clip 1. */
+    fun setTransition(boundaryIndex: Int, transition: ClipTransition) {
+        if (boundaryIndex !in transitions.indices) return
+        transitions = transitions.toMutableList().also { it[boundaryIndex] = transition }
+        // Preview transitions are drawn by Compose on top of the player,
+        // so no rebuild — just replay the boundary so it can be seen.
+        val start = clipStartMs(boundaryIndex + 1)
+        seekToGlobal((start - 1000).coerceAtLeast(0L))
+        player.play()
     }
 
     /**
-     * Moves and/or resizes the attached music's placement within the
-     * clip's own timeline — [EditorScreen]'s draggable music segment is
-     * the caller. Both values are clamped so the segment can never sit
-     * outside the clip or exceed the music file's own real length.
+     * Copies the picked audio into app-private storage first: a
+     * content:// grant from the picker doesn't survive this Activity
+     * being finished and relaunched for another recording, a file does.
      */
+    fun setMusic(uri: Uri?) {
+        if (uri == null) {
+            musicPath = null
+            musicDurationMs = null
+            rebuildAndPrepare(startGlobalMs = globalPositionMs(), playWhenReady = player.playWhenReady)
+            return
+        }
+        isAttachingMusic = true
+        editorScope.launch {
+            val copied = withContext(Dispatchers.IO) {
+                try {
+                    val dest = File(context.filesDir, "editor_music_${System.currentTimeMillis()}")
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        dest.outputStream().use { input.copyTo(it) }
+                    } ?: return@withContext null
+                    val ms = probeDurationUs(context, Uri.fromFile(dest))?.div(1000)
+                    if (ms == null) {
+                        dest.delete()
+                        null
+                    } else {
+                        dest.absolutePath to ms
+                    }
+                } catch (e: Exception) {
+                    Log.w("EditorViewModel", "Copying picked music failed", e)
+                    null
+                }
+            }
+            isAttachingMusic = false
+            if (copied == null) {
+                previewError = "Couldn't read that audio file."
+                return@launch
+            }
+            musicPath = copied.first
+            musicDurationMs = copied.second
+            musicStartOffsetMs = 0L
+            musicPlayDurationMs = minOf(copied.second, totalDurationMs)
+            rebuildAndPrepare(startGlobalMs = globalPositionMs(), playWhenReady = player.playWhenReady)
+        }
+    }
+
+    /** Moves/resizes the music on the GLOBAL timeline, clamped to the timeline and the song's own length. */
     fun setMusicPlacement(startOffsetMs: Long, playDurationMs: Long) {
-        val durationMs = musicDurationMs ?: return
-        val clipDurationMs = (trimEndMs - trimStartMs).coerceAtLeast(0L)
-        val clampedStart = startOffsetMs.coerceIn(0L, clipDurationMs)
-        val maxDuration = (clipDurationMs - clampedStart).coerceAtLeast(0L)
-        musicStartOffsetMs = clampedStart
-        musicPlayDurationMs = playDurationMs.coerceIn(0L, minOf(durationMs, maxDuration))
-        rebuildAndPrepare(startAt = player.currentPosition, playWhenReady = player.playWhenReady)
+        val songMs = musicDurationMs ?: return
+        val total = totalDurationMs
+        val start = startOffsetMs.coerceIn(0L, total)
+        musicStartOffsetMs = start
+        musicPlayDurationMs = playDurationMs.coerceIn(0L, minOf(songMs, total - start))
+        rebuildAndPrepare(startGlobalMs = globalPositionMs(), playWhenReady = player.playWhenReady)
     }
 
     fun rotateNinety() {
+        // Preview rotation is a Compose transform on the surface (plain
+        // ExoPlayer has no effects pipeline); export bakes the real
+        // rotation in via ScaleAndRotateTransformation.
         rotationDegrees = (rotationDegrees + 90) % 360
-        // No rebuildAndPrepare needed: rotation isn't part of the
-        // preview MediaSource anymore (plain ExoPlayer has no live
-        // Effects/Transformation pipeline — that's CompositionPlayer/
-        // Transformer-only). EditorScreen applies a Compose-level visual
-        // rotation to the PlayerSurface directly from this field. The
-        // real, pixel-accurate rotation is still applied at export time
-        // via ScaleAndRotateTransformation in buildComposition(), below
-        // — unaffected by this pivot.
     }
 
     fun toggleMute() {
@@ -333,220 +310,251 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         applyPreviewVolume()
     }
 
-    /**
-     * Preview audio routing: when music is attached, the preview plays
-     * ONLY the music (see this class's own doc comment on why — no live
-     * N-way mixing on plain ExoPlayer), so the mute toggle has nothing
-     * left to mute there; it still governs the ORIGINAL clip's audio at
-     * export time via buildComposition()'s own hasAudio check,
-     * unaffected by this. With no music attached, mute genuinely
-     * silences the live preview via player volume — the most direct,
-     * reliable way to mute a single already-playing audio track,
-     * without needing to rebuild/reprepare the MediaSource at all.
-     */
+    fun clearPreviewError() {
+        previewError = null
+    }
+
     private fun applyPreviewVolume() {
-        player.volume = if (musicUri == null && isMuted) 0f else 1f
+        // With music attached the preview carries only the music (no live
+        // mixing), so mute only applies to the no-music preview.
+        player.volume = if (musicPath == null && isMuted) 0f else 1f
     }
 
-    /** Rebuilds the preview [MediaSource] from current trim/music state and reloads it into [player]. */
-    private fun rebuildAndPrepare(startAt: Long, playWhenReady: Boolean) {
-        DebugLog.log(context, "rebuildAndPrepare: start startAt=$startAt playWhenReady=$playWhenReady")
-        // Never resume at/after the clip's end — seeking a clipped source
-        // past its own end left the player stuck (reported as a freeze
-        // after re-lengthening the music).
-        val clipMs = previewClipDurationMs()
-        val safeStartAt = if (clipMs > 0 && startAt >= clipMs) 0L else startAt
-        val mediaSource = buildPreviewMediaSource()
-        DebugLog.log(context, "rebuildAndPrepare: preview MediaSource built, calling player.stop()")
-        player.stop()
-        DebugLog.log(context, "rebuildAndPrepare: player.stop() done, calling setMediaSource")
-        player.setMediaSource(mediaSource)
-        applyPreviewVolume()
-        DebugLog.log(context, "rebuildAndPrepare: setMediaSource done, calling prepare()")
-        player.prepare()
-        DebugLog.log(context, "rebuildAndPrepare: prepare() done")
-        if (safeStartAt > 0) {
-            player.seekTo(safeStartAt)
-            DebugLog.log(context, "rebuildAndPrepare: seekTo done")
+    private fun clampMusicToTimeline() {
+        if (musicPath == null) return
+        val total = totalDurationMs
+        musicStartOffsetMs = musicStartOffsetMs.coerceIn(0L, total)
+        musicPlayDurationMs = musicPlayDurationMs.coerceIn(0L, total - musicStartOffsetMs)
+    }
+
+    private fun generateThumbnails(path: String) {
+        if (thumbnails.containsKey(path)) return
+        editorScope.launch {
+            val frames = withContext(Dispatchers.IO) {
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(path)
+                    val totalMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+                    if (totalMs == null || totalMs <= 0) {
+                        emptyList()
+                    } else {
+                        val count = 10
+                        (0 until count).mapNotNull { i ->
+                            val timeMs = totalMs * i / count
+                            try {
+                                val frame = if (android.os.Build.VERSION.SDK_INT >= 27) {
+                                    retriever.getScaledFrameAtTime(timeMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 160, 284)
+                                } else {
+                                    retriever.getFrameAtTime(timeMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                                }
+                                frame?.let { timeMs to it }
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("EditorViewModel", "Thumbnail generation failed for $path", e)
+                    emptyList()
+                } finally {
+                    retriever.release()
+                }
+            }
+            thumbnails[path] = frames
         }
-        player.playWhenReady = playWhenReady
-        DebugLog.log(context, "rebuildAndPrepare: playWhenReady set, done")
     }
 
     /**
-     * Builds the ExoPlayer [MediaSource] graph for live preview only —
-     * see this class's own doc comment for the full pivot rationale.
-     * Trim: [ClippingMediaSource], the standard, long-stable ExoPlayer
-     * trim mechanism (constructor takes start/end in microseconds,
-     * confirmed via the real media3-exoplayer 1.11.0 sources). Music:
-     * [FilteringMediaSource] (confirmed real/public in the same sources
-     * — "publishes tracks of one type") strips the clip's own audio
-     * deterministically, [SilenceMediaSource] + [ConcatenatingMediaSource]
-     * reproduce the same "start N ms into the clip" gap the old
-     * Composition-based `addGap` gave us, and [MergingMediaSource]
-     * combines the video-only branch with the (possibly gapped +
-     * clipped) music branch into one Player/one clock — the standard,
-     * long-established "video from one source, audio from another"
-     * ExoPlayer pattern.
+     * Splits the timeline into playlist items so music can be attached
+     * with MergingMediaSource. MergingMediaSource requires every merged
+     * child to have the SAME number of periods (confirmed in the
+     * media3-exoplayer 1.11.0 sources: IllegalMergeException
+     * REASON_PERIOD_COUNT_MISMATCH) — so "silence + music + silence"
+     * concatenated against a one-period clip is illegal (that was the
+     * real cause of the music-attached freeze). Instead each clip is cut
+     * at the music's start/end, and every piece merges one video slice
+     * with exactly one audio piece of the same length: a music slice, or
+     * silence. Without music: one segment per clip, its own audio.
      */
-    /** Length of the kept (trimmed) clip in ms, or 0 while the source duration is still unknown. */
-    private fun previewClipDurationMs(): Long {
-        val end = if (trimEndMs > trimStartMs) trimEndMs else durationMs
-        return (end - trimStartMs).coerceAtLeast(0L)
+    private fun buildSegments(): List<Segment> {
+        val music = musicPath != null && musicPlayDurationMs > 0
+        val mStart = musicStartOffsetMs
+        val mEnd = musicStartOffsetMs + musicPlayDurationMs
+        val result = mutableListOf<Segment>()
+        var g = 0L
+        clips.forEachIndexed { i, clip ->
+            val ge = g + clip.keptDurationMs
+            val cuts = mutableListOf(g, ge)
+            // Skip cut points hugging a clip edge — a few-ms playlist item only adds a hiccup.
+            if (music) {
+                listOf(mStart, mEnd).forEach { c -> if (c > g + 50 && c < ge - 50) cuts += c }
+            }
+            val sorted = cuts.distinct().sorted()
+            for (k in 0 until sorted.size - 1) {
+                val a = sorted[k]
+                val b = sorted[k + 1]
+                if (b - a <= 0) continue
+                result += Segment(clipIndex = i, globalStartMs = a, lengthMs = b - a, sourceStartMs = clip.trimStartMs + (a - g))
+            }
+            g = ge
+        }
+        return result
     }
 
-    private fun buildPreviewMediaSource(): MediaSource {
-        val dataSourceFactory = DefaultDataSource.Factory(context)
-        val mediaSourceFactory = ProgressiveMediaSource.Factory(dataSourceFactory)
-
-        val hasRealTrimWindow = trimEndMs > trimStartMs
-        var videoSource: MediaSource =
-            mediaSourceFactory.createMediaSource(MediaItem.fromUri(Uri.fromFile(File(sourcePath))))
-        if (hasRealTrimWindow) {
-            videoSource = ClippingMediaSource(videoSource, trimStartMs * 1000, trimEndMs * 1000)
-        }
-
-        val uri = musicUri
-        val musicDur = musicDurationMs
-        if (uri == null || musicDur == null) {
-            return videoSource
-        }
-
-        val videoOnlySource = FilteringMediaSource(videoSource, C.TRACK_TYPE_VIDEO)
-        val clipMs = previewClipDurationMs()
-        val startOffsetMs = if (clipMs > 0) musicStartOffsetMs.coerceIn(0L, clipMs) else musicStartOffsetMs
-        var playDurationMs = musicPlayDurationMs.coerceAtLeast(1L)
-        if (clipMs > 0) playDurationMs = playDurationMs.coerceAtMost((clipMs - startOffsetMs).coerceAtLeast(1L))
-        val clippedMusic = ClippingMediaSource(
-            mediaSourceFactory.createMediaSource(MediaItem.fromUri(uri)),
-            0L,
-            playDurationMs * 1000,
+    private fun rebuildAndPrepare(startGlobalMs: Long, playWhenReady: Boolean) {
+        previewError = null
+        segments = buildSegments()
+        // Constant-bitrate seeking: music is sliced at clip boundaries, so
+        // a slice can start mid-song — a VBR MP3 without a seek table is
+        // otherwise "unseekable" and ClippingMediaSource rejects a
+        // non-zero start (IllegalClippingException).
+        val factory = ProgressiveMediaSource.Factory(
+            DefaultDataSource.Factory(context),
+            DefaultExtractorsFactory().setConstantBitrateSeekingEnabled(true),
         )
-        // Real bug (user report: with music attached the playhead ran to
-        // the MUSIC's length, and after shortening the music the rest of
-        // the clip crawled in "slow motion"): a merged period lasts until
-        // its LONGEST branch ends, and the audio renderer is the playback
-        // clock. Music longer than the clip -> playback overran the
-        // video; music shorter -> once the audio ended, the clock fell
-        // back and the remaining video advanced wrongly. Fix: the audio
-        // branch is always EXACTLY the clip's length — silence before the
-        // music (its start offset) and silence after it (the remainder).
-        val parts = mutableListOf<MediaSource>()
-        if (startOffsetMs > 0) parts += SilenceMediaSource(startOffsetMs * 1000)
-        parts += clippedMusic
-        val tailMs = if (clipMs > 0) clipMs - startOffsetMs - playDurationMs else 0L
-        if (tailMs > 0) parts += SilenceMediaSource(tailMs * 1000)
-        val musicSource: MediaSource =
-            if (parts.size == 1) clippedMusic else ConcatenatingMediaSource(*parts.toTypedArray())
-        // adjustPeriodTimeOffsets=true (confirmed real/public via the
-        // downloaded media3-exoplayer 1.11.0 sources — "whether to
-        // adjust timestamps of the merged media sources to all start at
-        // the same time"): the video branch's sample timestamps come
-        // from a ClippingMediaSource over the ORIGINAL captured file
-        // (offset by trimStartMs), while the music branch's come from a
-        // freshly-clipped/possibly-gap-prefixed file starting at its own
-        // local zero — without this flag ExoPlayer isn't told these two
-        // periods should be treated as co-starting, a plausible source
-        // of the reported freeze/stutter right when music is attached.
-        val merged = MergingMediaSource(/* adjustPeriodTimeOffsets = */ true, videoOnlySource, musicSource)
-        // Belt and braces on top of the exact-length audio branch: hard-
-        // bound the merged period to the clip's length so no branch can
-        // ever stretch playback past the trimmed video.
-        return if (clipMs > 0) ClippingMediaSource(merged, 0L, clipMs * 1000) else merged
-    }
-
-    /**
-     * Builds the EXPORT-time [Composition] — this path is completely
-     * unaffected by the preview pivot above: it never used
-     * CompositionPlayer, only [Transformer], a separate, long-stable
-     * pipeline that has never been implicated in any crash this
-     * session. Still the one source of truth for what actually gets
-     * mixed/rendered into the published Ad.
-     */
-    private fun buildComposition(): Composition {
-        DebugLog.log(context, "buildComposition: start trimStartMs=$trimStartMs trimEndMs=$trimEndMs")
-        val hasRealTrimWindow = trimEndMs > trimStartMs
-        DebugLog.log(context, "buildComposition: hasRealTrimWindow=$hasRealTrimWindow")
-        val clippedVideo = MediaItem.Builder()
-            .setUri(Uri.fromFile(File(sourcePath)))
-            .apply {
-                if (hasRealTrimWindow) {
-                    setClippingConfiguration(
-                        MediaItem.ClippingConfiguration.Builder()
-                            .setStartPositionMs(trimStartMs)
-                            .setEndPositionMs(trimEndMs)
-                            .build(),
-                    )
-                }
-            }
-            .build()
-        DebugLog.log(context, "buildComposition: clippedVideo MediaItem built")
-        val sourceDurationUs = probeDurationUs(context, Uri.fromFile(File(sourcePath)))
-        DebugLog.log(context, "buildComposition: sourceDurationUs=$sourceDurationUs")
-        val videoItem = EditedMediaItem.Builder(clippedVideo)
-            .apply { if (sourceDurationUs != null) setDurationUs(sourceDurationUs) }
-            .apply {
-                if (rotationDegrees != 0) {
-                    val rotateEffect: Effect =
-                        ScaleAndRotateTransformation.Builder().setRotationDegrees(rotationDegrees.toFloat()).build()
-                    setEffects(Effects(ImmutableList.of<AudioProcessor>(), ImmutableList.of(rotateEffect)))
-                }
-            }
-            .build()
-        DebugLog.log(context, "buildComposition: videoItem built rotationDegrees=$rotationDegrees")
-        val hasAudio = !isMuted && sourceHasAudioTrack(sourcePath)
-        DebugLog.log(context, "buildComposition: sourceHasAudioTrack(effective)=$hasAudio isMuted=$isMuted")
-        val videoSequence = if (hasAudio) {
-            EditedMediaItemSequence.withAudioAndVideoFrom(ImmutableList.of(videoItem))
-        } else {
-            EditedMediaItemSequence.withVideoFrom(ImmutableList.of(videoItem))
-        }
-        DebugLog.log(context, "buildComposition: videoSequence built")
-
-        val uri = musicUri
-        if (uri == null) {
-            val composition = Composition.Builder(ImmutableList.of(videoSequence)).build()
-            DebugLog.log(context, "buildComposition: composition built (no music), returning")
-            return composition
-        }
-
-        val musicDurationUs = probeDurationUs(context, uri)
-        DebugLog.log(
-            context,
-            "buildComposition: musicDurationUs=$musicDurationUs musicStartOffsetMs=$musicStartOffsetMs " +
-                "musicPlayDurationMs=$musicPlayDurationMs",
-        )
-        val playDurationMs = musicPlayDurationMs.coerceAtLeast(1L)
-        val clippedMusic = MediaItem.Builder()
-            .setUri(uri)
-            .setClippingConfiguration(
-                MediaItem.ClippingConfiguration.Builder()
-                    .setStartPositionMs(0)
-                    .setEndPositionMs(playDurationMs)
-                    .build(),
+        val music = musicPath
+        val sources = segments.map { seg ->
+            val clip = clips[seg.clipIndex]
+            val video: MediaSource = ClippingMediaSource(
+                factory.createMediaSource(MediaItem.fromUri(Uri.fromFile(File(clip.path)))),
+                seg.sourceStartMs * 1000,
+                (seg.sourceStartMs + seg.lengthMs) * 1000,
             )
-            .build()
-        val musicItem = EditedMediaItem.Builder(clippedMusic)
-            .apply { if (musicDurationUs != null) setDurationUs(musicDurationUs) }
+            if (music == null) {
+                video
+            } else {
+                val segEnd = seg.globalStartMs + seg.lengthMs
+                val mEnd = musicStartOffsetMs + musicPlayDurationMs
+                // Cuts within 50ms of a clip edge are skipped (buildSegments),
+                // so a segment can overlap the music range by all but a few
+                // ms — decide by majority overlap rather than full containment.
+                val overlap = minOf(segEnd, mEnd) - maxOf(seg.globalStartMs, musicStartOffsetMs)
+                val songMs = musicDurationMs ?: 0L
+                val audio: MediaSource = if (musicPlayDurationMs > 0 && overlap * 2 >= seg.lengthMs && songMs > 0) {
+                    val fromMs = (seg.globalStartMs - musicStartOffsetMs).coerceIn(0L, (songMs - 1).coerceAtLeast(0L))
+                    ClippingMediaSource(
+                        factory.createMediaSource(MediaItem.fromUri(Uri.fromFile(File(music)))),
+                        fromMs * 1000,
+                        minOf(fromMs + seg.lengthMs, songMs) * 1000,
+                    )
+                } else {
+                    SilenceMediaSource(seg.lengthMs * 1000)
+                }
+                MergingMediaSource(
+                    /* adjustPeriodTimeOffsets = */ true,
+                    /* clipDurations = */ true,
+                    FilteringMediaSource(video, C.TRACK_TYPE_VIDEO),
+                    audio,
+                )
+            }
+        }
+        DebugLog.log(context, "rebuildAndPrepare: ${sources.size} segments startGlobalMs=$startGlobalMs")
+        player.stop()
+        player.setMediaSources(sources)
+        applyPreviewVolume()
+        player.prepare()
+        seekToGlobal(startGlobalMs)
+        player.playWhenReady = playWhenReady
+    }
+
+    /** The EXPORT composition — Transformer genuinely mixes clip audio with music here. */
+    private fun buildComposition(): Composition {
+        val targetSize = if (clips.size > 1) exportFrameSize() else null
+        val items = clips.mapIndexed { i, clip ->
+            val mediaItem = MediaItem.Builder()
+                .setUri(Uri.fromFile(File(clip.path)))
+                .setClippingConfiguration(
+                    MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionMs(clip.trimStartMs)
+                        .setEndPositionMs(clip.trimEndMs)
+                        .build(),
+                )
+                .build()
+            val videoEffects = mutableListOf<Effect>()
+            if (rotationDegrees != 0) {
+                videoEffects += ScaleAndRotateTransformation.Builder().setRotationDegrees(rotationDegrees.toFloat()).build()
+            }
+            // Clips can differ in size/orientation (front vs back camera);
+            // normalize every clip to the first one's frame so the
+            // encoder sees one resolution. Only needed with 2+ clips.
+            if (targetSize != null) {
+                videoEffects += Presentation.createForWidthAndHeight(
+                    targetSize.first,
+                    targetSize.second,
+                    Presentation.LAYOUT_SCALE_TO_FIT,
+                )
+            }
+            if (i > 0) videoEffects += transitionEffectsFor(transitions.getOrElse(i - 1) { ClipTransition.NONE })
+            EditedMediaItem.Builder(mediaItem)
+                .setDurationUs(clip.sourceDurationMs * 1000)
+                .apply {
+                    if (videoEffects.isNotEmpty()) {
+                        setEffects(Effects(ImmutableList.of<AudioProcessor>(), ImmutableList.copyOf(videoEffects)))
+                    }
+                }
+                .build()
+        }
+        val hasAudio = !isMuted && clips.all { sourceHasAudioTrack(it.path) }
+        val videoSequence = if (hasAudio) {
+            EditedMediaItemSequence.withAudioAndVideoFrom(items)
+        } else {
+            EditedMediaItemSequence.withVideoFrom(items)
+        }
+
+        val music = musicPath
+        if (music == null || musicPlayDurationMs <= 0) {
+            return Composition.Builder(ImmutableList.of(videoSequence)).build()
+        }
+        val musicUri = Uri.fromFile(File(music))
+        val musicItem = EditedMediaItem.Builder(
+            MediaItem.Builder()
+                .setUri(musicUri)
+                .setClippingConfiguration(
+                    MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionMs(0)
+                        .setEndPositionMs(musicPlayDurationMs)
+                        .build(),
+                )
+                .build(),
+        )
+            .apply { probeDurationUs(context, musicUri)?.let { setDurationUs(it) } }
             .build()
         val musicSequence = EditedMediaItemSequence.Builder(ImmutableSet.of(C.TRACK_TYPE_AUDIO))
             .apply { if (musicStartOffsetMs > 0) addGap(musicStartOffsetMs * 1000) }
             .addItem(musicItem)
             .build()
-
         return Composition.Builder(ImmutableList.of(videoSequence, musicSequence)).build()
     }
 
-    fun export(outputPath: String, onProgress: (Float) -> Unit, onComplete: (String?, String?) -> Unit) {
+    /** First clip's displayed size (container rotation applied, then the user's own rotation), even-numbered for the encoder. */
+    private fun exportFrameSize(): Pair<Int, Int>? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(clips.first().path)
+            val w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: return null
+            val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: return null
+            val rot = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            var (dw, dh) = if (rot % 180 == 90) h to w else w to h
+            if (rotationDegrees % 180 == 90) dw = dh.also { dh = dw }
+            (dw / 2 * 2) to (dh / 2 * 2)
+        } catch (e: Exception) {
+            Log.w("EditorViewModel", "exportFrameSize probe failed", e)
+            null
+        } finally {
+            retriever.release()
+        }
+    }
+
+    fun export(outputPath: String, onComplete: (String?, String?) -> Unit) {
         isExporting = true
         exportProgress = 0f
         exportError = null
+        player.pause()
 
         val transformer = Transformer.Builder(context)
             .addListener(object : Transformer.Listener {
                 override fun onCompleted(composition: Composition, exportResult: ExportResult) {
                     isExporting = false
-                    exportedFilePath = outputPath
                     onComplete(outputPath, null)
                 }
 
@@ -559,27 +567,18 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
             })
             .build()
 
-        val composition = buildComposition()
-        transformer.start(composition, outputPath)
+        transformer.start(buildComposition(), outputPath)
 
-        // Transformer doesn't push progress via listener — it's polled.
-        // A simple fixed-interval poll (matching the coarse granularity
-        // this app's own upload/export progress bars already use
-        // elsewhere) is enough for a progress bar; no need for a tighter
-        // loop than the UI can visibly represent anyway.
+        // Transformer's progress is polled, not pushed.
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
         val progressHolder = ProgressHolder()
         val poll = object : Runnable {
             override fun run() {
                 if (!isExporting) return
-                val state = transformer.getProgress(progressHolder)
-                if (state != Transformer.PROGRESS_STATE_NOT_STARTED) {
+                if (transformer.getProgress(progressHolder) != Transformer.PROGRESS_STATE_NOT_STARTED) {
                     exportProgress = progressHolder.progress / 100f
-                    onProgress(exportProgress)
                 }
-                if (isExporting) {
-                    handler.postDelayed(this, 200)
-                }
+                handler.postDelayed(this, 200)
             }
         }
         handler.postDelayed(poll, 200)
@@ -590,19 +589,34 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         player.release()
     }
 
-    private companion object {
-        /** Cached per source path — the source file never changes mid-session. */
-        var cachedPath: String? = null
-        var cachedResult: Boolean = false
+    companion object {
+        /** The state for a brand-new session from a single captured clip — capped at the 30s total. */
+        fun initialStateFor(context: Context, path: String): EditorSessionState {
+            val sourceMs = probeDurationUs(context, Uri.fromFile(File(path)))?.div(1000) ?: 0L
+            return EditorSessionState(
+                clips = listOf(EditorClip(path, sourceMs, 0L, minOf(sourceMs, MaxTotalDurationMs))),
+                transitions = emptyList(),
+                musicPath = null,
+                musicStartOffsetMs = 0L,
+                musicPlayDurationMs = 0L,
+                rotationDegrees = 0,
+                isMuted = false,
+            )
+        }
 
-        fun sourceHasAudioTrack(path: String): Boolean {
-            if (cachedPath == path) return cachedResult
+        private fun normalizeTransitions(list: List<ClipTransition>, clipCount: Int): List<ClipTransition> {
+            val wanted = (clipCount - 1).coerceAtLeast(0)
+            return List(wanted) { i -> list.getOrElse(i) { ClipTransition.NONE } }
+        }
+
+        private val audioTrackCache = mutableMapOf<String, Boolean>()
+
+        private fun sourceHasAudioTrack(path: String): Boolean = audioTrackCache.getOrPut(path) {
             val extractor = MediaExtractor()
-            val result = try {
+            try {
                 extractor.setDataSource(path)
                 (0 until extractor.trackCount).any { i ->
-                    val mime = extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME)
-                    mime?.startsWith("audio/") == true
+                    extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
                 }
             } catch (e: Exception) {
                 Log.w("EditorViewModel", "sourceHasAudioTrack probe failed, assuming no audio track", e)
@@ -610,26 +624,22 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
             } finally {
                 extractor.release()
             }
-            cachedPath = path
-            cachedResult = result
-            return result
         }
 
         /**
-         * Probes [uri]'s real duration synchronously via
-         * [MediaMetadataRetriever] (a plain, stable platform API — not
-         * Media3-specific). `setDataSource(Context, Uri)` — not the
-         * plain-`String` overload — handles both `file://` (the
-         * captured clip) and `content://` (a music file picked via the
-         * system audio picker) URIs uniformly.
+         * Probes [uri]'s duration synchronously. Transformer requires
+         * every EditedMediaItem's duration up front (checkArgument in
+         * CompositionPlayer/Transformer sources) — see the checkpoint
+         * history.
          */
         fun probeDurationUs(context: Context, uri: Uri): Long? {
             val retriever = MediaMetadataRetriever()
             return try {
                 retriever.setDataSource(context, uri)
-                val durationMsString = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                val durationMs = durationMsString?.toLongOrNull()
-                if (durationMs != null && durationMs > 0) durationMs * 1000 else null
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    ?.toLongOrNull()
+                    ?.takeIf { it > 0 }
+                    ?.times(1000)
             } catch (e: Exception) {
                 Log.w("EditorViewModel", "probeDurationUs failed for $uri", e)
                 null

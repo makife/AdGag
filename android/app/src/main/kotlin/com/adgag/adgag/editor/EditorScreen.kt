@@ -35,11 +35,24 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -48,8 +61,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.ui.compose.PlayerSurface
-import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
+import androidx.media3.ui.compose.ContentFrame
+import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 
 /**
  * The native editor's screen, phase 1 feature set (preview, trim, one
@@ -62,17 +75,32 @@ import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
  * restrained... avoid excessive gradients" directly, not just in name.
  */
 @UnstableApi
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EditorScreen(
     viewModel: EditorViewModel,
     onCancel: () -> Unit,
     onExported: (path: String, durationMs: Long) -> Unit,
+    /** The timeline's "+" — the Activity closes so Flutter's camera can record another clip. */
+    onAddClip: () -> Unit,
     exportOutputPath: String,
 ) {
     AdGagEditorTheme {
         val pickMusic = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri != null) viewModel.setMusic(uri)
+        }
+        // -1 = picker closed; otherwise the clip boundary being edited.
+        var pickingTransitionFor by remember { mutableIntStateOf(-1) }
+
+        // Per-frame GLOBAL position, read ONLY inside the graphicsLayer /
+        // drawBehind lambdas below — the entrance transitions animate
+        // every frame without recomposing the screen.
+        val frameGlobalMs = remember { mutableLongStateOf(0L) }
+        LaunchedEffect(viewModel) {
+            while (true) {
+                withFrameMillis { }
+                frameGlobalMs.longValue = viewModel.globalPositionMs()
+            }
         }
 
         Box(modifier = Modifier.fillMaxSize().background(AdGagColors.Background)) {
@@ -104,10 +132,33 @@ fun EditorScreen(
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                PlayerSurface(
+                // TextureView, not SurfaceView: a SurfaceView lives in its
+                // own window layer and ignores most Compose transforms,
+                // which the transition preview relies on. ContentFrame
+                // keeps the video's aspect ratio; keepContentOnReset
+                // avoids a black flash each time an edit rebuilds the
+                // playlist.
+                ContentFrame(
                     player = viewModel.player,
-                    surfaceType = SURFACE_TYPE_SURFACE_VIEW,
-                    modifier = Modifier.rotate(viewModel.rotationDegrees.toFloat()),
+                    surfaceType = SURFACE_TYPE_TEXTURE_VIEW,
+                    keepContentOnReset = true,
+                    modifier = Modifier.graphicsLayer {
+                        val pose = transitionPoseAt(viewModel, frameGlobalMs.longValue)
+                        rotationZ = viewModel.rotationDegrees + pose.rotationDegrees
+                        scaleX = pose.scale
+                        scaleY = pose.scale
+                        translationX = pose.translateX * size.width
+                        translationY = pose.translateY * size.height
+                    },
+                )
+                // Fade-in transition: a black veil over the video.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .drawBehind {
+                            val b = transitionPoseAt(viewModel, frameGlobalMs.longValue).brightness
+                            if (b < 1f) drawRect(Color.Black, alpha = 1f - b)
+                        },
                 )
             }
 
@@ -151,10 +202,9 @@ fun EditorScreen(
                     onClick = {
                         viewModel.export(
                             outputPath = exportOutputPath,
-                            onProgress = {},
                             onComplete = { path, _ ->
                                 if (path != null) {
-                                    onExported(path, viewModel.trimEndMs - viewModel.trimStartMs)
+                                    onExported(path, viewModel.totalDurationMs)
                                 }
                                 // A non-null error is already surfaced via
                                 // viewModel.exportError, rendered below —
@@ -181,16 +231,34 @@ fun EditorScreen(
                     .windowInsetsPadding(WindowInsets.systemBars)
                     .padding(horizontal = AdGagSpacing.lg.dp, vertical = AdGagSpacing.lg.dp),
             ) {
-                if (viewModel.durationMs > 0) {
-                    EditorTimeline(viewModel = viewModel)
-                    Spacer(modifier = Modifier.height(AdGagSpacing.lg.dp))
-                }
+                EditorTimeline(
+                    viewModel = viewModel,
+                    onAddClip = {
+                        viewModel.player.pause()
+                        onAddClip()
+                    },
+                    onPickTransition = { pickingTransitionFor = it },
+                )
+                Spacer(modifier = Modifier.height(AdGagSpacing.lg.dp))
 
                 ToolRow(viewModel = viewModel, onPickMusic = { pickMusic.launch("audio/*") })
 
                 if (viewModel.isExporting) {
                     Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
                     ExportProgress(viewModel.exportProgress)
+                }
+                if (viewModel.isAttachingMusic) {
+                    Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
+                    Text(text = "Adding music…", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.bodyMedium)
+                }
+                val previewError = viewModel.previewError
+                if (previewError != null) {
+                    Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
+                    Text(
+                        text = "Preview problem: $previewError",
+                        color = AdGagColors.Danger,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
                 val error = viewModel.exportError
                 if (error != null) {
@@ -203,7 +271,63 @@ fun EditorScreen(
                 }
             }
         }
+
+        if (pickingTransitionFor >= 0) {
+            val boundary = pickingTransitionFor
+            ModalBottomSheet(
+                onDismissRequest = { pickingTransitionFor = -1 },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                containerColor = AdGagColors.SurfaceElevated,
+            ) {
+                Column(modifier = Modifier.padding(horizontal = AdGagSpacing.lg.dp).padding(bottom = AdGagSpacing.xl.dp)) {
+                    Text(
+                        text = "How clip ${boundary + 2} comes in",
+                        color = AdGagColors.OnBackground,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(AdGagSpacing.sm.dp),
+                        verticalArrangement = Arrangement.spacedBy(AdGagSpacing.sm.dp),
+                    ) {
+                        val current = viewModel.transitions.getOrNull(boundary)
+                        ClipTransition.entries.forEach { t ->
+                            val selected = t == current
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(AdGagRadius.pill.dp))
+                                    .background(if (selected) AdGagColors.GradientPink else AdGagColors.Surface)
+                                    .clickable {
+                                        viewModel.setTransition(boundary, t)
+                                        pickingTransitionFor = -1
+                                    }
+                                    .padding(horizontal = AdGagSpacing.lg.dp, vertical = AdGagSpacing.sm.dp),
+                            ) {
+                                Text(text = t.label, color = AdGagColors.OnBackground, style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
+}
+
+/** The incoming clip's transition pose at GLOBAL time [globalMs] — identity outside every transition window. */
+@UnstableApi
+private fun transitionPoseAt(viewModel: EditorViewModel, globalMs: Long): TransitionMath.Pose {
+    val clips = viewModel.clips
+    var start = 0L
+    for (i in clips.indices) {
+        val end = start + clips[i].keptDurationMs
+        if (globalMs < end || i == clips.lastIndex) {
+            if (i == 0) return TransitionMath.Identity
+            val p = TransitionMath.progress(globalMs - start) ?: return TransitionMath.Identity
+            return TransitionMath.pose(viewModel.transitions.getOrElse(i - 1) { ClipTransition.NONE }, p)
+        }
+        start = end
+    }
+    return TransitionMath.Identity
 }
 
 @Composable
@@ -225,9 +349,9 @@ private fun ToolRow(viewModel: EditorViewModel, onPickMusic: () -> Unit) {
             onClick = { viewModel.toggleMute() },
         )
         EditorToolButton(
-            icon = if (viewModel.musicUri != null) Icons.Filled.MusicNote else Icons.Filled.MusicOff,
-            label = if (viewModel.musicUri != null) "Music added" else "Add music",
-            active = viewModel.musicUri != null,
+            icon = if (viewModel.musicPath != null) Icons.Filled.MusicNote else Icons.Filled.MusicOff,
+            label = if (viewModel.musicPath != null) "Music added" else "Add music",
+            active = viewModel.musicPath != null,
             onClick = onPickMusic,
         )
     }

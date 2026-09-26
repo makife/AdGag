@@ -5,19 +5,20 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../../core/media/native_editor_bridge.dart";
 import "../../domain/local_video_draft.dart";
+import "../../domain/video_constraints.dart";
 import "../providers/create_ad_flow_controller.dart";
+import "camera_record_view.dart";
 
 /// The real (only) editing entry point: opens the native editor
 /// (`NativeEditorActivity` on Android, Swift/AVFoundation on iOS) the
-/// instant this step is reached. See `native_editor_bridge.dart`'s own
-/// doc comment for why editing is entirely native — there is no
-/// Flutter-side editor to fall back to anymore.
+/// instant this step is reached. See `native_editor_bridge.dart` for why
+/// editing is entirely native.
 ///
-/// This screen itself is just a thin launcher + loading/error state —
-/// all the actual editing UI lives in the native Activity. If the
-/// native editor fails (a real, caught, surfaced crash — not silence,
-/// see `NativeEditorActivity`'s own uncaught-exception handling), this
-/// screen shows the real error with a Retry.
+/// Besides launching, this screen hosts the "record another clip" round
+/// trip: the timeline's "+" closes the native editor with its session
+/// state, this screen shows the camera (limited to the time left of the
+/// 30s cap, with a Cancel button), then reopens the editor with that
+/// state plus the new clip — or without one, if the user cancelled.
 class NativeEditorStep extends ConsumerStatefulWidget {
   const NativeEditorStep({super.key});
 
@@ -30,19 +31,20 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
   bool _launching = true;
   bool _isCrashLogFromLastAttempt = false;
 
+  /// Set while recording an extra clip: the editor session to resume, and
+  /// how long the new take may be.
+  String? _resumeState;
+  Duration? _extraClipMax;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_checkForLeftoverCrashThenOpen()));
   }
 
-  /// A hard native crash (see `native_editor_bridge.dart`'s own doc
-  /// comment on `readAndClearDebugLog`) kills the whole app process —
-  /// there is no live Dart callback to catch it, only a checkpoint log
-  /// written to disk that survives the crash and can be read back the
-  /// NEXT time this screen is reached. Checked first, before attempting
-  /// to auto-launch the native editor again, so a real crash trace is
-  /// never silently lost.
+  /// A hard native crash kills the whole app process — only a checkpoint
+  /// log written to disk survives, read back here the NEXT time this
+  /// screen is reached, before auto-launching the editor again.
   Future<void> _checkForLeftoverCrashThenOpen() async {
     final String? leftoverLog = await NativeEditorBridge.readAndClearDebugLog();
     if (!mounted) {
@@ -61,28 +63,51 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
 
   Future<void> _open() async {
     final LocalVideoDraft? draft = ref.read(createAdFlowControllerProvider).capturedDraft;
-    if (draft == null || !mounted) {
+    if (draft == null) {
+      return;
+    }
+    await _run(() => NativeEditorBridge.openEditor(videoPath: draft.filePath));
+  }
+
+  /// Reopens the editor with the saved session, appending [newClipPath] if a take was recorded.
+  Future<void> _resume({String? newClipPath}) async {
+    final String? state = _resumeState;
+    if (state == null) {
+      return unawaited(_open());
+    }
+    await _run(() => NativeEditorBridge.openEditor(state: state, newClipPath: newClipPath));
+  }
+
+  Future<void> _run(Future<NativeEditorOutcome?> Function() launch) async {
+    if (!mounted) {
       return;
     }
     setState(() {
       _launching = true;
       _error = null;
       _isCrashLogFromLastAttempt = false;
+      _extraClipMax = null;
     });
     try {
-      final NativeEditorResult? result = await NativeEditorBridge.openEditor(draft.filePath);
+      final NativeEditorOutcome? outcome = await launch();
       if (!mounted) {
         return;
       }
-      if (result == null) {
-        // User backed out of the native editor without exporting —
-        // matches Retake, not an error.
-        ref.read(createAdFlowControllerProvider.notifier).retake();
-        return;
+      switch (outcome) {
+        case null:
+          // Backed out of the editor without exporting — like Retake.
+          ref.read(createAdFlowControllerProvider.notifier).retake();
+        case NativeEditorExported(:final String filePath, :final int durationMs):
+          ref.read(createAdFlowControllerProvider.notifier).onVideoTrimmed(
+                LocalVideoDraft(filePath: filePath, duration: Duration(milliseconds: durationMs)),
+              );
+        case NativeEditorAddClipRequested(:final String state, :final int remainingMs):
+          setState(() {
+            _resumeState = state;
+            _extraClipMax = Duration(milliseconds: remainingMs.clamp(0, VideoConstraints.max.inMilliseconds));
+            _launching = false;
+          });
       }
-      ref.read(createAdFlowControllerProvider.notifier).onVideoTrimmed(
-            LocalVideoDraft(filePath: result.filePath, duration: Duration(milliseconds: result.durationMs)),
-          );
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -95,19 +120,24 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
 
   @override
   Widget build(BuildContext context) {
+    final Duration? extraClipMax = _extraClipMax;
+    if (extraClipMax != null) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: CameraRecordView(
+          maxDuration: extraClipMax,
+          onRecorded: (String filePath, Duration _) => unawaited(_resume(newClipPath: filePath)),
+          onCancel: () => unawaited(_resume()),
+        ),
+      );
+    }
+
     final String? error = _error;
     return Scaffold(
       body: SafeArea(
         child: error != null
-            // Real layout bug found via user report/screenshot
-            // ("BOTTOM OVERFLOWED BY 11785 PIXELS"): a long checkpoint
-            // log (accumulated across several trim/seek edits in a
-            // normal session) genuinely overflowed the old
-            // Center+Column layout, which had no scroll container at
-            // all — pushing Retry off-screen and making this error
-            // state effectively untappable. The icon/title/Retry now
-            // stay fixed; only the log text itself scrolls, in the
-            // space actually available, however long it is.
+            // Only the log text scrolls, so Retry can never be pushed
+            // off-screen by a long checkpoint log.
             ? Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
@@ -128,7 +158,10 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    FilledButton(onPressed: () => unawaited(_open()), child: const Text("Retry")),
+                    FilledButton(
+                      onPressed: () => unawaited(_resumeState != null ? _resume() : _open()),
+                      child: const Text("Retry"),
+                    ),
                   ],
                 ),
               )

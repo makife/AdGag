@@ -85,5 +85,7 @@
 
   "genericRetry": "Retry",
   "genericCancel": "Cancel",
+  "captureCancelExtraClip": "Cancel",
+  "@captureCancelExtraClip": {"description": "Top-left button on the camera opened from the editor timeline's + button; goes back to the editor without adding a clip."},
   "genericOffline": "You're offline. Some content may be unavailable."
 }

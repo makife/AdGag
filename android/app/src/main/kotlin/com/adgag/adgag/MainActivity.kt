@@ -32,8 +32,11 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "openEditor" -> {
                     val videoPath = call.argument<String>("videoPath")
-                    if (videoPath == null) {
-                        result.error("MISSING_ARG", "videoPath is required", null)
+                    // Relaunch after the timeline's "+" (see NativeEditorActivity.EXTRA_STATE_JSON).
+                    val stateJson = call.argument<String>("state")
+                    val newClipPath = call.argument<String>("newClipPath")
+                    if (videoPath == null && stateJson == null) {
+                        result.error("MISSING_ARG", "videoPath or state is required", null)
                         return@setMethodCallHandler
                     }
                     if (pendingResult != null) {
@@ -46,7 +49,12 @@ class MainActivity : FlutterActivity() {
                     }
                     pendingResult = result
                     val intent = Intent(this, NativeEditorActivity::class.java).apply {
-                        putExtra(NativeEditorActivity.EXTRA_VIDEO_PATH, videoPath)
+                        if (stateJson != null) {
+                            putExtra(NativeEditorActivity.EXTRA_STATE_JSON, stateJson)
+                            if (newClipPath != null) putExtra(NativeEditorActivity.EXTRA_NEW_CLIP_PATH, newClipPath)
+                        } else {
+                            putExtra(NativeEditorActivity.EXTRA_VIDEO_PATH, videoPath)
+                        }
                     }
                     DebugLog.log(applicationContext, "MainActivity: about to startActivityForResult")
                     startActivityForResult(intent, editorRequestCode)
@@ -86,11 +94,21 @@ class MainActivity : FlutterActivity() {
             // so the caller can show the real reason instead of just
             // "nothing happened."
             result.error("NATIVE_EDITOR_CRASHED", errorMessage, null)
+        } else if (resultCode == Activity.RESULT_OK && data?.hasExtra(NativeEditorActivity.EXTRA_ADD_CLIP_STATE) == true) {
+            // The user tapped "+": Flutter records another clip, then
+            // calls openEditor again with this state + the new clip.
+            result.success(
+                mapOf(
+                    "action" to "addClip",
+                    "state" to data.getStringExtra(NativeEditorActivity.EXTRA_ADD_CLIP_STATE),
+                    "remainingMs" to data.getLongExtra(NativeEditorActivity.EXTRA_REMAINING_MS, 0L),
+                ),
+            )
         } else if (resultCode == Activity.RESULT_OK && data != null) {
             val outputPath = data.getStringExtra(NativeEditorActivity.EXTRA_OUTPUT_PATH)
             val durationMs = data.getLongExtra(NativeEditorActivity.EXTRA_OUTPUT_DURATION_MS, 0L)
             if (outputPath != null) {
-                result.success(mapOf("path" to outputPath, "durationMs" to durationMs))
+                result.success(mapOf("action" to "exported", "path" to outputPath, "durationMs" to durationMs))
             } else {
                 result.success(null)
             }

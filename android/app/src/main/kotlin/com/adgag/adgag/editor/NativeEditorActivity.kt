@@ -30,6 +30,13 @@ class NativeEditorActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_VIDEO_PATH = "video_path"
+        /** Relaunch after recording another clip: the previous session's state (EditorSessionState JSON)... */
+        const val EXTRA_STATE_JSON = "state_json"
+        /** ...plus the newly recorded clip to append (absent if the user cancelled the recording). */
+        const val EXTRA_NEW_CLIP_PATH = "new_clip_path"
+        /** Result when the user tapped "+": the session to hand back on relaunch, and how much time is left to record. */
+        const val EXTRA_ADD_CLIP_STATE = "add_clip_state"
+        const val EXTRA_REMAINING_MS = "remaining_ms"
         const val EXTRA_OUTPUT_PATH = "output_path"
         const val EXTRA_OUTPUT_DURATION_MS = "output_duration_ms"
         const val EXTRA_ERROR = "error"
@@ -39,10 +46,16 @@ class NativeEditorActivity : ComponentActivity() {
     private val viewModel: EditorViewModel by viewModels {
         object : ViewModelProvider.Factory {
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
-                val path = intent.getStringExtra(EXTRA_VIDEO_PATH)
-                    ?: error("NativeEditorActivity started without $EXTRA_VIDEO_PATH")
+                val stateJson = intent.getStringExtra(EXTRA_STATE_JSON)
+                val state = if (stateJson != null) {
+                    EditorSessionState.fromJson(stateJson)
+                } else {
+                    val path = intent.getStringExtra(EXTRA_VIDEO_PATH)
+                        ?: error("NativeEditorActivity started without $EXTRA_VIDEO_PATH or $EXTRA_STATE_JSON")
+                    EditorViewModel.initialStateFor(applicationContext, path)
+                }
                 @Suppress("UNCHECKED_CAST")
-                return EditorViewModel(applicationContext, path) as T
+                return EditorViewModel(applicationContext, state, intent.getStringExtra(EXTRA_NEW_CLIP_PATH)) as T
             }
         }
     }
@@ -119,6 +132,15 @@ class NativeEditorActivity : ComponentActivity() {
                         val result = Intent().apply {
                             putExtra(EXTRA_OUTPUT_PATH, path)
                             putExtra(EXTRA_OUTPUT_DURATION_MS, durationMs)
+                        }
+                        setResult(RESULT_OK, result)
+                        finish()
+                    },
+                    onAddClip = {
+                        DebugLog.clear(applicationContext) // normal exit, not a crash
+                        val result = Intent().apply {
+                            putExtra(EXTRA_ADD_CLIP_STATE, viewModel.sessionState().toJson())
+                            putExtra(EXTRA_REMAINING_MS, viewModel.remainingMs)
                         }
                         setResult(RESULT_OK, result)
                         finish()
