@@ -19,6 +19,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -103,30 +107,57 @@ fun EditorScreen(
             }
         }
 
-        Box(modifier = Modifier.fillMaxSize().background(AdGagColors.Background)) {
-            // Full-bleed video — the dominant visual element, per this
-            // app's own standing rule everywhere else in the product.
-            //
-            // Rotation preview note: since the pivot away from
-            // CompositionPlayer (plain ExoPlayer has no live Effects/
-            // Transformation pipeline — that's CompositionPlayer/
-            // Transformer-only), this is a visual-only Compose rotation
-            // of the rendered surface, not a re-decoded rotated frame.
-            // It's a reasonable approximation for feedback while
-            // editing; the real, pixel-accurate rotation is still what
-            // gets baked into the exported Ad (EditorViewModel.
-            // buildComposition's ScaleAndRotateTransformation, entirely
-            // unaffected by this pivot).
+        // Stacked, not overlaid: top bar, then the video (whatever height
+        // is left, aspect ratio kept), then the editing panel. The panel
+        // used to sit ON TOP of a full-bleed video and hid most of it
+        // (user report: "you can't see what the edits change").
+        Column(modifier = Modifier.fillMaxSize().background(AdGagColors.Background)) {
+            // Top bar: Cancel + the branded-gradient Next pill — the one
+            // place this screen uses the brand gradient.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(horizontal = AdGagSpacing.lg.dp, vertical = AdGagSpacing.sm.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ScrimIconButton(
+                    icon = null,
+                    text = "Cancel",
+                    contentDescription = "Cancel",
+                    onClick = onCancel,
+                )
+                NextButton(
+                    enabled = !viewModel.isExporting,
+                    onClick = {
+                        viewModel.export(
+                            outputPath = exportOutputPath,
+                            onComplete = { path, _ ->
+                                if (path != null) {
+                                    onExported(path, viewModel.totalDurationMs)
+                                }
+                                // A non-null error is surfaced via
+                                // viewModel.exportError in the panel — the
+                                // screen stays open so it's visible.
+                            },
+                        )
+                    },
+                )
+            }
+
+            // Video area. Rotation preview is a Compose rotation of the
+            // rendered surface (plain ExoPlayer has no effects pipeline);
+            // the export bakes in the real rotation. clipToBounds keeps
+            // slide/zoom/spin transitions from drawing over the panels.
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    // Direct user request: tapping the video itself
-                    // should pause it, tapping again should resume it —
-                    // not only the center play button (which only ever
-                    // shows while already paused). Placed on this outer
-                    // Box, declared before the center play button below,
-                    // so the button (a later sibling, drawn on top) still
-                    // gets first claim on taps within its own bounds.
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .clipToBounds()
+                    // Tap anywhere on the video toggles play/pause; the
+                    // center button (a later sibling) still wins taps
+                    // inside its own bounds.
                     .pointerInput(Unit) {
                         detectTapGestures(onTap = { viewModel.togglePlayPause() })
                     },
@@ -135,9 +166,9 @@ fun EditorScreen(
                 // TextureView, not SurfaceView: a SurfaceView lives in its
                 // own window layer and ignores most Compose transforms,
                 // which the transition preview relies on. ContentFrame
-                // keeps the video's aspect ratio; keepContentOnReset
-                // avoids a black flash each time an edit rebuilds the
-                // playlist.
+                // scales the video to FIT this area with its aspect ratio
+                // kept; keepContentOnReset avoids a black flash each time
+                // an edit rebuilds the playlist.
                 ContentFrame(
                     player = viewModel.player,
                     surfaceType = SURFACE_TYPE_TEXTURE_VIEW,
@@ -160,76 +191,29 @@ fun EditorScreen(
                             if (b < 1f) drawRect(Color.Black, alpha = 1f - b)
                         },
                 )
+                // Center play button — only while paused.
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = !viewModel.isPlaying,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
+                    ScrimIconButton(
+                        icon = Icons.Filled.PlayArrow,
+                        contentDescription = "Play",
+                        size = 64.dp,
+                        onClick = { viewModel.togglePlayPause() },
+                    )
+                }
             }
 
-            // Center play/pause — only shown while paused, so it never
-            // competes with the content while actually playing (an
-            // always-visible control here would be exactly the kind of
-            // "cheap meme app" clutter section 35 warns against).
-            AnimatedVisibility(
-                visible = !viewModel.isPlaying,
-                modifier = Modifier.align(Alignment.Center),
-                enter = fadeIn(),
-                exit = fadeOut(),
-            ) {
-                ScrimIconButton(
-                    icon = Icons.Filled.PlayArrow,
-                    contentDescription = "Play",
-                    size = 64.dp,
-                    onClick = { viewModel.togglePlayPause() },
-                )
-            }
-
-            // Top bar: transparent over video, Cancel + a branded-
-            // gradient Next pill — the one place this screen uses the
-            // brand gradient, matching "used sparingly as an accent."
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.systemBars)
-                    .padding(horizontal = AdGagSpacing.lg.dp, vertical = AdGagSpacing.sm.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ScrimIconButton(
-                    icon = null,
-                    text = "Cancel",
-                    contentDescription = "Cancel",
-                    onClick = onCancel,
-                )
-                NextButton(
-                    enabled = !viewModel.isExporting,
-                    onClick = {
-                        viewModel.export(
-                            outputPath = exportOutputPath,
-                            onComplete = { path, _ ->
-                                if (path != null) {
-                                    onExported(path, viewModel.totalDurationMs)
-                                }
-                                // A non-null error is already surfaced via
-                                // viewModel.exportError, rendered below —
-                                // the screen stays open so it's visible,
-                                // matching this app's "never silently
-                                // fail" rule.
-                            },
-                        )
-                    },
-                )
-            }
-
-            // Bottom control panel: a rounded, elevated dark sheet —
-            // exactly the "restrained overlay" treatment the rest of
-            // AdGag's video surfaces already use, not a redesign of the
-            // whole screen's visual language, just this screen's own
-            // application of it.
+            // Editing panel — its own space below the video, never over it.
             Column(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(topStart = AdGagRadius.lg.dp, topEnd = AdGagRadius.lg.dp))
                     .background(AdGagColors.SurfaceElevated)
-                    .windowInsetsPadding(WindowInsets.systemBars)
-                    .padding(horizontal = AdGagSpacing.lg.dp, vertical = AdGagSpacing.lg.dp),
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(horizontal = AdGagSpacing.lg.dp, vertical = AdGagSpacing.md.dp),
             ) {
                 EditorTimeline(
                     viewModel = viewModel,
@@ -239,7 +223,7 @@ fun EditorScreen(
                     },
                     onPickTransition = { pickingTransitionFor = it },
                 )
-                Spacer(modifier = Modifier.height(AdGagSpacing.lg.dp))
+                Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
 
                 ToolRow(viewModel = viewModel, onPickMusic = { pickMusic.launch("audio/*") })
 
@@ -251,6 +235,8 @@ fun EditorScreen(
                     Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
                     Text(text = "Adding music…", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.bodyMedium)
                 }
+                // Errors are capped at a few lines: a long codec dump used
+                // to grow the panel and squeeze the video away.
                 val previewError = viewModel.previewError
                 if (previewError != null) {
                     Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
@@ -258,6 +244,8 @@ fun EditorScreen(
                         text = "Preview problem: $previewError",
                         color = AdGagColors.Danger,
                         style = MaterialTheme.typography.bodySmall,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 val error = viewModel.exportError
@@ -266,7 +254,9 @@ fun EditorScreen(
                     Text(
                         text = "Export failed: $error",
                         color = AdGagColors.Danger,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }

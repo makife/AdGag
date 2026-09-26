@@ -102,6 +102,14 @@ dev_dependencies:
   # `dart run flutter_launcher_icons`. Dev-only: never a runtime dependency.
   flutter_launcher_icons: ^0.14.4
 
+dependency_overrides:
+  # Patched copy of the camera plugin's Android implementation: binds
+  # VideoCapture when the camera opens instead of when recording starts,
+  # which froze the first ~1.8s of every recording. See
+  # third_party/camera_android_camerax/PATCH_NOTES.md.
+  camera_android_camerax:
+    path: third_party/camera_android_camerax
+
 flutter:
   uses-material-design: true
   generate: true # drives flutter gen-l10n from l10n.yaml
