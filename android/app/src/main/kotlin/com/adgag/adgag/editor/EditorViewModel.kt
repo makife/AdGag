@@ -263,9 +263,16 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
             musicStartOffsetMs = clampedStart
             musicPlayDurationMs = musicPlayDurationMs.coerceIn(0L, newClipDurationMs - clampedStart)
         }
-        val wasPlaying = player.isPlaying
-        val resumeAt = player.currentPosition.coerceIn(0L, endMs - startMs)
-        rebuildAndPrepare(startAt = resumeAt, playWhenReady = wasPlaying)
+        // Real bug (user report: dragging the LEFT trim handle "confused"
+        // the player and paused it): the old code resumed from the
+        // player's previous position, but that position is relative to
+        // the OLD trim start — after moving the start handle, the same
+        // number points at different content (or past the new end).
+        // Every mobile editor restarts from the new trim start after a
+        // trim edit; do the same. playWhenReady (the user's intent), not
+        // isPlaying (false while buffering — e.g. still preparing from a
+        // previous trim commit), so back-to-back trims don't pause.
+        rebuildAndPrepare(startAt = 0L, playWhenReady = player.playWhenReady)
     }
 
     fun setMusic(uri: Uri?) {
@@ -290,9 +297,7 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         // timeline's music-segment drag handles (setMusicPlacement).
         musicStartOffsetMs = 0L
         musicPlayDurationMs = if (probedMs != null) minOf(probedMs, clipDurationMs) else 0L
-        val wasPlaying = player.isPlaying
-        val resumeAt = player.currentPosition
-        rebuildAndPrepare(startAt = resumeAt, playWhenReady = wasPlaying)
+        rebuildAndPrepare(startAt = player.currentPosition, playWhenReady = player.playWhenReady)
     }
 
     /**
@@ -308,9 +313,7 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         val maxDuration = (clipDurationMs - clampedStart).coerceAtLeast(0L)
         musicStartOffsetMs = clampedStart
         musicPlayDurationMs = playDurationMs.coerceIn(0L, minOf(durationMs, maxDuration))
-        val wasPlaying = player.isPlaying
-        val resumeAt = player.currentPosition
-        rebuildAndPrepare(startAt = resumeAt, playWhenReady = wasPlaying)
+        rebuildAndPrepare(startAt = player.currentPosition, playWhenReady = player.playWhenReady)
     }
 
     fun rotateNinety() {

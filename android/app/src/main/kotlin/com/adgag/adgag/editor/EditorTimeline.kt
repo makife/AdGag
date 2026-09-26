@@ -209,17 +209,31 @@ private fun ClipRow(viewModel: EditorViewModel, density: Density, positionMs: Lo
         // unlike the handles below, no moving-target coordinate issue
         // here. One-directional: never reads position back out of this
         // gesture, only ever calls seekTo.
+        //
+        // COORDINATE SYSTEMS (the root cause of the trim-handle bugs):
+        // this row draws SOURCE time (0 = start of the original file),
+        // but the preview player is a ClippingMediaSource whose position
+        // is CLIP time (0 = trimStartMs). Every seek must convert source
+        // -> clip, clamped to the kept window — seeking the raw source
+        // time used to land past the clip's end after a left trim. The
+        // trim values are read from viewModel at event time (not
+        // captured), since this pointerInput is only keyed on durationMs.
+        fun seekToSourceMs(sourceMs: Long) {
+            val start = viewModel.trimStartMs
+            val end = if (viewModel.trimEndMs > start) viewModel.trimEndMs else durationMs
+            viewModel.player.seekTo(sourceMs.coerceIn(start, end) - start)
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(durationMs) {
                     detectDragGestures { change, _ ->
                         change.consume()
-                        viewModel.player.seekTo(pxToMs(change.position.x))
+                        seekToSourceMs(pxToMs(change.position.x))
                     }
                 }
                 .pointerInput(durationMs) {
-                    detectTapGestures { offset -> viewModel.player.seekTo(pxToMs(offset.x)) }
+                    detectTapGestures { offset -> seekToSourceMs(pxToMs(offset.x)) }
                 },
         )
 
@@ -228,9 +242,15 @@ private fun ClipRow(viewModel: EditorViewModel, density: Density, positionMs: Lo
         // triggers a seek. Colored with the brand gradient per direct
         // user request ("timeline ilerleme çizgisini renkli yapalım"),
         // replacing the previous plain white line.
+        // positionMs is CLIP time (see seekToSourceMs above) — shift it
+        // by the trim start to draw it in this row's SOURCE-time space,
+        // and keep it inside the kept window (the live local window
+        // while a handle is being dragged). Drawing raw clip time here
+        // is why the playhead ran across the dimmed, cut-away region.
+        val playheadSourceMs = (viewModel.trimStartMs + positionMs).coerceIn(localTrimStart, localTrimEnd)
         Box(
             modifier = Modifier
-                .offset(x = with(density) { msToPx(positionMs.coerceIn(0L, durationMs)).toDp() } - 1.dp)
+                .offset(x = with(density) { msToPx(playheadSourceMs).toDp() } - 1.dp)
                 .width(3.dp)
                 .fillMaxHeight()
                 .background(AdGagColors.BrandGradient),
@@ -238,6 +258,7 @@ private fun ClipRow(viewModel: EditorViewModel, density: Density, positionMs: Lo
 
         TrimHandle(
             xPx = trimStartPx,
+            rowWidthPx = fullWidthPx,
             density = density,
             onDrag = { deltaPx ->
                 val deltaMs = pxDeltaToMsDelta(deltaPx)
@@ -247,6 +268,7 @@ private fun ClipRow(viewModel: EditorViewModel, density: Density, positionMs: Lo
         )
         TrimHandle(
             xPx = trimEndPx,
+            rowWidthPx = fullWidthPx,
             density = density,
             onDrag = { deltaPx ->
                 val deltaMs = pxDeltaToMsDelta(deltaPx)
@@ -273,12 +295,25 @@ private fun ClipRow(viewModel: EditorViewModel, density: Density, positionMs: Lo
  * [EditorTimeline]'s own doc comment.
  */
 @Composable
-private fun TrimHandle(xPx: Float, density: Density, onDrag: (deltaPx: Float) -> Unit, onDragEnd: () -> Unit) {
+private fun TrimHandle(
+    xPx: Float,
+    rowWidthPx: Float,
+    density: Density,
+    onDrag: (deltaPx: Float) -> Unit,
+    onDragEnd: () -> Unit,
+) {
     val currentOnDrag by rememberUpdatedState(onDrag)
     val currentOnDragEnd by rememberUpdatedState(onDragEnd)
+    // Centered on xPx, but kept fully inside the row: at the row's very
+    // edges (the default, untrimmed state for both handles) a centered
+    // hit box would sit half outside its parent, where Compose never
+    // delivers touches — leaving only a sliver grabbable, and a near
+    // miss landing on the scrub layer (a seek, not a trim) instead.
+    val hitWidthPx = with(density) { HandleHitWidthDp.dp.toPx() }
+    val hitLeftPx = (xPx - hitWidthPx / 2).coerceIn(0f, (rowWidthPx - hitWidthPx).coerceAtLeast(0f))
     Box(
         modifier = Modifier
-            .offset(x = with(density) { xPx.toDp() } - (HandleHitWidthDp / 2).dp)
+            .offset(x = with(density) { hitLeftPx.toDp() })
             .width(HandleHitWidthDp.dp)
             .fillMaxHeight()
             .pointerInput(Unit) {
@@ -290,10 +325,16 @@ private fun TrimHandle(xPx: Float, density: Density, onDrag: (deltaPx: Float) ->
                     },
                 )
             },
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.CenterStart,
     ) {
+        // The visible bar stays centered on the real trim point even when
+        // the hit box above got pushed inward at a row edge (clamped so
+        // the bar itself never leaves the row either).
+        val barWidthPx = with(density) { HandleWidthDp.dp.toPx() }
+        val barLeftPx = (xPx - barWidthPx / 2 - hitLeftPx).coerceIn(0f, hitWidthPx - barWidthPx)
         Box(
             modifier = Modifier
+                .offset(x = with(density) { barLeftPx.toDp() })
                 .width(HandleWidthDp.dp)
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(AdGagRadius.sm.dp))
@@ -399,15 +440,15 @@ private fun MusicRow(viewModel: EditorViewModel, density: Density) {
 @Composable
 private fun rememberPlayheadPositionMs(viewModel: EditorViewModel): Long {
     var position by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(viewModel.isPlaying) {
-        while (viewModel.isPlaying) {
+    // Polls continuously, not only while playing: a scrub or a trim
+    // commit while PAUSED also moves the position, and the playhead used
+    // to stay frozen at its old spot until playback resumed.
+    // currentPosition is a cheap getter; 50ms keeps the line smooth.
+    LaunchedEffect(viewModel) {
+        while (true) {
             position = viewModel.player.currentPosition
-            delay(100)
+            delay(50)
         }
-        // One final read on stop, so the playhead reflects exactly
-        // where playback actually ended up (a manual pause, or the
-        // natural end just before REPEAT_MODE_ONE loops it back).
-        position = viewModel.player.currentPosition
     }
     return position
 }
