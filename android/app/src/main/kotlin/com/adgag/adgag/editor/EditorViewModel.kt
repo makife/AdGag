@@ -351,6 +351,11 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
     /** Rebuilds the preview [MediaSource] from current trim/music state and reloads it into [player]. */
     private fun rebuildAndPrepare(startAt: Long, playWhenReady: Boolean) {
         DebugLog.log(context, "rebuildAndPrepare: start startAt=$startAt playWhenReady=$playWhenReady")
+        // Never resume at/after the clip's end — seeking a clipped source
+        // past its own end left the player stuck (reported as a freeze
+        // after re-lengthening the music).
+        val clipMs = previewClipDurationMs()
+        val safeStartAt = if (clipMs > 0 && startAt >= clipMs) 0L else startAt
         val mediaSource = buildPreviewMediaSource()
         DebugLog.log(context, "rebuildAndPrepare: preview MediaSource built, calling player.stop()")
         player.stop()
@@ -360,8 +365,8 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         DebugLog.log(context, "rebuildAndPrepare: setMediaSource done, calling prepare()")
         player.prepare()
         DebugLog.log(context, "rebuildAndPrepare: prepare() done")
-        if (startAt > 0) {
-            player.seekTo(startAt)
+        if (safeStartAt > 0) {
+            player.seekTo(safeStartAt)
             DebugLog.log(context, "rebuildAndPrepare: seekTo done")
         }
         player.playWhenReady = playWhenReady
@@ -384,6 +389,12 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
      * long-established "video from one source, audio from another"
      * ExoPlayer pattern.
      */
+    /** Length of the kept (trimmed) clip in ms, or 0 while the source duration is still unknown. */
+    private fun previewClipDurationMs(): Long {
+        val end = if (trimEndMs > trimStartMs) trimEndMs else durationMs
+        return (end - trimStartMs).coerceAtLeast(0L)
+    }
+
     private fun buildPreviewMediaSource(): MediaSource {
         val dataSourceFactory = DefaultDataSource.Factory(context)
         val mediaSourceFactory = ProgressiveMediaSource.Factory(dataSourceFactory)
@@ -402,12 +413,31 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         }
 
         val videoOnlySource = FilteringMediaSource(videoSource, C.TRACK_TYPE_VIDEO)
-        var musicSource: MediaSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(uri))
-        val playDurationMs = musicPlayDurationMs.coerceAtLeast(1L)
-        musicSource = ClippingMediaSource(musicSource, 0L, playDurationMs * 1000)
-        if (musicStartOffsetMs > 0) {
-            musicSource = ConcatenatingMediaSource(SilenceMediaSource(musicStartOffsetMs * 1000), musicSource)
-        }
+        val clipMs = previewClipDurationMs()
+        val startOffsetMs = if (clipMs > 0) musicStartOffsetMs.coerceIn(0L, clipMs) else musicStartOffsetMs
+        var playDurationMs = musicPlayDurationMs.coerceAtLeast(1L)
+        if (clipMs > 0) playDurationMs = playDurationMs.coerceAtMost((clipMs - startOffsetMs).coerceAtLeast(1L))
+        val clippedMusic = ClippingMediaSource(
+            mediaSourceFactory.createMediaSource(MediaItem.fromUri(uri)),
+            0L,
+            playDurationMs * 1000,
+        )
+        // Real bug (user report: with music attached the playhead ran to
+        // the MUSIC's length, and after shortening the music the rest of
+        // the clip crawled in "slow motion"): a merged period lasts until
+        // its LONGEST branch ends, and the audio renderer is the playback
+        // clock. Music longer than the clip -> playback overran the
+        // video; music shorter -> once the audio ended, the clock fell
+        // back and the remaining video advanced wrongly. Fix: the audio
+        // branch is always EXACTLY the clip's length — silence before the
+        // music (its start offset) and silence after it (the remainder).
+        val parts = mutableListOf<MediaSource>()
+        if (startOffsetMs > 0) parts += SilenceMediaSource(startOffsetMs * 1000)
+        parts += clippedMusic
+        val tailMs = if (clipMs > 0) clipMs - startOffsetMs - playDurationMs else 0L
+        if (tailMs > 0) parts += SilenceMediaSource(tailMs * 1000)
+        val musicSource: MediaSource =
+            if (parts.size == 1) clippedMusic else ConcatenatingMediaSource(*parts.toTypedArray())
         // adjustPeriodTimeOffsets=true (confirmed real/public via the
         // downloaded media3-exoplayer 1.11.0 sources — "whether to
         // adjust timestamps of the merged media sources to all start at
@@ -418,7 +448,11 @@ class EditorViewModel(private val context: Context, private val sourcePath: Stri
         // local zero — without this flag ExoPlayer isn't told these two
         // periods should be treated as co-starting, a plausible source
         // of the reported freeze/stutter right when music is attached.
-        return MergingMediaSource(/* adjustPeriodTimeOffsets = */ true, videoOnlySource, musicSource)
+        val merged = MergingMediaSource(/* adjustPeriodTimeOffsets = */ true, videoOnlySource, musicSource)
+        // Belt and braces on top of the exact-length audio branch: hard-
+        // bound the merged period to the clip's length so no branch can
+        // ever stretch playback past the trimmed video.
+        return if (clipMs > 0) ClippingMediaSource(merged, 0L, clipMs * 1000) else merged
     }
 
     /**

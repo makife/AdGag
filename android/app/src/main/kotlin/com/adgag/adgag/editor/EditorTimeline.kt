@@ -368,6 +368,27 @@ private fun MusicRow(viewModel: EditorViewModel, density: Density) {
         val segmentWidthPx = msToPx(localDuration).coerceAtLeast(minWidthPx)
 
         val commitPlacement by rememberUpdatedState({ viewModel.setMusicPlacement(localStart, localDuration) })
+        val musicFileDurationMs = viewModel.musicDurationMs ?: Long.MAX_VALUE
+        // Real bug (user report: after shortening the music once it could
+        // not be dragged back to its old length, and the video froze):
+        // localStart/localDuration are re-created by remember(key) every
+        // time a commit lands, but the pointerInput(Unit) gesture blocks
+        // below are set up ONCE — their inline lambdas kept writing to the
+        // FIRST composition's state objects (and its clipDurationMs /
+        // width), so every drag after the first moved nothing on screen
+        // and then committed the unchanged values, forcing a pointless
+        // player rebuild. Routed through rememberUpdatedState — the same
+        // pattern TrimHandle already uses — so gestures always act on the
+        // current state.
+        val onBodyDrag by rememberUpdatedState({ deltaPx: Float ->
+            val deltaMs = pxDeltaToMsDelta(deltaPx)
+            localStart = (localStart + deltaMs).coerceIn(0L, (clipDurationMs - localDuration).coerceAtLeast(0L))
+        })
+        val onEdgeDrag by rememberUpdatedState({ deltaPx: Float ->
+            val deltaMs = pxDeltaToMsDelta(deltaPx)
+            val maxMs = minOf(musicFileDurationMs, clipDurationMs - localStart).coerceAtLeast(MinTrimGapMs)
+            localDuration = (localDuration + deltaMs).coerceIn(MinTrimGapMs, maxMs)
+        })
 
         // Segment body: dragging moves the WHOLE segment (repositions
         // when the music starts within the clip) without changing its
@@ -385,8 +406,7 @@ private fun MusicRow(viewModel: EditorViewModel, density: Density) {
                         onDragEnd = { commitPlacement() },
                         onDrag = { change, dragAmount ->
                             change.consume()
-                            val deltaMs = pxDeltaToMsDelta(dragAmount.x)
-                            localStart = (localStart + deltaMs).coerceIn(0L, clipDurationMs - localDuration)
+                            onBodyDrag(dragAmount.x)
                         },
                     )
                 },
@@ -396,7 +416,6 @@ private fun MusicRow(viewModel: EditorViewModel, density: Density) {
         // song plays (from the song's own start) — this is what "cutting"
         // the music means in this phase; see setMusicPlacement's doc
         // comment.
-        val musicFileDurationMs = viewModel.musicDurationMs ?: Long.MAX_VALUE
         Box(
             modifier = Modifier
                 .offset(x = with(density) { (segmentStartPx + segmentWidthPx).toDp() } - (HandleHitWidthDp / 2).dp)
@@ -407,11 +426,7 @@ private fun MusicRow(viewModel: EditorViewModel, density: Density) {
                         onDragEnd = { commitPlacement() },
                         onDrag = { change, dragAmount ->
                             change.consume()
-                            val deltaMs = pxDeltaToMsDelta(dragAmount.x)
-                            localDuration = (localDuration + deltaMs).coerceIn(
-                                MinTrimGapMs,
-                                minOf(musicFileDurationMs, clipDurationMs - localStart),
-                            )
+                            onEdgeDrag(dragAmount.x)
                         },
                     )
                 },
