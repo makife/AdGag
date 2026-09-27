@@ -62,6 +62,8 @@ import kotlinx.coroutines.delay
  * 3. Music row (once music is attached) — on the GLOBAL timeline,
  *    aligned under the clip strip; trim handles on both ends, drag the
  *    middle to move it.
+ * 4. Song row — the whole song, any length; the used section is a window
+ *    that can be dragged anywhere in the song and resized.
  *
  * Fits one screen width (≤30s) — no horizontal scrolling, which avoids
  * the scroll/seek feedback-loop bug class the old Flutter editor had.
@@ -155,7 +157,124 @@ fun EditorTimeline(
             // Same row layout as the clip strip (so the same width and time
             // scale); the slot under "+" holds the music settings button.
             AlignedRow(trailing = { MusicSettingsButton(onClick = onOpenMusic) }) { MusicRow(viewModel, density) }
+
+            // The WHOLE song, whatever its length, with the used section as
+            // a window — pick e.g. 0:45–1:15 of a 3-minute track.
+            val songMs = viewModel.musicDurationMs ?: 0L
+            Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(text = "Song section", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
+                Text(
+                    text = "${formatSeconds(viewModel.musicSourceStartMs)} – " +
+                        "${formatSeconds(viewModel.musicSourceStartMs + viewModel.musicPlayDurationMs)} of ${formatSeconds(songMs)}",
+                    color = AdGagColors.OnSurfaceMuted,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
+            SongRow(viewModel, density, positionMs)
         }
+    }
+}
+
+private const val SongRowHeightDp = 40
+private const val SongTickEveryMs = 10_000L
+
+/**
+ * The whole song at full width, the used section as a draggable window:
+ * drag the window to pick a different part of the song (only the song
+ * in-point changes — where the music sits in the video stays put), drag
+ * its edges to change the section's length. Same commit-on-release and
+ * rememberUpdatedState rules as every other row here.
+ */
+@UnstableApi
+@Composable
+private fun SongRow(viewModel: EditorViewModel, density: Density, globalPositionMs: Long) {
+    val songMs = (viewModel.musicDurationMs ?: 0L).coerceAtLeast(1L)
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(SongRowHeightDp.dp)
+            .clip(RoundedCornerShape(AdGagRadius.sm.dp))
+            .background(AdGagColors.Surface),
+    ) {
+        val widthPx = with(density) { maxWidth.toPx() }
+        fun msToPx(ms: Long): Float = ms.toFloat() / songMs * widthPx
+        fun pxDeltaToMsDelta(deltaPx: Float): Long = (deltaPx / widthPx * songMs).toLong()
+
+        var localSource by remember(viewModel.musicSourceStartMs) { mutableLongStateOf(viewModel.musicSourceStartMs) }
+        var localDuration by remember(viewModel.musicPlayDurationMs) { mutableLongStateOf(viewModel.musicPlayDurationMs) }
+        // The section can't be longer than the time left in the video after the music's start.
+        val maxSectionMs = (viewModel.outputDurationMs - viewModel.musicStartOffsetMs).coerceAtLeast(MinTrimGapMs)
+
+        val commit by rememberUpdatedState({
+            viewModel.setMusicPlacement(viewModel.musicStartOffsetMs, localSource, localDuration)
+        })
+        val onWindowDrag by rememberUpdatedState({ deltaPx: Float ->
+            localSource = (localSource + pxDeltaToMsDelta(deltaPx)).coerceIn(0L, (songMs - localDuration).coerceAtLeast(0L))
+        })
+        val onLeftDrag by rememberUpdatedState({ deltaPx: Float ->
+            // Keep the section's END fixed in the song.
+            val end = localSource + localDuration
+            val lower = maxOf(0L, end - maxSectionMs)
+            val upper = (end - MinTrimGapMs).coerceAtLeast(lower)
+            val newSource = (localSource + pxDeltaToMsDelta(deltaPx)).coerceIn(lower, upper)
+            localDuration = end - newSource
+            localSource = newSource
+        })
+        val onRightDrag by rememberUpdatedState({ deltaPx: Float ->
+            val upper = minOf(songMs - localSource, maxSectionMs).coerceAtLeast(MinTrimGapMs)
+            localDuration = (localDuration + pxDeltaToMsDelta(deltaPx)).coerceIn(MinTrimGapMs, upper)
+        })
+
+        // 10-second ticks so long songs can be navigated by eye.
+        var tick = SongTickEveryMs
+        while (tick < songMs) {
+            Box(
+                modifier = Modifier
+                    .offset(x = with(density) { msToPx(tick).toDp() })
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(AdGagColors.Border),
+            )
+            tick += SongTickEveryMs
+        }
+
+        val windowStartPx = msToPx(localSource)
+        val windowEndPx = msToPx(localSource + localDuration)
+        Box(
+            modifier = Modifier
+                .offset(x = with(density) { windowStartPx.toDp() })
+                .width(with(density) { (windowEndPx - windowStartPx).coerceAtLeast(1f).toDp() })
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(AdGagRadius.sm.dp))
+                .background(AdGagColors.GradientBlue.copy(alpha = 0.55f))
+                .pointerInput(Unit) {
+                    detectDragGestures(
+                        onDragEnd = { commit() },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            onWindowDrag(dragAmount.x)
+                        },
+                    )
+                },
+        )
+
+        // Where in the SONG the preview is right now (only while the music plays).
+        val outMs = (globalPositionMs / viewModel.videoSpeed).toLong() - viewModel.musicStartOffsetMs
+        if (viewModel.musicPlayDurationMs > 0 && outMs in 0 until viewModel.musicCoveredMs) {
+            val songPos = viewModel.musicSourceStartMs + outMs % viewModel.musicPlayDurationMs
+            Box(
+                modifier = Modifier
+                    .offset(x = with(density) { msToPx(songPos).toDp() } - 1.dp)
+                    .width(2.dp)
+                    .fillMaxHeight()
+                    .background(AdGagColors.BrandGradient),
+            )
+        }
+
+        TrimHandle(xPx = windowStartPx, rowWidthPx = widthPx, density = density, onDrag = { onLeftDrag(it) }, onDragEnd = { commit() })
+        TrimHandle(xPx = windowEndPx, rowWidthPx = widthPx, density = density, onDrag = { onRightDrag(it) }, onDragEnd = { commit() })
     }
 }
 
