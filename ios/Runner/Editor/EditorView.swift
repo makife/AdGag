@@ -16,6 +16,8 @@ struct EditorView: View {
 
   private enum Panel: Equatable {
     case transition(Int), music, speed, effects, text(String)
+    /// Sticker picker: nil = adding, else the sticker being changed.
+    case stickers(String?)
   }
 
   @State private var panel: Panel?
@@ -28,6 +30,11 @@ struct EditorView: View {
       if case .text(let id) = panel {
         // In place of the timeline + tools, never over the video.
         TextEditorPanel(viewModel: viewModel, layerId: id, onClose: { panel = nil })
+          .padding(16)
+          .background(EditorPalette.surfaceElevated)
+          .clipShape(RoundedRectangle(cornerRadius: 16))
+      } else if case .stickers(let id) = panel {
+        StickerPanel(viewModel: viewModel, editingId: id, onClose: { panel = nil })
           .padding(16)
           .background(EditorPalette.surfaceElevated)
           .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -77,10 +84,7 @@ struct EditorView: View {
     ZStack {
       PlayerLayerView(player: viewModel.player)
       // Captions + all taps on the video (play/pause, selecting captions).
-      TextOverlayView(viewModel: viewModel) { id in
-        viewModel.pause()
-        panel = .text(id)
-      }
+      TextOverlayView(viewModel: viewModel) { id in editOverlay(id) }
       if !viewModel.isPlaying {
         Image(systemName: "play.fill")
           .font(.system(size: 30))
@@ -93,6 +97,12 @@ struct EditorView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .clipped()
+  }
+
+  /// Tapping a selected caption/sticker (or its timeline bar) opens the matching editor.
+  private func editOverlay(_ id: String) {
+    viewModel.pause()
+    panel = viewModel.stickerLayers.contains { $0.id == id } ? .stickers(id) : .text(id)
   }
 
   private func addText() {
@@ -113,10 +123,7 @@ struct EditorView: View {
         onPickTransition: { panel = .transition($0) },
         onOpenMusic: { panel = .music },
         onAddText: addText,
-        onEditText: { id in
-          viewModel.pause()
-          panel = .text(id)
-        })
+        onEditText: { id in editOverlay(id) })
       toolRow
       if viewModel.isExporting {
         VStack(alignment: .leading, spacing: 4) {
@@ -148,6 +155,12 @@ struct EditorView: View {
         ToolButton(icon: "textformat",
                    label: viewModel.textLayers.isEmpty ? "Text" : "Text (\(viewModel.textLayers.count))",
                    active: !viewModel.textLayers.isEmpty) { addText() }
+        ToolButton(icon: "face.smiling",
+                   label: viewModel.stickerLayers.isEmpty ? "Stickers" : "Stickers (\(viewModel.stickerLayers.count))",
+                   active: !viewModel.stickerLayers.isEmpty) {
+          viewModel.pause()
+          panel = .stickers(nil)
+        }
         ToolButton(icon: "rotate.right", label: "Rotate", active: false) { viewModel.rotateNinety() }
         ToolButton(icon: viewModel.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
                    label: viewModel.isMuted ? "Muted" : "Mute", active: viewModel.isMuted) { viewModel.toggleMute() }
@@ -181,7 +194,7 @@ struct EditorView: View {
                                 onRemoved: { self.panel = nil })
         case .speed: SpeedPanel(viewModel: viewModel)
         case .effects: EffectsPanel(viewModel: viewModel)
-        case .text: EmptyView()
+        case .text, .stickers: EmptyView()
         }
       }
       .padding(16)
@@ -193,8 +206,10 @@ struct EditorView: View {
   }
 
   private func isTextPanel(_ panel: Panel) -> Bool {
-    if case .text = panel { return true }
-    return false
+    switch panel {
+    case .text, .stickers: return true
+    default: return false
+    }
   }
 
   private func panelTitle(_ panel: Panel) -> String {
@@ -204,6 +219,7 @@ struct EditorView: View {
     case .speed: return "Video speed"
     case .effects: return "Effects"
     case .text: return "Text"
+    case .stickers: return "Stickers"
     }
   }
 }

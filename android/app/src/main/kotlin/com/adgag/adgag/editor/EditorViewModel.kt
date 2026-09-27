@@ -215,10 +215,43 @@ class EditorViewModel(
     var textLayers by mutableStateOf(initialState.textLayers)
         private set
 
-    /** The caption being edited/dragged in the preview (null = none). */
+    /** Animated stickers (Stickers.kt) — overlay state like the captions. */
+    var stickerLayers by mutableStateOf(initialState.stickerLayers)
+        private set
+
+    /** The caption OR sticker being edited/dragged in the preview (null = none; ids are unique across both). */
     var selectedTextId by mutableStateOf<String?>(null)
 
     val fonts = TypefaceCache(context)
+    val stickers = StickerStore(context)
+
+    fun addSticker(def: StickerDef): StickerLayer {
+        player.pause()
+        val total = outputDurationMs.coerceAtLeast(500L)
+        val now = (globalPositionMs() / videoSpeed).toLong().coerceIn(0L, total)
+        val start = if (total - now < 1_000L) (total - 3_000L).coerceAtLeast(0L) else now
+        // Staggered a little so several stickers don't land exactly on top of each other.
+        val n = stickerLayers.size % 5
+        val layer = StickerLayer(
+            stickerId = def.id,
+            x = 0.5f + (n - 2) * 0.06f,
+            y = 0.32f + (n % 2) * 0.05f,
+            startMs = start,
+            endMs = minOf(total, start + 3_000L),
+        )
+        stickerLayers = stickerLayers + layer
+        selectedTextId = layer.id
+        return layer
+    }
+
+    fun updateSticker(layer: StickerLayer) {
+        stickerLayers = stickerLayers.map { if (it.id == layer.id) layer else it }
+    }
+
+    fun removeSticker(id: String) {
+        stickerLayers = stickerLayers.filterNot { it.id == id }
+        if (selectedTextId == id) selectedTextId = null
+    }
 
     fun addText(): TextLayer {
         val total = outputDurationMs.coerceAtLeast(500L)
@@ -239,12 +272,13 @@ class EditorViewModel(
         if (selectedTextId == id) selectedTextId = null
     }
 
-    /** Timeline drag of a caption's timing, clamped to the Ad (OUTPUT time), at least 300ms long. */
-    fun setTextTiming(id: String, startMs: Long, endMs: Long) {
+    /** Timeline drag of a caption's or sticker's timing, clamped to the Ad (OUTPUT time), at least 300ms long. */
+    fun setOverlayTiming(id: String, startMs: Long, endMs: Long) {
         val total = outputDurationMs
         val s = startMs.coerceIn(0L, (total - 300L).coerceAtLeast(0L))
         val e = endMs.coerceIn(s + 300L, total.coerceAtLeast(s + 300L))
         textLayers = textLayers.map { if (it.id == id) it.copy(startMs = s, endMs = e) else it }
+        stickerLayers = stickerLayers.map { if (it.id == id) it.copy(startMs = s, endMs = e) else it }
     }
 
     /** Picker thumbnails: each effect applied (on the CPU) to a frame of the first clip. */
@@ -400,6 +434,7 @@ class EditorViewModel(
         videoSpeed = videoSpeed,
         videoFilter = videoFilter,
         textLayers = textLayers,
+        stickerLayers = stickerLayers,
     )
 
     fun clipStartMs(index: Int): Long = clips.take(index).sumOf { it.keptDurationMs }
@@ -1029,8 +1064,11 @@ class EditorViewModel(
      */
     private fun Composition.Builder.withTextOverlay(): Composition.Builder {
         val visible = textLayers.filter { it.text.isNotBlank() && it.endMs > it.startMs }
-        if (visible.isEmpty()) return this
-        val overlay = OverlayEffect(ImmutableList.of<TextureOverlay>(TextOverlayEffectBitmap(visible, fonts)))
+        val visibleStickers = stickerLayers.filter { it.endMs > it.startMs && stickers.byId(it.stickerId) != null }
+        if (visible.isEmpty() && visibleStickers.isEmpty()) return this
+        val overlay = OverlayEffect(
+            ImmutableList.of<TextureOverlay>(TextOverlayEffectBitmap(visible, fonts, visibleStickers, stickers)),
+        )
         return setEffects(Effects(ImmutableList.of<AudioProcessor>(), ImmutableList.of<Effect>(overlay)))
     }
 

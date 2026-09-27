@@ -1,0 +1,389 @@
+[
+ {
+  "id": "1f602",
+  "label": "Tears of joy",
+  "file": "1f602.webp",
+  "frames": 35,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1770
+ },
+ {
+  "id": "1f923",
+  "label": "ROFL",
+  "file": "1f923.webp",
+  "frames": 18,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 900
+ },
+ {
+  "id": "1f60d",
+  "label": "Heart eyes",
+  "file": "1f60d.webp",
+  "frames": 31,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1560
+ },
+ {
+  "id": "1f929",
+  "label": "Star struck",
+  "file": "1f929.webp",
+  "frames": 36,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1800
+ },
+ {
+  "id": "1f60e",
+  "label": "Cool",
+  "file": "1f60e.webp",
+  "frames": 41,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 2040
+ },
+ {
+  "id": "1f92f",
+  "label": "Mind blown",
+  "file": "1f92f.webp",
+  "frames": 52,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 2610
+ },
+ {
+  "id": "1f631",
+  "label": "Scream",
+  "file": "1f631.webp",
+  "frames": 29,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1470
+ },
+ {
+  "id": "1f973",
+  "label": "Party",
+  "file": "1f973.webp",
+  "frames": 32,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1620
+ },
+ {
+  "id": "1f911",
+  "label": "Money mouth",
+  "file": "1f911.webp",
+  "frames": 43,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 2160
+ },
+ {
+  "id": "1f644",
+  "label": "Eye roll",
+  "file": "1f644.webp",
+  "frames": 59,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 2940
+ },
+ {
+  "id": "1f62d",
+  "label": "Crying",
+  "file": "1f62d.webp",
+  "frames": 36,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1800
+ },
+ {
+  "id": "1f621",
+  "label": "Angry",
+  "file": "1f621.webp",
+  "frames": 54,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 2700
+ },
+ {
+  "id": "1f914",
+  "label": "Thinking",
+  "file": "1f914.webp",
+  "frames": 36,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1800
+ },
+ {
+  "id": "1f60f",
+  "label": "Smirk",
+  "file": "1f60f.webp",
+  "frames": 36,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1800
+ },
+ {
+  "id": "1f440",
+  "label": "Eyes",
+  "file": "1f440.webp",
+  "frames": 26,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1320
+ },
+ {
+  "id": "1f44d",
+  "label": "Thumbs up",
+  "file": "1f44d.webp",
+  "frames": 22,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1080
+ },
+ {
+  "id": "1f44f",
+  "label": "Clap",
+  "file": "1f44f.webp",
+  "frames": 13,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 660
+ },
+ {
+  "id": "1f64c",
+  "label": "Hands up",
+  "file": "1f64c.webp",
+  "frames": 28,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1380
+ },
+ {
+  "id": "1f525",
+  "label": "Fire",
+  "file": "1f525.webp",
+  "frames": 20,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 990
+ },
+ {
+  "id": "2764_fe0f",
+  "label": "Heart",
+  "file": "2764_fe0f.webp",
+  "frames": 36,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1800
+ },
+ {
+  "id": "1f4af",
+  "label": "100",
+  "file": "1f4af.webp",
+  "frames": 41,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 2040
+ },
+ {
+  "id": "1f4a5",
+  "label": "Boom",
+  "file": "1f4a5.webp",
+  "frames": 23,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1140
+ },
+ {
+  "id": "2728",
+  "label": "Sparkles",
+  "file": "2728.webp",
+  "frames": 37,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1830
+ },
+ {
+  "id": "1f389",
+  "label": "Tada",
+  "file": "1f389.webp",
+  "frames": 28,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1380
+ },
+ {
+  "id": "1f4b8",
+  "label": "Money wings",
+  "file": "1f4b8.webp",
+  "frames": 14,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 720
+ },
+ {
+  "id": "1f680",
+  "label": "Rocket",
+  "file": "1f680.webp",
+  "frames": 12,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 600
+ },
+ {
+  "id": "1f31f",
+  "label": "Star",
+  "file": "1f31f.webp",
+  "frames": 32,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1620
+ },
+ {
+  "id": "1f451",
+  "label": "Crown",
+  "file": "1f451.webp",
+  "frames": 34,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1680
+ },
+ {
+  "id": "1f48e",
+  "label": "Gem",
+  "file": "1f48e.webp",
+  "frames": 24,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1200
+ },
+ {
+  "id": "1f3c6",
+  "label": "Trophy",
+  "file": "1f3c6.webp",
+  "frames": 41,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 2040
+ },
+ {
+  "id": "1f3af",
+  "label": "Bullseye",
+  "file": "1f3af.webp",
+  "frames": 41,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 2070
+ },
+ {
+  "id": "26a1",
+  "label": "Zap",
+  "file": "26a1.webp",
+  "frames": 25,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1260
+ },
+ {
+  "id": "1f308",
+  "label": "Rainbow",
+  "file": "1f308.webp",
+  "frames": 36,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1800
+ },
+ {
+  "id": "1f37f",
+  "label": "Popcorn",
+  "file": "1f37f.webp",
+  "frames": 44,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 2220
+ },
+ {
+  "id": "1f91d",
+  "label": "Deal",
+  "file": "1f91d.webp",
+  "frames": 22,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1080
+ },
+ {
+  "id": "1faf6",
+  "label": "Heart hands",
+  "file": "1faf6.webp",
+  "frames": 33,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1650
+ },
+ {
+  "id": "1f90c",
+  "label": "Chef kiss",
+  "file": "1f90c.webp",
+  "frames": 38,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1920
+ },
+ {
+  "id": "1f4aa",
+  "label": "Strong",
+  "file": "1f4aa.webp",
+  "frames": 28,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1410
+ },
+ {
+  "id": "1f64f",
+  "label": "Please",
+  "file": "1f64f.webp",
+  "frames": 36,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1800
+ },
+ {
+  "id": "1f634",
+  "label": "Sleepy",
+  "file": "1f634.webp",
+  "frames": 36,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1800
+ },
+ {
+  "id": "1f921",
+  "label": "Clown",
+  "file": "1f921.webp",
+  "frames": 37,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 1830
+ },
+ {
+  "id": "1f47b",
+  "label": "Ghost",
+  "file": "1f47b.webp",
+  "frames": 43,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 2160
+ },
+ {
+  "id": "1f480",
+  "label": "Skull",
+  "file": "1f480.webp",
+  "frames": 60,
+  "cols": 6,
+  "size": 192,
+  "durationMs": 4140
+ }
+]

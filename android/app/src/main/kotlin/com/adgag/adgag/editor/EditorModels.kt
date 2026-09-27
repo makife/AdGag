@@ -93,6 +93,8 @@ data class EditorSessionState(
     val videoFilter: VideoFilter,
     /** Captions over the whole Ad (TextLayers.kt), timed in OUTPUT time. */
     val textLayers: List<TextLayer> = emptyList(),
+    /** Animated stickers (Stickers.kt), timed in OUTPUT time. */
+    val stickerLayers: List<StickerLayer> = emptyList(),
 ) {
     fun toJson(): String = JSONObject().apply {
         put("clips", JSONArray().apply {
@@ -127,6 +129,7 @@ data class EditorSessionState(
         put("rotationDegrees", rotationDegrees)
         put("isMuted", isMuted)
         put("textLayers", TextLayer.listToJson(textLayers))
+        put("stickerLayers", StickerLayer.listToJson(stickerLayers))
     }.toString()
 
     companion object {
@@ -175,6 +178,7 @@ data class EditorSessionState(
                 videoFilter = runCatching { VideoFilter.valueOf(o.optString("videoFilter", "NONE")) }
                     .getOrDefault(VideoFilter.NONE),
                 textLayers = TextLayer.listFromJson(o.optJSONArray("textLayers")),
+                stickerLayers = StickerLayer.listFromJson(o.optJSONArray("stickerLayers")),
             )
         }
     }

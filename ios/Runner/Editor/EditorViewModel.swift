@@ -42,6 +42,8 @@ final class EditorViewModel: ObservableObject {
   /// rebuilds the player — the preview draws them over the video, the
   /// export burns them in through the compositor.
   @Published private(set) var textLayers: [TextLayer]
+  /// Animated stickers — overlay state like the captions.
+  @Published private(set) var stickerLayers: [StickerLayer]
   /// The caption being edited/dragged in the preview.
   @Published var selectedTextId: String?
   /// Width / height of the rendered frame (the rectangle captions live in).
@@ -85,6 +87,7 @@ final class EditorViewModel: ObservableObject {
     videoSpeed = state.videoSpeed
     videoFilter = state.videoFilter
     textLayers = state.textLayers
+    stickerLayers = state.stickerLayers
 
     if let path = musicOriginalPath, let songMs = Self.durationMs(path: path) {
       musicDurationMs = Int64(Double(songMs) / musicSpeed)
@@ -128,7 +131,8 @@ final class EditorViewModel: ObservableObject {
       musicSpeed: musicSpeed, musicFadeInMs: musicFadeInMs, musicFadeOutMs: musicFadeOutMs, musicLoop: musicLoop,
       musicStartOffsetMs: musicStartOffsetMs, musicSourceStartMs: musicSourceStartMs,
       musicPlayDurationMs: musicPlayDurationMs, rotationDegrees: rotationDegrees, isMuted: isMuted,
-      videoSpeed: videoSpeed, videoFilter: videoFilter, textLayers: textLayers)
+      videoSpeed: videoSpeed, videoFilter: videoFilter, textLayers: textLayers,
+      stickerLayers: stickerLayers)
   }
 
   // MARK: Playback
@@ -422,14 +426,47 @@ final class EditorViewModel: ObservableObject {
     }
   }
 
-  /// Timeline drag of a caption's timing, clamped to the Ad (OUTPUT time), at least 300ms long.
-  func setTextTiming(_ id: String, startMs: Int64, endMs: Int64) {
-    guard let i = textLayers.firstIndex(where: { $0.id == id }) else { return }
+  /// Timeline drag of a caption's or sticker's timing, clamped to the Ad (OUTPUT time), at least 300ms long.
+  func setOverlayTiming(_ id: String, startMs: Int64, endMs: Int64) {
     let total = outputDurationMs
     let s = min(max(startMs, 0), max(total - 300, 0))
     let e = min(max(endMs, s + 300), max(total, s + 300))
-    textLayers[i].startMs = s
-    textLayers[i].endMs = e
+    if let i = textLayers.firstIndex(where: { $0.id == id }) {
+      textLayers[i].startMs = s
+      textLayers[i].endMs = e
+    }
+    if let i = stickerLayers.firstIndex(where: { $0.id == id }) {
+      stickerLayers[i].startMs = s
+      stickerLayers[i].endMs = e
+    }
+  }
+
+  @discardableResult
+  func addSticker(_ def: StickerDef) -> StickerLayer {
+    pause()
+    let total = max(outputDurationMs, 500)
+    let now = min(max(currentOutputMs(), 0), total)
+    let start = total - now < 1_000 ? max(total - 3_000, 0) : now
+    // Staggered a little so several stickers don't land exactly on top of each other.
+    let n = stickerLayers.count % 5
+    var layer = StickerLayer(stickerId: def.id)
+    layer.x = 0.5 + Double(n - 2) * 0.06
+    layer.y = 0.32 + Double(n % 2) * 0.05
+    layer.startMs = start
+    layer.endMs = min(total, start + 3_000)
+    stickerLayers.append(layer)
+    selectedTextId = layer.id
+    return layer
+  }
+
+  func updateSticker(_ layer: StickerLayer) {
+    guard let i = stickerLayers.firstIndex(where: { $0.id == layer.id }) else { return }
+    stickerLayers[i] = layer
+  }
+
+  func removeSticker(_ id: String) {
+    stickerLayers.removeAll { $0.id == id }
+    if selectedTextId == id { selectedTextId = nil }
   }
 
   // MARK: Thumbnails

@@ -534,6 +534,9 @@ object TextRenderer {
 class TextOverlayEffectBitmap(
     private val layers: List<TextLayer>,
     private val fonts: TypefaceCache,
+    /** Animated stickers, drawn under the captions (they always animate, so redraw while one is on screen). */
+    private val stickers: List<StickerLayer> = emptyList(),
+    private val stickerStore: StickerStore? = null,
 ) : BitmapOverlay() {
     private var bitmap: Bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
     private var canvas = Canvas(bitmap)
@@ -551,12 +554,14 @@ class TextOverlayEffectBitmap(
         if (firstUs == C.TIME_UNSET) firstUs = presentationTimeUs
         val tMs = (presentationTimeUs - firstUs) / 1000
         val active = layers.filter { tMs >= it.startMs && tMs < it.endMs }
-        val key = active.joinToString(",") { it.id }
-        val animating = active.any { TextRenderer.isAnimatingAt(it, tMs) }
+        val activeStickers = if (stickerStore == null) emptyList() else stickers.filter { tMs >= it.startMs && tMs < it.endMs }
+        val key = (active.map { it.id } + activeStickers.map { it.id }).joinToString(",")
+        val animating = activeStickers.isNotEmpty() || active.any { TextRenderer.isAnimatingAt(it, tMs) }
         if (animating || key != lastKey) {
             bitmap.eraseColor(Color.TRANSPARENT)
             val w = bitmap.width.toFloat()
             val h = bitmap.height.toFloat()
+            stickerStore?.let { store -> activeStickers.forEach { StickerRenderer.draw(canvas, it, w, h, tMs, store) } }
             active.forEach { TextRenderer.draw(canvas, it, w, h, tMs, fonts) }
             lastKey = key
         }

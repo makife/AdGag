@@ -288,7 +288,7 @@ enum EditorCompositionBuilder {
     let outputDurationMs = Int64((CMTimeGetSeconds(outputTotal) * 1000).rounded())
 
     let textOverlay: TextOverlayRenderer? = includeText
-      ? { let r = TextOverlayRenderer(layers: state.textLayers); return r.isEmpty ? nil : r }()
+      ? { let r = TextOverlayRenderer(layers: state.textLayers, stickers: state.stickerLayers); return r.isEmpty ? nil : r }()
       : nil
 
     // One instruction per clip, tiling the whole output timeline exactly.

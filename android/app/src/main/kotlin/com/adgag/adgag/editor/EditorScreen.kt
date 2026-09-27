@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.MusicOff
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.SlowMotionVideo
+import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
@@ -101,9 +102,28 @@ fun EditorScreen(
         var showSpeedSheet by remember { mutableStateOf(false) }
         var showEffectsSheet by remember { mutableStateOf(false) }
         var editingTextId by remember { mutableStateOf<String?>(null) }
+        // Sticker picker: null = closed; "" = adding; otherwise the sticker being changed.
+        var stickerPanelFor by remember { mutableStateOf<String?>(null) }
         val addText = {
             viewModel.player.pause()
+            stickerPanelFor = null
             editingTextId = viewModel.addText().id
+        }
+        val openStickers = {
+            viewModel.player.pause()
+            editingTextId = null
+            stickerPanelFor = ""
+        }
+        // Tapping a selected overlay (or its timeline bar) opens the matching editor.
+        val editOverlay = { id: String ->
+            viewModel.player.pause()
+            if (viewModel.stickerLayers.any { it.id == id }) {
+                editingTextId = null
+                stickerPanelFor = id
+            } else {
+                stickerPanelFor = null
+                editingTextId = id
+            }
         }
 
         // Per-frame GLOBAL position, read ONLY inside the graphicsLayer /
@@ -206,10 +226,7 @@ fun EditorScreen(
                 TextOverlayLayer(
                     viewModel = viewModel,
                     frameGlobalMs = frameGlobalMs,
-                    onEdit = {
-                        viewModel.player.pause()
-                        editingTextId = it
-                    },
+                    onEdit = editOverlay,
                 )
                 // Center play button — only while paused.
                 androidx.compose.animation.AnimatedVisibility(
@@ -230,7 +247,23 @@ fun EditorScreen(
             // (the video above just shrinks a little), instead of a sheet
             // over the video.
             val editingText = editingTextId
-            if (editingText != null) {
+            val stickerPanel = stickerPanelFor
+            if (stickerPanel != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(topStart = AdGagRadius.lg.dp, topEnd = AdGagRadius.lg.dp))
+                        .background(AdGagColors.SurfaceElevated)
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .padding(vertical = AdGagSpacing.sm.dp),
+                ) {
+                    StickerPanel(
+                        viewModel = viewModel,
+                        editingId = stickerPanel.ifEmpty { null },
+                        onDismiss = { stickerPanelFor = null },
+                    )
+                }
+            } else if (editingText != null) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -260,10 +293,7 @@ fun EditorScreen(
                     onPickTransition = { pickingTransitionFor = it },
                     onOpenMusic = { showMusicSheet = true },
                     onAddText = addText,
-                    onEditText = {
-                        viewModel.player.pause()
-                        editingTextId = it
-                    },
+                    onEditText = editOverlay,
                 )
                 Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
 
@@ -273,6 +303,7 @@ fun EditorScreen(
                     onSpeed = { showSpeedSheet = true },
                     onEffects = { showEffectsSheet = true },
                     onText = addText,
+                    onStickers = openStickers,
                 )
 
                 if (viewModel.isExporting) {
@@ -369,6 +400,7 @@ private fun ToolRow(
     onSpeed: () -> Unit,
     onEffects: () -> Unit,
     onText: () -> Unit,
+    onStickers: () -> Unit,
 ) {
     Row(
         // Scrolls sideways if the tools outgrow a narrow screen.
@@ -381,6 +413,12 @@ private fun ToolRow(
             label = if (viewModel.textLayers.isEmpty()) "Text" else "Text (${viewModel.textLayers.size})",
             active = viewModel.textLayers.isNotEmpty(),
             onClick = onText,
+        )
+        EditorToolButton(
+            icon = Icons.Filled.EmojiEmotions,
+            label = if (viewModel.stickerLayers.isEmpty()) "Stickers" else "Stickers (${viewModel.stickerLayers.size})",
+            active = viewModel.stickerLayers.isNotEmpty(),
+            onClick = onStickers,
         )
         EditorToolButton(
             icon = Icons.Filled.RotateRight,

@@ -1,0 +1,4 @@
+Animated stickers: Noto Animated Emoji by Google, licensed under CC BY 4.0
+(https://creativecommons.org/licenses/by/4.0/). Source:
+https://googlefonts.github.io/noto-emoji-animation/ . Frames were resampled and
+packed into sprite sheets for AdGag.

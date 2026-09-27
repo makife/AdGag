@@ -18,12 +18,14 @@ struct TextOverlayView: View {
     let hitId: String?
     let wasSelected: Bool
     let start: TextLayer?
+    let startSticker: StickerLayer?
     var moved = false
   }
 
   @State private var drag: DragState?
-  @State private var pinchStart: TextLayer?
-  @State private var rotateStart: TextLayer?
+  /// (scale, rotation) of the selected caption/sticker when a pinch / twist began.
+  @State private var pinchStart: Double?
+  @State private var rotateStart: Double?
 
   var body: some View {
     GeometryReader { geo in
@@ -50,7 +52,7 @@ struct TextOverlayView: View {
 
   @ViewBuilder
   private func captionsCanvas(frame: CGSize) -> some View {
-    if viewModel.textLayers.isEmpty {
+    if viewModel.textLayers.isEmpty && viewModel.stickerLayers.isEmpty {
       Color.clear
     } else {
       TimelineView(.animation) { _ in
@@ -59,6 +61,27 @@ struct TextOverlayView: View {
           let selected = viewModel.selectedTextId
           let playing = viewModel.isPlaying
           context.withCGContext { cg in
+            // Stickers under the captions (same order as the export).
+            for sticker in viewModel.stickerLayers {
+              let frozen = sticker.id == selected && !playing && (tMs < sticker.startMs || tMs >= sticker.endMs)
+              StickerRenderer.draw(cg, layer: sticker, frameW: size.width, frameH: size.height,
+                                   tMs: frozen ? min(sticker.startMs + 400, sticker.endMs - 1) : tMs)
+              if sticker.id == selected {
+                let half = StickerRenderer.halfSide(sticker, frameH: size.height) * 1.1
+                let s = CGFloat(sticker.scale)
+                cg.saveGState()
+                cg.translateBy(x: CGFloat(sticker.x) * size.width, y: CGFloat(sticker.y) * size.height)
+                cg.rotate(by: CGFloat(sticker.rotationDeg) * .pi / 180)
+                cg.scaleBy(x: s, y: s)
+                cg.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+                cg.setLineWidth(1.5 / s)
+                cg.setLineDash(phase: 0, lengths: [9 / s, 6 / s])
+                cg.addPath(CGPath(roundedRect: CGRect(x: -half, y: -half, width: 2 * half, height: 2 * half),
+                                  cornerWidth: 6 / s, cornerHeight: 6 / s, transform: nil))
+                cg.strokePath()
+                cg.restoreGState()
+              }
+            }
             for layer in viewModel.textLayers {
               let frozen = layer.id == selected && !playing
               TextRenderer.draw(cg, layer: layer, frameW: size.width, frameH: size.height,
@@ -88,8 +111,8 @@ struct TextOverlayView: View {
     if viewModel.selectedTextId != nil { viewModel.selectedTextId = nil } else { viewModel.togglePlayPause() }
   }
 
-  private func isShown(_ layer: TextLayer, at tMs: Int64) -> Bool {
-    (tMs >= layer.startMs && tMs < layer.endMs) || (layer.id == viewModel.selectedTextId && !viewModel.isPlaying)
+  private func isShown(_ id: String, _ start: Int64, _ end: Int64, at tMs: Int64) -> Bool {
+    (tMs >= start && tMs < end) || (id == viewModel.selectedTextId && !viewModel.isPlaying)
   }
 
   private func dragGesture(frame: CGSize) -> some Gesture {
@@ -97,23 +120,37 @@ struct TextOverlayView: View {
       .onChanged { value in
         if drag == nil {
           let tMs = viewModel.currentOutputMs()
+          // Captions are drawn over stickers, so they win the touch.
           let hit = viewModel.textLayers.reversed().first { layer in
-            isShown(layer, at: tMs)
+            isShown(layer.id, layer.startMs, layer.endMs, at: tMs)
               && TextRenderer.hitTest(layer, frameW: frame.width, frameH: frame.height, point: value.startLocation)
           }
-          drag = DragState(hitId: hit?.id, wasSelected: hit != nil && hit?.id == viewModel.selectedTextId, start: hit)
-          if let hit { viewModel.selectedTextId = hit.id }
+          let stickerHit = hit != nil ? nil : viewModel.stickerLayers.reversed().first { s in
+            isShown(s.id, s.startMs, s.endMs, at: tMs)
+              && StickerRenderer.hitTest(s, frameW: frame.width, frameH: frame.height, point: value.startLocation)
+          }
+          let hitId = hit?.id ?? stickerHit?.id
+          drag = DragState(hitId: hitId, wasSelected: hitId != nil && hitId == viewModel.selectedTextId,
+                           start: hit, startSticker: stickerHit)
+          if let hitId { viewModel.selectedTextId = hitId }
         }
         guard var state = drag else { return }
         let distance = hypot(value.translation.width, value.translation.height)
         if !state.moved && distance > 6 { state.moved = true }
         drag = state
         // Moving is for the touched caption only (pinch/rotate handle the rest).
-        if state.moved, let start = state.start, pinchStart == nil, rotateStart == nil,
-           var layer = viewModel.textLayers.first(where: { $0.id == start.id }) {
-          layer.x = min(max(start.x + Double(value.translation.width / frame.width), 0), 1)
-          layer.y = min(max(start.y + Double(value.translation.height / frame.height), 0), 1)
+        guard state.moved, pinchStart == nil, rotateStart == nil else { return }
+        let dx = Double(value.translation.width / frame.width)
+        let dy = Double(value.translation.height / frame.height)
+        if let start = state.start, var layer = viewModel.textLayers.first(where: { $0.id == start.id }) {
+          layer.x = min(max(start.x + dx, 0), 1)
+          layer.y = min(max(start.y + dy, 0), 1)
           viewModel.updateText(layer)
+        } else if let start = state.startSticker,
+                  var sticker = viewModel.stickerLayers.first(where: { $0.id == start.id }) {
+          sticker.x = min(max(start.x + dx, 0), 1)
+          sticker.y = min(max(start.y + dy, 0), 1)
+          viewModel.updateSticker(sticker)
         }
       }
       .onEnded { _ in
@@ -131,13 +168,19 @@ struct TextOverlayView: View {
   private var pinchGesture: some Gesture {
     MagnificationGesture()
       .onChanged { value in
-        guard let id = viewModel.selectedTextId,
-              var layer = viewModel.textLayers.first(where: { $0.id == id }) else { return }
-        let start = pinchStart ?? layer
-        if pinchStart == nil { pinchStart = start }
+        guard let id = viewModel.selectedTextId else { return }
         drag?.moved = true
-        layer.scale = min(max(start.scale * Double(value), 0.2), 8)
-        viewModel.updateText(layer)
+        if var layer = viewModel.textLayers.first(where: { $0.id == id }) {
+          let start = pinchStart ?? layer.scale
+          if pinchStart == nil { pinchStart = start }
+          layer.scale = min(max(start * Double(value), 0.2), 8)
+          viewModel.updateText(layer)
+        } else if var sticker = viewModel.stickerLayers.first(where: { $0.id == id }) {
+          let start = pinchStart ?? sticker.scale
+          if pinchStart == nil { pinchStart = start }
+          sticker.scale = min(max(start * Double(value), 0.2), 8)
+          viewModel.updateSticker(sticker)
+        }
       }
       .onEnded { _ in pinchStart = nil }
   }
@@ -145,13 +188,19 @@ struct TextOverlayView: View {
   private var rotationGesture: some Gesture {
     RotationGesture()
       .onChanged { angle in
-        guard let id = viewModel.selectedTextId,
-              var layer = viewModel.textLayers.first(where: { $0.id == id }) else { return }
-        let start = rotateStart ?? layer
-        if rotateStart == nil { rotateStart = start }
+        guard let id = viewModel.selectedTextId else { return }
         drag?.moved = true
-        layer.rotationDeg = start.rotationDeg + angle.degrees
-        viewModel.updateText(layer)
+        if var layer = viewModel.textLayers.first(where: { $0.id == id }) {
+          let start = rotateStart ?? layer.rotationDeg
+          if rotateStart == nil { rotateStart = start }
+          layer.rotationDeg = start + angle.degrees
+          viewModel.updateText(layer)
+        } else if var sticker = viewModel.stickerLayers.first(where: { $0.id == id }) {
+          let start = rotateStart ?? sticker.rotationDeg
+          if rotateStart == nil { rotateStart = start }
+          sticker.rotationDeg = start + angle.degrees
+          viewModel.updateSticker(sticker)
+        }
       }
       .onEnded { _ in rotateStart = nil }
   }

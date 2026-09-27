@@ -67,16 +67,16 @@ struct EditorTimelineView: View {
           .id(index) // reset the row's drag state when another clip is selected
       }
 
-      if !viewModel.textLayers.isEmpty {
-        let selected = viewModel.textLayers.first { $0.id == viewModel.selectedTextId }
+      if !viewModel.textLayers.isEmpty || !viewModel.stickerLayers.isEmpty {
+        let selected = overlayBars(viewModel).first { $0.id == viewModel.selectedTextId }
         HStack {
           if let selected {
-            label("Text · \"\(String((selected.text.components(separatedBy: "\n").first ?? "").prefix(18)))\"")
+            label("\(selected.kind) · \"\(String(selected.label.prefix(18)))\"")
               .lineLimit(1)
             Spacer()
             label("\(formatClock(selected.startMs)) – \(formatClock(selected.endMs))")
           } else {
-            label("Text · tap one to select")
+            label("Text & stickers · tap one to select")
             Spacer()
           }
         }
@@ -432,6 +432,29 @@ private struct MusicRowView: View {
 
 // MARK: - Text row (OUTPUT time)
 
+/// One caption or sticker as a bar on the overlay row.
+private struct OverlayBar: Identifiable {
+  let id: String
+  let kind: String
+  let label: String
+  let startMs: Int64
+  let endMs: Int64
+  let color: Color
+}
+
+@MainActor
+private func overlayBars(_ viewModel: EditorViewModel) -> [OverlayBar] {
+  viewModel.stickerLayers.map { s in
+    OverlayBar(id: s.id, kind: "Sticker", label: StickerStore.shared.byId(s.stickerId)?.label ?? "Sticker",
+               startMs: s.startMs, endMs: s.endMs, color: Color(red: 1, green: 0.7, blue: 0))
+  } + viewModel.textLayers.map { t in
+    let c = argbComponents(t.color)
+    return OverlayBar(id: t.id, kind: "Text", label: t.text.components(separatedBy: "\n").first ?? "",
+                      startMs: t.startMs, endMs: t.endMs,
+                      color: Color(red: Double(c.r), green: Double(c.g), blue: Double(c.b)))
+  }
+}
+
 /// Captions on the OUTPUT timeline (same width and scale as the clip strip).
 /// Every caption is a bar; tap one to select it (and jump there), tap the
 /// selected one to edit it. The selected caption gets start/end handles and
@@ -450,14 +473,14 @@ private struct TextRowView: View {
       let msToX = { (ms: Int64) -> CGFloat in CGFloat(min(max(ms, 0), total)) / CGFloat(total) * width }
       let dxToMs = { (dx: CGFloat) -> Int64 in Int64(dx / width * CGFloat(total)) }
       let selectedId = viewModel.selectedTextId
+      let bars = overlayBars(viewModel)
 
       ZStack(alignment: .topLeading) {
-        ForEach(viewModel.textLayers.filter { $0.id != selectedId }) { layer in
+        ForEach(bars.filter { $0.id != selectedId }) { layer in
           let left = msToX(layer.startMs)
           let right = max(msToX(layer.endMs), left + 4)
-          let c = argbComponents(layer.color)
           RoundedRectangle(cornerRadius: 6)
-            .fill(Color(red: Double(c.r), green: Double(c.g), blue: Double(c.b)).opacity(0.35))
+            .fill(layer.color.opacity(0.35))
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(EditorPalette.border, lineWidth: 1))
             .frame(width: right - left, height: textRowHeight - 10)
             .offset(x: left, y: 5)
@@ -467,7 +490,7 @@ private struct TextRowView: View {
             }
         }
 
-        if let sel = viewModel.textLayers.first(where: { $0.id == selectedId }) {
+        if let sel = bars.first(where: { $0.id == selectedId }) {
           let live = origin?.0 == sel.id
           let start = live ? (liveStart ?? sel.startMs) : sel.startMs
           let end = live ? (liveEnd ?? sel.endMs) : sel.endMs
@@ -477,7 +500,7 @@ private struct TextRowView: View {
           RoundedRectangle(cornerRadius: 6).fill(EditorPalette.pink.opacity(0.45))
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(EditorPalette.pink, lineWidth: 2))
             .overlay(
-              Text(sel.text.components(separatedBy: "\n").first ?? "")
+              Text(sel.label)
                 .font(.caption2).foregroundColor(.white).lineLimit(1)
                 .padding(.horizontal, 18),
               alignment: .leading)
@@ -523,7 +546,7 @@ private struct TextRowView: View {
 
   private func commit() {
     if let o = origin {
-      viewModel.setTextTiming(o.0, startMs: liveStart ?? o.1, endMs: liveEnd ?? o.2)
+      viewModel.setOverlayTiming(o.0, startMs: liveStart ?? o.1, endMs: liveEnd ?? o.2)
     }
     origin = nil
     liveStart = nil

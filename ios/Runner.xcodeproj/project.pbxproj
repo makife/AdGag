@@ -21,6 +21,8 @@
 		AD0E000EA1B2C3D4E5F6000E /* EditorText.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0E000DA1B2C3D4E5F6000D /* EditorText.swift */; };
 		AD0E0010A1B2C3D4E5F60010 /* EditorTextViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0E000FA1B2C3D4E5F6000F /* EditorTextViews.swift */; };
 		AD0E0012A1B2C3D4E5F60012 /* AdGagFonts in Resources */ = {isa = PBXBuildFile; fileRef = AD0E0011A1B2C3D4E5F60011 /* AdGagFonts */; };
+		AD0E0014A1B2C3D4E5F60014 /* EditorStickers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0E0013A1B2C3D4E5F60013 /* EditorStickers.swift */; };
+		AD0E0016A1B2C3D4E5F60016 /* AdGagStickers in Resources */ = {isa = PBXBuildFile; fileRef = AD0E0015A1B2C3D4E5F60015 /* AdGagStickers */; };
 		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
@@ -68,6 +70,8 @@
 		AD0E000DA1B2C3D4E5F6000D /* EditorText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/EditorText.swift; sourceTree = "<group>"; };
 		AD0E000FA1B2C3D4E5F6000F /* EditorTextViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/EditorTextViews.swift; sourceTree = "<group>"; };
 		AD0E0011A1B2C3D4E5F60011 /* AdGagFonts */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Editor/AdGagFonts; sourceTree = "<group>"; };
+		AD0E0013A1B2C3D4E5F60013 /* EditorStickers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/EditorStickers.swift; sourceTree = "<group>"; };
+		AD0E0015A1B2C3D4E5F60015 /* AdGagStickers */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Editor/AdGagStickers; sourceTree = "<group>"; };
 		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
@@ -150,6 +154,8 @@
 				AD0E000DA1B2C3D4E5F6000D /* EditorText.swift */,
 				AD0E000FA1B2C3D4E5F6000F /* EditorTextViews.swift */,
 				AD0E0011A1B2C3D4E5F60011 /* AdGagFonts */,
+				AD0E0013A1B2C3D4E5F60013 /* EditorStickers.swift */,
+				AD0E0015A1B2C3D4E5F60015 /* AdGagStickers */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
@@ -257,6 +263,7 @@
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
 				AD0E0012A1B2C3D4E5F60012 /* AdGagFonts in Resources */,
+				AD0E0016A1B2C3D4E5F60016 /* AdGagStickers in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -320,6 +327,7 @@
 				AD0E000CA1B2C3D4E5F6000C /* AdGagFilters.metal in Sources */,
 				AD0E000EA1B2C3D4E5F6000E /* EditorText.swift in Sources */,
 				AD0E0010A1B2C3D4E5F60010 /* EditorTextViews.swift in Sources */,
+				AD0E0014A1B2C3D4E5F60014 /* EditorStickers.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

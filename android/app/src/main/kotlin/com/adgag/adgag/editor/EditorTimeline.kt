@@ -139,12 +139,12 @@ fun EditorTimeline(
             TrimRow(viewModel, selected, clip, density, positionMs)
         }
 
-        if (viewModel.textLayers.isNotEmpty()) {
-            val sel = viewModel.textLayers.firstOrNull { it.id == viewModel.selectedTextId }
+        if (viewModel.textLayers.isNotEmpty() || viewModel.stickerLayers.isNotEmpty()) {
+            val sel = overlayBars(viewModel).firstOrNull { it.id == viewModel.selectedTextId }
             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    text = if (sel != null) "Text · \"${sel.text.lineSequence().first().take(18)}\"" else "Text · tap one to select",
+                    text = if (sel != null) "${sel.kind} · \"${sel.label.take(18)}\"" else "Text & stickers · tap one to select",
                     color = AdGagColors.OnSurfaceMuted,
                     style = MaterialTheme.typography.labelMedium,
                     maxLines = 1,
@@ -776,9 +776,20 @@ private fun AddTextButton(onClick: () -> Unit) {
     }
 }
 
+/** One caption or sticker as a bar on the overlay row. */
+private data class OverlayBar(val id: String, val kind: String, val label: String, val startMs: Long, val endMs: Long, val color: Color)
+
+@UnstableApi
+private fun overlayBars(viewModel: EditorViewModel): List<OverlayBar> =
+    viewModel.stickerLayers.map { s ->
+        OverlayBar(s.id, "Sticker", viewModel.stickers.byId(s.stickerId)?.label ?: "Sticker", s.startMs, s.endMs, Color(0xFFFFB300))
+    } + viewModel.textLayers.map { t ->
+        OverlayBar(t.id, "Text", t.text.lineSequence().first(), t.startMs, t.endMs, Color(t.color))
+    }
+
 /**
- * Captions on the OUTPUT timeline (same width and scale as the clip
- * strip). Every caption is a bar; tap one to select it (and jump there),
+ * Captions AND stickers on the OUTPUT timeline (same width and scale as
+ * the clip strip). Every one is a bar; tap one to select it (and jump there),
  * tap the selected one to edit it. The selected caption gets two handles
  * (start / end) and can be dragged by its body to move it in time. Drags
  * only move local state; the caption is updated once, on release.
@@ -798,8 +809,9 @@ private fun RowScope.TextRow(viewModel: EditorViewModel, density: Density, onEdi
         fun msToPx(ms: Long): Float = ms.toFloat() / total * widthPx
         fun pxDeltaToMsDelta(deltaPx: Float): Long = (deltaPx / widthPx * total).toLong()
         val selectedId = viewModel.selectedTextId
+        val bars = overlayBars(viewModel)
 
-        viewModel.textLayers.filter { it.id != selectedId }.forEach { layer ->
+        bars.filter { it.id != selectedId }.forEach { layer ->
             val left = msToPx(layer.startMs.coerceIn(0L, total))
             val right = msToPx(layer.endMs.coerceIn(0L, total)).coerceAtLeast(left + 4f)
             Box(
@@ -809,7 +821,7 @@ private fun RowScope.TextRow(viewModel: EditorViewModel, density: Density, onEdi
                     .fillMaxHeight()
                     .padding(vertical = 5.dp)
                     .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                    .background(Color(layer.color).copy(alpha = 0.35f))
+                    .background(layer.color.copy(alpha = 0.35f))
                     .border(BorderStroke(1.dp, AdGagColors.Border), RoundedCornerShape(AdGagRadius.sm.dp))
                     .clickable {
                         viewModel.selectedTextId = layer.id
@@ -818,10 +830,10 @@ private fun RowScope.TextRow(viewModel: EditorViewModel, density: Density, onEdi
             )
         }
 
-        val sel = viewModel.textLayers.firstOrNull { it.id == selectedId } ?: return@BoxWithConstraints
+        val sel = bars.firstOrNull { it.id == selectedId } ?: return@BoxWithConstraints
         var localStart by remember(sel.id, sel.startMs) { mutableLongStateOf(sel.startMs) }
         var localEnd by remember(sel.id, sel.endMs) { mutableLongStateOf(sel.endMs) }
-        val commit by rememberUpdatedState({ viewModel.setTextTiming(sel.id, localStart, localEnd) })
+        val commit by rememberUpdatedState({ viewModel.setOverlayTiming(sel.id, localStart, localEnd) })
         val startPx = msToPx(localStart.coerceIn(0L, total))
         val endPx = msToPx(localEnd.coerceIn(0L, total)).coerceAtLeast(startPx + 4f)
         Box(
@@ -854,7 +866,7 @@ private fun RowScope.TextRow(viewModel: EditorViewModel, density: Density, onEdi
             contentAlignment = Alignment.CenterStart,
         ) {
             Text(
-                text = sel.text.lineSequence().first(),
+                text = sel.label,
                 color = Color.White,
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,

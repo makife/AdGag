@@ -864,23 +864,28 @@ enum TextRenderer {
 /// composition's own time, which is OUTPUT time — the captions' time base.
 final class TextOverlayRenderer: @unchecked Sendable {
   private let layers: [TextLayer]
+  /// Drawn under the captions; they always animate, so redraw while one is on screen.
+  private let stickers: [StickerLayer]
   private let lock = NSLock()
   private var lastKey: String?
   private var lastImage: CIImage?
 
-  init(layers: [TextLayer]) {
+  init(layers: [TextLayer], stickers: [StickerLayer] = []) {
     self.layers = layers.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.endMs > $0.startMs }
+    self.stickers = stickers.filter { $0.endMs > $0.startMs && StickerStore.shared.byId($0.stickerId) != nil }
   }
 
-  var isEmpty: Bool { layers.isEmpty }
+  var isEmpty: Bool { layers.isEmpty && stickers.isEmpty }
 
   func image(size: CGSize, tMs: Int64) -> CIImage? {
     lock.lock()
     defer { lock.unlock() }
     let active = layers.filter { tMs >= $0.startMs && tMs < $0.endMs }
-    guard !active.isEmpty else { return nil }
-    let key = active.map(\.id).joined(separator: ",") + "@\(Int(size.width))x\(Int(size.height))"
-    let animating = active.contains { TextRenderer.isAnimating($0, at: tMs) }
+    let activeStickers = stickers.filter { tMs >= $0.startMs && tMs < $0.endMs }
+    guard !active.isEmpty || !activeStickers.isEmpty else { return nil }
+    let key = (activeStickers.map(\.id) + active.map(\.id)).joined(separator: ",")
+      + "@\(Int(size.width))x\(Int(size.height))"
+    let animating = !activeStickers.isEmpty || active.contains { TextRenderer.isAnimating($0, at: tMs) }
     if !animating, key == lastKey, let cached = lastImage { return cached }
 
     let w = max(2, Int(size.width))
@@ -891,6 +896,9 @@ final class TextOverlayRenderer: @unchecked Sendable {
     // y-down drawing, like the preview canvas.
     ctx.translateBy(x: 0, y: CGFloat(h))
     ctx.scaleBy(x: 1, y: -1)
+    for sticker in activeStickers {
+      StickerRenderer.draw(ctx, layer: sticker, frameW: CGFloat(w), frameH: CGFloat(h), tMs: tMs)
+    }
     for layer in active {
       TextRenderer.draw(ctx, layer: layer, frameW: CGFloat(w), frameH: CGFloat(h), tMs: tMs)
     }

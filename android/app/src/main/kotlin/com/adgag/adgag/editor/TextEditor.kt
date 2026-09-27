@@ -124,11 +124,16 @@ fun TextOverlayLayer(
                         val w = size.width.toFloat()
                         val h = size.height.toFloat()
                         val tMs = (viewModel.globalPositionMs() / viewModel.videoSpeed).toLong()
+                        fun shown(id: String, start: Long, end: Long) =
+                            (tMs >= start && tMs < end) || (id == viewModel.selectedTextId && !viewModel.isPlaying)
+                        // Captions are drawn over stickers, so they win the touch.
                         val hit = viewModel.textLayers.asReversed().firstOrNull { layer ->
-                            val shown = (tMs >= layer.startMs && tMs < layer.endMs) ||
-                                (layer.id == viewModel.selectedTextId && !viewModel.isPlaying)
-                            shown && TextRenderer.hitTest(layer, w, h, down.position.x, down.position.y, viewModel.fonts)
-                        }
+                            shown(layer.id, layer.startMs, layer.endMs) &&
+                                TextRenderer.hitTest(layer, w, h, down.position.x, down.position.y, viewModel.fonts)
+                        }?.let { HitOverlay(it.id) } ?: viewModel.stickerLayers.asReversed().firstOrNull { layer ->
+                            shown(layer.id, layer.startMs, layer.endMs) &&
+                                StickerRenderer.hitTest(layer, w, h, down.position.x, down.position.y)
+                        }?.let { HitOverlay(it.id) }
                         val wasSelected = hit != null && hit.id == viewModel.selectedTextId
                         if (hit != null) viewModel.selectedTextId = hit.id
                         var targetId = hit?.id
@@ -158,6 +163,16 @@ fun TextOverlayLayer(
                                             ),
                                         )
                                     }
+                                    viewModel.stickerLayers.firstOrNull { it.id == id }?.let { layer ->
+                                        viewModel.updateSticker(
+                                            layer.copy(
+                                                x = (layer.x + pan.x / w).coerceIn(0f, 1f),
+                                                y = (layer.y + pan.y / h).coerceIn(0f, 1f),
+                                                scale = (layer.scale * zoom).coerceIn(0.2f, 8f),
+                                                rotationDeg = layer.rotationDeg + rotation,
+                                            ),
+                                        )
+                                    }
                                 }
                                 event.changes.forEach { if (it.positionChanged()) it.consume() }
                             }
@@ -175,6 +190,8 @@ fun TextOverlayLayer(
     }
 }
 
+private data class HitOverlay(val id: String)
+
 private val selectionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
     style = Paint.Style.STROKE
     color = android.graphics.Color.WHITE
@@ -184,13 +201,30 @@ private val selectionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
 @UnstableApi
 private fun DrawScope.drawCaptions(viewModel: EditorViewModel, globalMs: Long) {
     val layers = viewModel.textLayers
-    if (layers.isEmpty()) return
+    val stickers = viewModel.stickerLayers
+    if (layers.isEmpty() && stickers.isEmpty()) return
     val tMs = (globalMs / viewModel.videoSpeed).toLong()
     val w = size.width
     val h = size.height
     val selected = viewModel.selectedTextId
     drawIntoCanvas { c ->
         val canvas = c.nativeCanvas
+        // Stickers under the captions (same order as the export).
+        stickers.forEach { layer ->
+            val frozen = layer.id == selected && !viewModel.isPlaying && (tMs < layer.startMs || tMs >= layer.endMs)
+            val t = if (frozen) minOf(layer.startMs + 400L, layer.endMs - 1) else tMs
+            StickerRenderer.draw(canvas, layer, w, h, t, viewModel.stickers)
+            if (layer.id == selected) {
+                val half = StickerRenderer.halfSide(layer, h) * 1.1f
+                canvas.save()
+                canvas.translate(layer.x * w, layer.y * h)
+                canvas.rotate(layer.rotationDeg)
+                canvas.scale(layer.scale, layer.scale)
+                selectionPaint.strokeWidth = 3f / layer.scale
+                canvas.drawRoundRect(-half, -half, half, half, 12f / layer.scale, 12f / layer.scale, selectionPaint)
+                canvas.restore()
+            }
+        }
         layers.forEach { layer ->
             val frozen = layer.id == selected && !viewModel.isPlaying
             val t = if (frozen) settledTimeMs(layer) else tMs
