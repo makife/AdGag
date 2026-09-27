@@ -27,6 +27,8 @@ data class TextLayer(
     val opacity: Float = 1f,
     val style: TextStyleEffect = TextStyleEffect.OUTLINE,
     val animation: TextAnimation = TextAnimation.POP,
+    /** How it leaves at [endMs] (the last ~0.5s). */
+    val exit: TextExit = TextExit.FADE,
     val align: TextAlignment = TextAlignment.CENTER,
     /** Extra space between letters, fraction of the font size. */
     val letterSpacing: Float = 0f,
@@ -40,7 +42,7 @@ data class TextLayer(
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id); put("text", text); put("fontId", fontId); put("sizeFrac", sizeFrac.toDouble())
         put("color", color); put("accentColor", accentColor); put("opacity", opacity.toDouble())
-        put("style", style.name); put("animation", animation.name); put("align", align.name)
+        put("style", style.name); put("animation", animation.name); put("exit", exit.name); put("align", align.name)
         put("letterSpacing", letterSpacing.toDouble()); put("x", x.toDouble()); put("y", y.toDouble())
         put("rotationDeg", rotationDeg.toDouble()); put("scale", scale.toDouble())
         put("startMs", startMs); put("endMs", endMs)
@@ -57,6 +59,7 @@ data class TextLayer(
             opacity = o.optDouble("opacity", 1.0).toFloat(),
             style = runCatching { TextStyleEffect.valueOf(o.optString("style")) }.getOrDefault(TextStyleEffect.NONE),
             animation = runCatching { TextAnimation.valueOf(o.optString("animation")) }.getOrDefault(TextAnimation.NONE),
+            exit = runCatching { TextExit.valueOf(o.optString("exit")) }.getOrDefault(TextExit.NONE),
             align = runCatching { TextAlignment.valueOf(o.optString("align")) }.getOrDefault(TextAlignment.CENTER),
             letterSpacing = o.optDouble("letterSpacing", 0.0).toFloat(),
             x = o.optDouble("x", 0.5).toFloat(),
@@ -96,6 +99,31 @@ enum class TextStyleEffect(val label: String) {
     SUNSET("Sunset"),
     OCEAN("Ocean"),
     RAINBOW_FILL("Rainbow"),
+    STICKER("Sticker"),
+    LONG_SHADOW("Long shadow"),
+    DOUBLE_OUTLINE("Double"),
+    CHROME("Chrome"),
+    FIRE("Fire"),
+    ICE("Ice"),
+    SPLIT("Split"),
+    CANDY("Candy"),
+}
+
+/** How a caption leaves at its end. */
+enum class TextExit(val label: String) {
+    NONE("None"),
+    FADE("Fade"),
+    SHRINK("Shrink"),
+    BLOW_UP("Blow up"),
+    SPIN("Spin"),
+    SLIDE_UP("Slide up"),
+    SLIDE_DOWN("Slide down"),
+    SLIDE_LEFT("Slide left"),
+    SLIDE_RIGHT("Slide right"),
+    ERASE("Erase"),
+    FALL("Fall"),
+    SCATTER("Scatter"),
+    FLICKER_OUT("Flicker"),
 }
 
 /** Motion: entrances (play once at the start) and loops (for the whole time on screen). */
@@ -162,6 +190,18 @@ object TextFonts {
         TextFont("dancing", "Dancing", "DancingScript-Variable.ttf", 700),
         TextFont("greatvibes", "Great Vibes", "GreatVibes-Regular.ttf"),
         TextFont("caveat", "Caveat", "Caveat-Variable.ttf", 700),
+        TextFont("alfaslab", "Alfa Slab", "AlfaSlabOne-Regular.ttf"),
+        TextFont("amatic", "Amatic", "AmaticSC-Bold.ttf"),
+        TextFont("barlow", "Barlow Black", "BarlowCondensed-Black.ttf"),
+        TextFont("bowlby", "Bowlby", "BowlbyOneSC-Regular.ttf"),
+        TextFont("bungeeshade", "Bungee Shade", "BungeeShade-Regular.ttf"),
+        TextFont("courgette", "Courgette", "Courgette-Regular.ttf"),
+        TextFont("nosifer", "Nosifer", "Nosifer-Regular.ttf"),
+        TextFont("rubikbubbles", "Bubbles", "RubikBubbles-Regular.ttf"),
+        TextFont("rubikglitch", "Glitchy", "RubikGlitch-Regular.ttf"),
+        TextFont("rubikwet", "Wet Paint", "RubikWetPaint-Regular.ttf"),
+        TextFont("spacegrotesk", "Space Grotesk", "SpaceGrotesk-Variable.ttf", 700),
+        TextFont("staatliches", "Staatliches", "Staatliches-Regular.ttf"),
     )
 
     fun byId(id: String): TextFont = all.firstOrNull { it.id == id } ?: all.first()

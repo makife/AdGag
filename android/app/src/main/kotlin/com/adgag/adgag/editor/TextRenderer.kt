@@ -166,9 +166,65 @@ object TextRenderer {
         }
     }
 
+    /** How long exit effects take (less on very short captions). */
+    const val EXIT_MS = 500L
+
+    fun exitMsOf(layer: TextLayer): Long = minOf(EXIT_MS, (layer.endMs - layer.startMs) / 2)
+
+    /** 0 while the caption is fully on screen, rising to 1 at its end while its exit plays. */
+    fun exitProgress(layer: TextLayer, tMs: Long): Float {
+        if (layer.exit == TextExit.NONE) return 0f
+        val d = exitMsOf(layer)
+        val remaining = layer.endMs - tMs
+        if (d <= 0 || remaining >= d) return 0f
+        return (1f - remaining.toFloat() / d).coerceIn(0f, 1f)
+    }
+
+    private fun easeIn(t: Float): Float {
+        val x = t.coerceIn(0f, 1f)
+        return x * x * x
+    }
+
+    /** Applies the whole-block part of an exit to [m] at progress [q] (0..1). */
+    private fun applyExit(exit: TextExit, q: Float, m: Motion) {
+        if (q <= 0f) return
+        val e = easeIn(q)
+        when (exit) {
+            TextExit.FADE -> m.alpha *= 1f - q
+            TextExit.SHRINK -> m.scale *= (1f - e).coerceAtLeast(0.01f)
+            TextExit.BLOW_UP -> { m.scale *= 1f + 1.5f * e; m.alpha *= 1f - q }
+            TextExit.SPIN -> { m.rotation += 360f * e; m.scale *= (1f - e).coerceAtLeast(0.01f) }
+            TextExit.SLIDE_UP -> { m.dy -= 3f * e; m.alpha *= 1f - e }
+            TextExit.SLIDE_DOWN -> { m.dy += 3f * e; m.alpha *= 1f - e }
+            TextExit.SLIDE_LEFT -> { m.dx -= 5f * e; m.alpha *= 1f - e }
+            TextExit.SLIDE_RIGHT -> { m.dx += 5f * e; m.alpha *= 1f - e }
+            TextExit.FLICKER_OUT -> m.alpha *= if (q > 0.85f || sin(q * 60f) > 0.2f) 0f else 1f
+            else -> Unit
+        }
+    }
+
+    /** Per-letter part of an exit: (extra dy in font units, alpha multiplier), or null to hide the glyph. */
+    private fun glyphExit(exit: TextExit, q: Float, i: Int, count: Int): Pair<Float, Float>? {
+        if (q <= 0f) return 0f to 1f
+        return when (exit) {
+            TextExit.ERASE -> if (i < count * (1f - q)) 0f to 1f else null
+            TextExit.FALL -> {
+                val k = (q * 1.6f - i.toFloat() / count.coerceAtLeast(1) * 0.6f).coerceIn(0f, 1f)
+                3f * easeIn(k) to 1f - k
+            }
+            TextExit.SCATTER -> {
+                val k = easeIn(q)
+                val dir = if (i % 2 == 0) -1f else 1f
+                dir * 2.5f * k * (1f + (i % 3) * 0.4f) to 1f - q
+            }
+            else -> 0f to 1f
+        }
+    }
+
     /** True while this layer looks different from one frame to the next (entrance running or a loop). */
     fun isAnimatingAt(layer: TextLayer, tMs: Long): Boolean {
         val local = tMs - layer.startMs
+        if (layer.exit != TextExit.NONE && layer.endMs - tMs < exitMsOf(layer) + 50) return true
         return when (layer.animation) {
             TextAnimation.NONE -> false
             TextAnimation.WAVE, TextAnimation.JUMP, TextAnimation.SHAKE, TextAnimation.PULSE,
@@ -194,10 +250,24 @@ object TextRenderer {
     private fun darker(c: Int, f: Float): Int =
         Color.argb(Color.alpha(c), (Color.red(c) * f).toInt(), (Color.green(c) * f).toInt(), (Color.blue(c) * f).toInt())
 
-    private fun gradientFor(style: TextStyleEffect, layout: Layout): Shader? {
+    private fun gradientFor(layer: TextLayer, layout: Layout): Shader? {
         val w = layout.width / 2
         val h = layout.height / 2
-        return when (style) {
+        val s = layout.sizePx
+        return when (layer.style) {
+            TextStyleEffect.CHROME -> LinearGradient(0f, -h, 0f, h,
+                intArrayOf(0xFFFFFFFF.toInt(), 0xFFB0BEC5.toInt(), 0xFF37474F.toInt(), 0xFFECEFF1.toInt(), 0xFF90A4AE.toInt()),
+                floatArrayOf(0f, 0.4f, 0.52f, 0.7f, 1f), Shader.TileMode.CLAMP)
+            TextStyleEffect.FIRE -> LinearGradient(0f, -h, 0f, h,
+                intArrayOf(0xFFD50000.toInt(), 0xFFFF6D00.toInt(), 0xFFFFD600.toInt()), null, Shader.TileMode.CLAMP)
+            TextStyleEffect.ICE -> LinearGradient(0f, -h, 0f, h,
+                intArrayOf(0xFFFFFFFF.toInt(), 0xFFB3E5FC.toInt(), 0xFF29B6F6.toInt()), null, Shader.TileMode.CLAMP)
+            TextStyleEffect.SPLIT -> LinearGradient(0f, -h, 0f, h,
+                intArrayOf(layer.color, layer.color, layer.accentColor, layer.accentColor),
+                floatArrayOf(0f, 0.5f, 0.5f, 1f), Shader.TileMode.CLAMP)
+            TextStyleEffect.CANDY -> LinearGradient(0f, 0f, 0.18f * s, 0.18f * s,
+                intArrayOf(layer.color, layer.color, layer.accentColor, layer.accentColor),
+                floatArrayOf(0f, 0.5f, 0.5f, 1f), Shader.TileMode.REPEAT)
             TextStyleEffect.GOLD -> LinearGradient(0f, -h, 0f, h,
                 intArrayOf(0xFFFFF3B0.toInt(), 0xFFFFC837.toInt(), 0xFFB8860B.toInt(), 0xFFFFE08A.toInt()),
                 floatArrayOf(0f, 0.45f, 0.7f, 1f), Shader.TileMode.CLAMP)
@@ -237,6 +307,8 @@ object TextRenderer {
         val layout = layout(layer, frameH, fonts)
         val s = layout.sizePx
         val motion = blockMotion(layer.animation, local)
+        val exitQ = exitProgress(layer, tMs)
+        applyExit(layer.exit, exitQ, motion)
         val alpha = (layer.opacity * motion.alpha).coerceIn(0f, 1f)
         if (alpha <= 0.001f) return
 
@@ -277,7 +349,7 @@ object TextRenderer {
             }
         }
 
-        drawGlyphs(canvas, layer, layout, local, alpha, lineStartX = ::lineStartX, top0 = top0, baseOffset = baseOffset, mirror = false)
+        drawGlyphs(canvas, layer, layout, local, alpha, lineStartX = ::lineStartX, top0 = top0, baseOffset = baseOffset, mirror = false, exitQ = exitQ)
 
         if (layer.style == TextStyleEffect.REFLECTION) {
             val bottom = top0 + layout.height
@@ -287,7 +359,7 @@ object TextRenderer {
             canvas.save()
             canvas.translate(0f, 2 * bottom + gap)
             canvas.scale(1f, -1f)
-            drawGlyphs(canvas, layer, layout, local, alpha * 0.45f, lineStartX = ::lineStartX, top0 = top0, baseOffset = baseOffset, mirror = true)
+            drawGlyphs(canvas, layer, layout, local, alpha * 0.45f, lineStartX = ::lineStartX, top0 = top0, baseOffset = baseOffset, mirror = true, exitQ = exitQ)
             canvas.restore()
             val fade = Paint().apply {
                 shader = LinearGradient(0f, region.top, 0f, region.bottom, Color.BLACK, Color.TRANSPARENT, Shader.TileMode.CLAMP)
@@ -309,10 +381,11 @@ object TextRenderer {
         top0: Float,
         baseOffset: Float,
         mirror: Boolean,
+        exitQ: Float,
     ) {
         val s = layout.sizePx
         val fill = Paint(layout.paint)
-        val shader = gradientFor(layer.style, layout)
+        val shader = gradientFor(layer, layout)
         val stroke = Paint(layout.paint).apply {
             style = Paint.Style.STROKE
             strokeJoin = Paint.Join.ROUND
@@ -327,11 +400,12 @@ object TextRenderer {
             val baseline = top0 + li * layout.lineHeight + baseOffset
             line.glyphs.forEachIndexed { gi, g ->
                 val gm = glyphMotion(layer.animation, local, index, total)
+                val ge = glyphExit(layer.exit, exitQ, index, total)
                 val i = index
                 index++
-                if (gm == null) { x += line.advances[gi]; return@forEachIndexed }
-                val a = alpha * gm.second
-                val y = baseline + gm.first * s
+                if (gm == null || ge == null) { x += line.advances[gi]; return@forEachIndexed }
+                val a = alpha * gm.second * ge.second
+                val y = baseline + (gm.first + ge.first) * s
                 val color = if (layer.animation == TextAnimation.RAINBOW) {
                     Color.HSVToColor(floatArrayOf(((local / 1000f) * 120f + i * 25f) % 360f, 0.85f, 1f))
                 } else {
@@ -385,6 +459,41 @@ object TextRenderer {
                         }
                         TextStyleEffect.GOLD -> {
                             stroke.color = withAlpha(0xFF6B4A00.toInt(), a); stroke.strokeWidth = 0.05f * s
+                            canvas.drawText(g, x, y, stroke)
+                        }
+                        TextStyleEffect.STICKER -> {
+                            stroke.color = withAlpha(Color.WHITE, a); stroke.strokeWidth = 0.3f * s
+                            stroke.setShadowLayer(0.12f * s, 0f, 0.06f * s, withAlpha(Color.BLACK, a * 0.45f))
+                            canvas.drawText(g, x, y, stroke); stroke.clearShadowLayer()
+                        }
+                        TextStyleEffect.LONG_SHADOW -> {
+                            extra.shader = null; extra.clearShadowLayer(); extra.color = withAlpha(layer.accentColor, a)
+                            for (k in 18 downTo 1) canvas.drawText(g, x + k * 0.02f * s, y + k * 0.02f * s, extra)
+                        }
+                        TextStyleEffect.DOUBLE_OUTLINE -> {
+                            stroke.color = withAlpha(color, a); stroke.strokeWidth = 0.32f * s
+                            canvas.drawText(g, x, y, stroke)
+                            stroke.color = withAlpha(layer.accentColor, a); stroke.strokeWidth = 0.18f * s
+                            canvas.drawText(g, x, y, stroke)
+                        }
+                        TextStyleEffect.CHROME -> {
+                            stroke.color = withAlpha(0xFF263238.toInt(), a); stroke.strokeWidth = 0.06f * s
+                            canvas.drawText(g, x, y, stroke)
+                        }
+                        TextStyleEffect.FIRE -> {
+                            extra.shader = null; extra.color = withAlpha(0xFFFF6D00.toInt(), a)
+                            extra.setShadowLayer(0.4f * s, 0f, -0.08f * s, withAlpha(0xFFFF3D00.toInt(), a))
+                            canvas.drawText(g, x, y, extra); extra.clearShadowLayer()
+                        }
+                        TextStyleEffect.ICE -> {
+                            extra.shader = null; extra.color = withAlpha(0xFF81D4FA.toInt(), a)
+                            extra.setShadowLayer(0.3f * s, 0f, 0f, withAlpha(0xFF00E5FF.toInt(), a))
+                            canvas.drawText(g, x, y, extra); extra.clearShadowLayer()
+                            stroke.color = withAlpha(Color.WHITE, a); stroke.strokeWidth = 0.05f * s
+                            canvas.drawText(g, x, y, stroke)
+                        }
+                        TextStyleEffect.CANDY -> {
+                            stroke.color = withAlpha(Color.WHITE, a); stroke.strokeWidth = 0.12f * s
                             canvas.drawText(g, x, y, stroke)
                         }
                         else -> Unit

@@ -21,6 +21,7 @@ enum TextLayerAlign: String, Codable, CaseIterable {
 enum TextStyleEffect: String, Codable, CaseIterable {
   case NONE, OUTLINE, SHADOW, GLOW, NEON, BOX, PILL, HIGHLIGHT, HOLLOW, EXTRUDE, REFLECTION
   case COMIC, RETRO, GLITCH, GOLD, SUNSET, OCEAN, RAINBOW_FILL
+  case STICKER, LONG_SHADOW, DOUBLE_OUTLINE, CHROME, FIRE, ICE, SPLIT, CANDY
 
   var label: String {
     switch self {
@@ -42,6 +43,38 @@ enum TextStyleEffect: String, Codable, CaseIterable {
     case .SUNSET: return "Sunset"
     case .OCEAN: return "Ocean"
     case .RAINBOW_FILL: return "Rainbow"
+    case .STICKER: return "Sticker"
+    case .LONG_SHADOW: return "Long shadow"
+    case .DOUBLE_OUTLINE: return "Double"
+    case .CHROME: return "Chrome"
+    case .FIRE: return "Fire"
+    case .ICE: return "Ice"
+    case .SPLIT: return "Split"
+    case .CANDY: return "Candy"
+    }
+  }
+}
+
+/// How a caption leaves at its end (same as Android's TextExit).
+enum TextExit: String, Codable, CaseIterable {
+  case NONE, FADE, SHRINK, BLOW_UP, SPIN, SLIDE_UP, SLIDE_DOWN, SLIDE_LEFT, SLIDE_RIGHT
+  case ERASE, FALL, SCATTER, FLICKER_OUT
+
+  var label: String {
+    switch self {
+    case .NONE: return "None"
+    case .FADE: return "Fade"
+    case .SHRINK: return "Shrink"
+    case .BLOW_UP: return "Blow up"
+    case .SPIN: return "Spin"
+    case .SLIDE_UP: return "Slide up"
+    case .SLIDE_DOWN: return "Slide down"
+    case .SLIDE_LEFT: return "Slide left"
+    case .SLIDE_RIGHT: return "Slide right"
+    case .ERASE: return "Erase"
+    case .FALL: return "Fall"
+    case .SCATTER: return "Scatter"
+    case .FLICKER_OUT: return "Flicker"
     }
   }
 }
@@ -88,6 +121,8 @@ struct TextLayer: Codable, Equatable, Identifiable {
   var opacity: Double = 1
   var style: TextStyleEffect = .OUTLINE
   var animation: TextAnimation = .POP
+  /// How it leaves at endMs (the last ~0.5s).
+  var exit: TextExit = .FADE
   var align: TextLayerAlign = .CENTER
   var letterSpacing: Double = 0
   var x: Double = 0.5
@@ -115,6 +150,7 @@ struct TextLayer: Codable, Equatable, Identifiable {
     t.opacity = d("opacity", 1)
     t.style = TextStyleEffect(rawValue: o["style"] as? String ?? "") ?? .NONE
     t.animation = TextAnimation(rawValue: o["animation"] as? String ?? "") ?? .NONE
+    t.exit = TextExit(rawValue: o["exit"] as? String ?? "") ?? .NONE
     t.align = TextLayerAlign(rawValue: o["align"] as? String ?? "") ?? .CENTER
     t.letterSpacing = d("letterSpacing", 0)
     t.x = d("x", 0.5)
@@ -167,6 +203,18 @@ enum TextFonts {
     TextFont(id: "dancing", label: "Dancing", file: "DancingScript-Variable", weight: 700),
     TextFont(id: "greatvibes", label: "Great Vibes", file: "GreatVibes-Regular"),
     TextFont(id: "caveat", label: "Caveat", file: "Caveat-Variable", weight: 700),
+    TextFont(id: "alfaslab", label: "Alfa Slab", file: "AlfaSlabOne-Regular"),
+    TextFont(id: "amatic", label: "Amatic", file: "AmaticSC-Bold"),
+    TextFont(id: "barlow", label: "Barlow Black", file: "BarlowCondensed-Black"),
+    TextFont(id: "bowlby", label: "Bowlby", file: "BowlbyOneSC-Regular"),
+    TextFont(id: "bungeeshade", label: "Bungee Shade", file: "BungeeShade-Regular"),
+    TextFont(id: "courgette", label: "Courgette", file: "Courgette-Regular"),
+    TextFont(id: "nosifer", label: "Nosifer", file: "Nosifer-Regular"),
+    TextFont(id: "rubikbubbles", label: "Bubbles", file: "RubikBubbles-Regular"),
+    TextFont(id: "rubikglitch", label: "Glitchy", file: "RubikGlitch-Regular"),
+    TextFont(id: "rubikwet", label: "Wet Paint", file: "RubikWetPaint-Regular"),
+    TextFont(id: "spacegrotesk", label: "Space Grotesk", file: "SpaceGrotesk-Variable", weight: 700),
+    TextFont(id: "staatliches", label: "Staatliches", file: "Staatliches-Regular"),
   ]
 
   static func byId(_ id: String) -> TextFont { all.first { $0.id == id } ?? all[0] }
@@ -413,10 +461,66 @@ enum TextRenderer {
     }
   }
 
+  /// How long exit effects take (less on very short captions).
+  static let exitMs: Int64 = 500
+
+  static func exitMs(of layer: TextLayer) -> Int64 { min(exitMs, (layer.endMs - layer.startMs) / 2) }
+
+  /// 0 while the caption is fully on screen, rising to 1 at its end while its exit plays.
+  static func exitProgress(_ layer: TextLayer, _ tMs: Int64) -> CGFloat {
+    guard layer.exit != .NONE else { return 0 }
+    let d = exitMs(of: layer)
+    let remaining = layer.endMs - tMs
+    guard d > 0, remaining < d else { return 0 }
+    return min(max(1 - CGFloat(remaining) / CGFloat(d), 0), 1)
+  }
+
+  private static func easeIn(_ t: CGFloat) -> CGFloat {
+    let x = min(max(t, 0), 1)
+    return x * x * x
+  }
+
+  /// The whole-block part of an exit at progress q (0...1).
+  private static func applyExit(_ exit: TextExit, _ q: CGFloat, _ m: inout Motion) {
+    guard q > 0 else { return }
+    let e = easeIn(q)
+    switch exit {
+    case .FADE: m.alpha *= 1 - q
+    case .SHRINK: m.scale *= max(1 - e, 0.01)
+    case .BLOW_UP: m.scale *= 1 + 1.5 * e; m.alpha *= 1 - q
+    case .SPIN: m.rotation += 360 * e; m.scale *= max(1 - e, 0.01)
+    case .SLIDE_UP: m.dy -= 3 * e; m.alpha *= 1 - e
+    case .SLIDE_DOWN: m.dy += 3 * e; m.alpha *= 1 - e
+    case .SLIDE_LEFT: m.dx -= 5 * e; m.alpha *= 1 - e
+    case .SLIDE_RIGHT: m.dx += 5 * e; m.alpha *= 1 - e
+    case .FLICKER_OUT: m.alpha *= (q > 0.85 || sin(q * 60) > 0.2) ? 0 : 1
+    default: break
+    }
+  }
+
+  /// Per-letter part of an exit: (extra dy in font units, alpha multiplier), or nil to hide the glyph.
+  private static func glyphExit(_ exit: TextExit, _ q: CGFloat, _ i: Int, _ count: Int) -> (CGFloat, CGFloat)? {
+    guard q > 0 else { return (0, 1) }
+    switch exit {
+    case .ERASE:
+      return CGFloat(i) < CGFloat(count) * (1 - q) ? (0, 1) : nil
+    case .FALL:
+      let k = min(max(q * 1.6 - CGFloat(i) / CGFloat(max(count, 1)) * 0.6, 0), 1)
+      return (3 * easeIn(k), 1 - k)
+    case .SCATTER:
+      let k = easeIn(q)
+      let dir: CGFloat = i % 2 == 0 ? -1 : 1
+      return (dir * 2.5 * k * (1 + CGFloat(i % 3) * 0.4), 1 - q)
+    default:
+      return (0, 1)
+    }
+  }
+
   /// True while this layer looks different from one frame to the next.
   static func isAnimating(_ layer: TextLayer, at tMs: Int64) -> Bool {
     let local = tMs - layer.startMs
     let n = Int64(layer.text.count)
+    if layer.exit != .NONE && layer.endMs - tMs < exitMs(of: layer) + 50 { return true }
     switch layer.animation {
     case .NONE: return false
     case .WAVE, .JUMP, .SHAKE, .PULSE, .SWING, .FLICKER, .RAINBOW: return true
@@ -429,7 +533,8 @@ enum TextRenderer {
   /// Output time at which a caption has finished entering (drawn while it's selected and paused).
   static func settledTimeMs(_ layer: TextLayer) -> Int64 {
     let entrance = max(entranceMs + 100, Int64(layer.text.count) * 70 + 600)
-    return min(layer.startMs + entrance, layer.endMs - 1)
+    let lastSettled = max(layer.startMs, layer.endMs - exitMs(of: layer) - 1)
+    return min(layer.startMs + entrance, lastSettled)
   }
 
   // MARK: Drawing helpers
@@ -453,8 +558,17 @@ enum TextRenderer {
   private static func hex(_ v: UInt32) -> Int32 { Int32(bitPattern: v) }
 
   /// Gradient fills: colours, locations and whether it runs vertically (else horizontally).
-  private static func gradient(_ style: TextStyleEffect) -> ([Int32], [CGFloat], Bool)? {
-    switch style {
+  private static func gradient(_ layer: TextLayer) -> ([Int32], [CGFloat], Bool)? {
+    switch layer.style {
+    case .CHROME:
+      return ([hex(0xFFFF_FFFF), hex(0xFFB0_BEC5), hex(0xFF37_474F), hex(0xFFEC_EFF1), hex(0xFF90_A4AE)],
+              [0, 0.4, 0.52, 0.7, 1], true)
+    case .FIRE:
+      return ([hex(0xFFD5_0000), hex(0xFFFF_6D00), hex(0xFFFF_D600)], [0, 0.5, 1], true)
+    case .ICE:
+      return ([hex(0xFFFF_FFFF), hex(0xFFB3_E5FC), hex(0xFF29_B6F6)], [0, 0.5, 1], true)
+    case .SPLIT:
+      return ([layer.color, layer.color, layer.accentColor, layer.accentColor], [0, 0.5, 0.5, 1], true)
     case .GOLD:
       return ([hex(0xFFFF_F3B0), hex(0xFFFF_C837), hex(0xFFB8_860B), hex(0xFFFF_E08A)], [0, 0.45, 0.7, 1], true)
     case .SUNSET:
@@ -497,7 +611,9 @@ enum TextRenderer {
     let local = tMs - layer.startMs
     let layout = layout(layer, frameH: frameH)
     let s = layout.sizePx
-    let motion = blockMotion(layer.animation, local)
+    var motion = blockMotion(layer.animation, local)
+    let exitQ = exitProgress(layer, tMs)
+    applyExit(layer.exit, exitQ, &motion)
     let alpha = min(max(CGFloat(layer.opacity) * motion.alpha, 0), 1)
     guard alpha > 0.001 else { return }
     let totalScale = CGFloat(layer.scale) * motion.scale
@@ -547,7 +663,7 @@ enum TextRenderer {
     }
 
     drawGlyphs(ctx, layer: layer, layout: layout, local: local, alpha: alpha, lineStartX: lineStartX,
-               top0: top0, baseOffset: baseOffset, mirror: false, shadowScale: totalScale)
+               top0: top0, baseOffset: baseOffset, mirror: false, shadowScale: totalScale, exitQ: exitQ)
 
     if layer.style == .REFLECTION {
       let bottom = top0 + layout.height
@@ -560,7 +676,7 @@ enum TextRenderer {
       ctx.translateBy(x: 0, y: 2 * bottom + gap)
       ctx.scaleBy(x: 1, y: -1)
       drawGlyphs(ctx, layer: layer, layout: layout, local: local, alpha: alpha * 0.45, lineStartX: lineStartX,
-                 top0: top0, baseOffset: baseOffset, mirror: true, shadowScale: totalScale)
+                 top0: top0, baseOffset: baseOffset, mirror: true, shadowScale: totalScale, exitQ: exitQ)
       ctx.restoreGState()
       ctx.setBlendMode(.destinationIn)
       if let fade = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
@@ -578,9 +694,9 @@ enum TextRenderer {
 
   private static func drawGlyphs(_ ctx: CGContext, layer: TextLayer, layout: Layout, local: Int64, alpha: CGFloat,
                                  lineStartX: (Line) -> CGFloat, top0: CGFloat, baseOffset: CGFloat, mirror: Bool,
-                                 shadowScale: CGFloat) {
+                                 shadowScale: CGFloat, exitQ: CGFloat) {
     let s = layout.sizePx
-    let fillGradient = gradient(layer.style)
+    let fillGradient = gradient(layer)
     let total = layout.lines.reduce(0) { $0 + $1.glyphs.count }
     var index = 0
     let space = CGColorSpaceCreateDeviceRGB()
@@ -592,9 +708,10 @@ enum TextRenderer {
         defer { x += line.advances[gi] }
         let i = index
         index += 1
-        guard let gm = glyphMotion(layer.animation, local, i, total) else { continue }
-        let a = alpha * gm.1
-        let y = baseline + gm.0 * s
+        guard let gm = glyphMotion(layer.animation, local, i, total),
+              let ge = glyphExit(layer.exit, exitQ, i, total) else { continue }
+        let a = alpha * gm.1 * ge.1
+        let y = baseline + (gm.0 + ge.0) * s
         let color: Int32
         if layer.animation == .RAINBOW {
           let hue = ((CGFloat(local) / 1000) * 120 + CGFloat(i) * 25).truncatingRemainder(dividingBy: 360) / 360
@@ -669,6 +786,28 @@ enum TextRenderer {
             fill(path(dx: 0.05 * s), cg(hex(0xFFFF_1744), a * 0.85))
           case .GOLD:
             stroke(p, cg(hex(0xFF6B_4A00), a), 0.05 * s)
+          case .STICKER:
+            ctx.saveGState()
+            ctx.setShadow(offset: .zero, blur: 0.12 * s * shadowScale, color: CGColor(red: 0, green: 0, blue: 0, alpha: a * 0.45))
+            stroke(p, CGColor(red: 1, green: 1, blue: 1, alpha: a), 0.3 * s)
+            ctx.restoreGState()
+          case .LONG_SHADOW:
+            let shade = cg(layer.accentColor, a)
+            for k in stride(from: 18, through: 1, by: -1) {
+              fill(path(dx: CGFloat(k) * 0.02 * s, dy: CGFloat(k) * 0.02 * s), shade)
+            }
+          case .DOUBLE_OUTLINE:
+            stroke(p, cg(color, a), 0.32 * s)
+            stroke(p, cg(layer.accentColor, a), 0.18 * s)
+          case .CHROME:
+            stroke(p, cg(hex(0xFF26_3238), a), 0.06 * s)
+          case .FIRE:
+            glowFill(p, cg(hex(0xFFFF_6D00), a), blur: 0.4 * s, glow: cg(hex(0xFFFF_3D00), a))
+          case .ICE:
+            glowFill(p, cg(hex(0xFF81_D4FA), a), blur: 0.3 * s, glow: cg(hex(0xFF00_E5FF), a))
+            stroke(p, CGColor(red: 1, green: 1, blue: 1, alpha: a), 0.05 * s)
+          case .CANDY:
+            stroke(p, CGColor(red: 1, green: 1, blue: 1, alpha: a), 0.12 * s)
           default:
             break
           }
@@ -676,6 +815,22 @@ enum TextRenderer {
 
         if layer.style == .HOLLOW && !mirror {
           stroke(p, cg(color, a), 0.07 * s)
+        } else if layer.style == .CANDY && layer.animation != .RAINBOW {
+          // Diagonal stripes of the two colours, clipped to the letter.
+          ctx.saveGState()
+          ctx.addPath(p)
+          ctx.clip()
+          fill(p, cg(layer.color, a))
+          ctx.rotate(by: -.pi / 4)
+          let period = 0.18 * s * 1.41421356
+          let reach = layout.width + layout.height + 4 * s
+          ctx.setFillColor(cg(layer.accentColor, a))
+          var sx = -reach
+          while sx < reach {
+            ctx.fill(CGRect(x: sx, y: -reach, width: period / 2, height: 2 * reach))
+            sx += period
+          }
+          ctx.restoreGState()
         } else if layer.style != .GLOW || mirror {
           if let fg = fillGradient, layer.animation != .RAINBOW,
              let gradient = CGGradient(colorsSpace: space, colors: fg.0.map { cg($0, 1) } as CFArray,

@@ -25,7 +25,15 @@ struct EditorView: View {
     VStack(spacing: 0) {
       topBar
       videoArea
-      editingPanel
+      if case .text(let id) = panel {
+        // In place of the timeline + tools, never over the video.
+        TextEditorPanel(viewModel: viewModel, layerId: id, onClose: { panel = nil })
+          .padding(16)
+          .background(EditorPalette.surfaceElevated)
+          .clipShape(RoundedRectangle(cornerRadius: 16))
+      } else {
+        editingPanel
+      }
     }
     .background(EditorPalette.background.ignoresSafeArea())
     .overlay(alignment: .bottom) { panelOverlay }
@@ -160,7 +168,7 @@ struct EditorView: View {
 
   @ViewBuilder
   private var panelOverlay: some View {
-    if let panel {
+    if let panel, !isTextPanel(panel) {
       VStack(alignment: .leading, spacing: 12) {
         HStack {
           Text(panelTitle(panel)).font(.headline).foregroundColor(.white)
@@ -173,7 +181,7 @@ struct EditorView: View {
                                 onRemoved: { self.panel = nil })
         case .speed: SpeedPanel(viewModel: viewModel)
         case .effects: EffectsPanel(viewModel: viewModel)
-        case .text(let id): TextEditorPanel(viewModel: viewModel, layerId: id, onClose: { self.panel = nil })
+        case .text: EmptyView()
         }
       }
       .padding(16)
@@ -182,6 +190,11 @@ struct EditorView: View {
       .shadow(radius: 12)
       .transition(.move(edge: .bottom))
     }
+  }
+
+  private func isTextPanel(_ panel: Panel) -> Bool {
+    if case .text = panel { return true }
+    return false
   }
 
   private func panelTitle(_ panel: Panel) -> String {

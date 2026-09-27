@@ -226,6 +226,22 @@ fun EditorScreen(
                 }
             }
 
+            // Text editing replaces the timeline + tools in this same space
+            // (the video above just shrinks a little), instead of a sheet
+            // over the video.
+            val editingText = editingTextId
+            if (editingText != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(topStart = AdGagRadius.lg.dp, topEnd = AdGagRadius.lg.dp))
+                        .background(AdGagColors.SurfaceElevated)
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .padding(vertical = AdGagSpacing.sm.dp),
+                ) {
+                    TextEditorPanel(viewModel = viewModel, layerId = editingText, onDismiss = { editingTextId = null })
+                }
+            } else
             // Editing panel — its own space below the video, never over it.
             Column(
                 modifier = Modifier
@@ -317,9 +333,7 @@ fun EditorScreen(
         if (showEffectsSheet) {
             EffectsSheet(viewModel = viewModel, onDismiss = { showEffectsSheet = false })
         }
-        editingTextId?.let { id ->
-            TextEditorSheet(viewModel = viewModel, layerId = id, onDismiss = { editingTextId = null })
-        }
+
     }
 }
 

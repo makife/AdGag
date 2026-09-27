@@ -160,13 +160,13 @@ struct TextOverlayView: View {
 // MARK: - Editing panel
 
 private enum TextTab: String, CaseIterable {
-  case font = "Font", style = "Style", motion = "Motion", color = "Color", size = "Size"
+  case font = "Font", style = "Style", motion = "In", exit = "Out", color = "Color", size = "Size"
 }
 
-/// Edits one caption: its words, then Font / Style / Motion / Color / Size.
-/// Every change applies at once (the preview above updates live). Font,
-/// style and motion choices are live renders of the caption itself —
-/// motion ones animated.
+/// Edits one caption: its words, then Font / Style / In / Out / Color / Size.
+/// Shown IN PLACE of the timeline and tools (not over the video), so the
+/// video just gets a bit smaller and every change shows there live. Font,
+/// style and motion choices are live renders of the caption itself.
 struct TextEditorPanel: View {
   @ObservedObject var viewModel: EditorViewModel
   let layerId: String
@@ -178,6 +178,7 @@ struct TextEditorPanel: View {
     if let layer = viewModel.textLayers.first(where: { $0.id == layerId }) {
       VStack(alignment: .leading, spacing: 10) {
         HStack(spacing: 8) {
+          Text("Text").font(.headline).foregroundColor(.white)
           TextField("Type something", text: Binding(
             get: { layer.text },
             set: { var l = layer; l.text = String($0.prefix(120)); viewModel.updateText(l) }))
@@ -190,6 +191,7 @@ struct TextEditorPanel: View {
             onClose()
           }
           .foregroundColor(EditorPalette.danger)
+          Button("Done", action: onClose).foregroundColor(EditorPalette.pink)
         }
         HStack(spacing: 6) {
           ForEach(TextTab.allCases, id: \.self) { t in
@@ -221,13 +223,20 @@ struct TextEditorPanel: View {
                            preview: { anim in var l = layer; l.animation = anim; l.text = "Wow"; return l },
                            label: { $0.label }, animated: true,
                            onSelect: { anim in var l = layer; l.animation = anim; viewModel.updateText(l) })
+          case .exit:
+            // Each chip shows the word, then it leaving (looping).
+            PreviewChipRow(items: TextExit.allCases, isSelected: { $0 == layer.exit },
+                           preview: { exit in var l = layer; l.exit = exit; l.text = "Bye"; l.animation = .NONE; return l },
+                           label: { $0.label }, animated: true,
+                           onSelect: { exit in var l = layer; l.exit = exit; viewModel.updateText(l) },
+                           previewEndMs: 1_600, loopMs: 2_100)
           case .color:
             ColorTab(layer: layer) { viewModel.updateText($0) }
           case .size:
             SizeTab(layer: layer) { viewModel.updateText($0) }
           }
         }
-        .frame(height: 150, alignment: .top)
+        .frame(height: 116, alignment: .top)
       }
       .onDisappear { viewModel.removeTextIfBlank(layerId) }
     }
@@ -242,6 +251,9 @@ private struct PreviewChipRow<Item: Hashable>: View {
   let label: ((Item) -> String)?
   let animated: Bool
   let onSelect: (Item) -> Void
+  /// Where the chip's caption ends (exit previews); otherwise it never ends.
+  var previewEndMs: Int64 = Int64.max / 4
+  var loopMs: Int64 = 2_400
 
   var body: some View {
     ScrollView(.horizontal, showsIndicators: false) {
@@ -251,7 +263,7 @@ private struct PreviewChipRow<Item: Hashable>: View {
           Button { onSelect(item) } label: {
             VStack(spacing: 4) {
               chip(preview(item))
-                .frame(width: label == nil ? 112 : 84, height: label == nil ? 112 : 96)
+                .frame(width: label == nil ? 104 : 76, height: label == nil ? 96 : 72)
                 .background(Color(red: 0.16, green: 0.16, blue: 0.19))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8)
@@ -271,7 +283,7 @@ private struct PreviewChipRow<Item: Hashable>: View {
   private func chip(_ base: TextLayer) -> some View {
     if animated {
       TimelineView(.animation) { context in
-        let t = Int64(context.date.timeIntervalSinceReferenceDate * 1000) % 2_400
+        let t = Int64(context.date.timeIntervalSinceReferenceDate * 1000) % loopMs
         canvas(base, tMs: t)
       }
     } else {
@@ -288,7 +300,7 @@ private struct PreviewChipRow<Item: Hashable>: View {
       layer.opacity = 1
       layer.align = .CENTER
       layer.startMs = 0
-      layer.endMs = Int64.max / 4
+      layer.endMs = previewEndMs
       layer.sizeFrac = 0.3
       let layout = TextRenderer.layout(layer, frameH: size.height)
       layer.scale = Double(min(1, size.width * 0.72 / max(1, layout.width)))

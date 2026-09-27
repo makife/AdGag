@@ -2,6 +2,7 @@ package com.adgag.adgag.editor
 
 import android.graphics.DashPathEffect
 import android.graphics.Paint
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -72,7 +73,8 @@ import kotlin.math.min
 /** Output time at which a caption has finished entering (what's shown while it's selected and paused). */
 private fun settledTimeMs(layer: TextLayer): Long {
     val entrance = max(TextRenderer.ENTRANCE_MS + 100, layer.text.length * 70L + 600)
-    return min(layer.startMs + entrance, layer.endMs - 1)
+    val lastSettled = max(layer.startMs, layer.endMs - TextRenderer.exitMsOf(layer) - 1)
+    return min(layer.startMs + entrance, lastSettled)
 }
 
 /**
@@ -207,33 +209,32 @@ private fun DrawScope.drawCaptions(viewModel: EditorViewModel, globalMs: Long) {
     }
 }
 
-private enum class TextTab(val label: String) { FONT("Font"), STYLE("Style"), MOTION("Motion"), COLOR("Color"), SIZE("Size") }
+private enum class TextTab(val label: String) { FONT("Font"), STYLE("Style"), MOTION("In"), EXIT("Out"), COLOR("Color"), SIZE("Size") }
 
 /**
- * Edits one caption: its words, then Font / Style / Motion / Color / Size.
- * Every change applies at once (the preview above updates live — the
- * sheet has no scrim so the video stays visible). Style and motion
- * choices are previewed with the caption's own font and colours, motion
- * ones animated.
+ * Edits one caption: its words, then Font / Style / In / Out / Color / Size.
+ * Shown IN PLACE of the timeline and tools (not as a sheet over the video
+ * — a sheet covered part of it, user report), so the video just gets a
+ * bit smaller and stays fully visible; every change shows there live.
+ * Font/style/motion choices are live renders of the caption itself.
  */
 @UnstableApi
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TextEditorSheet(viewModel: EditorViewModel, layerId: String, onDismiss: () -> Unit) {
-    val layer = viewModel.textLayers.firstOrNull { it.id == layerId } ?: return
+fun TextEditorPanel(viewModel: EditorViewModel, layerId: String, onDismiss: () -> Unit) {
+    val layer = viewModel.textLayers.firstOrNull { it.id == layerId }
+    if (layer == null) {
+        LaunchedEffect(layerId) { onDismiss() }
+        return
+    }
     val close = {
         if (viewModel.textLayers.firstOrNull { it.id == layerId }?.text?.isBlank() == true) viewModel.removeText(layerId)
         onDismiss()
     }
     var tab by remember { mutableStateOf(TextTab.STYLE) }
+    BackHandler(onBack = close)
 
-    ModalBottomSheet(
-        onDismissRequest = close,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = AdGagColors.SurfaceElevated,
-        scrimColor = Color.Transparent,
-    ) {
-        Column(modifier = Modifier.padding(bottom = AdGagSpacing.lg.dp)) {
+    run {
+        Column {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = AdGagSpacing.lg.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -256,7 +257,7 @@ fun TextEditorSheet(viewModel: EditorViewModel, layerId: String, onDismiss: () -
                 value = layer.text,
                 onValueChange = { viewModel.updateText(layer.copy(text = it.take(120))) },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = AdGagSpacing.lg.dp),
-                maxLines = 3,
+                maxLines = 2,
                 placeholder = { Text("Type something", color = AdGagColors.OnSurfaceMuted) },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = AdGagColors.OnBackground,
@@ -291,7 +292,7 @@ fun TextEditorSheet(viewModel: EditorViewModel, layerId: String, onDismiss: () -
                 }
             }
             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(150.dp)) {
+            Box(modifier = Modifier.fillMaxWidth().height(116.dp)) {
                 when (tab) {
                     TextTab.FONT -> PreviewChipRow(
                         viewModel = viewModel,
@@ -320,6 +321,18 @@ fun TextEditorSheet(viewModel: EditorViewModel, layerId: String, onDismiss: () -
                         animated = true,
                         onSelect = { viewModel.updateText(layer.copy(animation = it)) },
                     )
+                    // Exits: each chip shows the word, then it leaving (looping).
+                    TextTab.EXIT -> PreviewChipRow(
+                        viewModel = viewModel,
+                        items = TextExit.entries,
+                        isSelected = { it == layer.exit },
+                        previewOf = { exit -> layer.copy(exit = exit, text = "Bye", animation = TextAnimation.NONE) },
+                        label = { it.label },
+                        animated = true,
+                        onSelect = { viewModel.updateText(layer.copy(exit = it)) },
+                        previewEndMs = 1_600L,
+                        loopMs = 2_100L,
+                    )
                     TextTab.COLOR -> ColorTab(layer, onChange = { viewModel.updateText(it) })
                     TextTab.SIZE -> SizeTab(layer, onChange = { viewModel.updateText(it) })
                 }
@@ -343,6 +356,9 @@ private fun <T> PreviewChipRow(
     label: ((T) -> String)?,
     animated: Boolean,
     onSelect: (T) -> Unit,
+    /** Where the chip's caption ends (exit previews); otherwise it never ends. */
+    previewEndMs: Long = Long.MAX_VALUE / 4,
+    loopMs: Long = 2_400L,
 ) {
     val clock = remember { mutableLongStateOf(0L) }
     if (animated) {
@@ -361,12 +377,12 @@ private fun <T> PreviewChipRow(
             val selected = isSelected(item)
             val preview = previewOf(item).copy(
                 x = 0.5f, y = 0.5f, rotationDeg = 0f, scale = 1f, opacity = 1f,
-                align = TextAlignment.CENTER, startMs = 0L, endMs = Long.MAX_VALUE / 4,
+                align = TextAlignment.CENTER, startMs = 0L, endMs = previewEndMs,
             )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     modifier = Modifier
-                        .size(width = if (label == null) 116.dp else 84.dp, height = if (label == null) 116.dp else 96.dp)
+                        .size(width = if (label == null) 104.dp else 76.dp, height = if (label == null) 96.dp else 72.dp)
                         .clip(RoundedCornerShape(AdGagRadius.sm.dp))
                         .border(
                             BorderStroke(if (selected) 2.dp else 1.dp, if (selected) AdGagColors.GradientPink else AdGagColors.Border),
@@ -375,7 +391,7 @@ private fun <T> PreviewChipRow(
                         .background(Color(0xFF2A2A30))
                         .clickable { onSelect(item) }
                         .drawBehind {
-                            val t = if (animated) clock.longValue % 2_400L else 10_000L
+                            val t = if (animated) clock.longValue % loopMs else 10_000L
                             val sized = preview.copy(sizeFrac = 0.3f)
                             val layout = TextRenderer.layout(sized, size.height, viewModel.fonts)
                             val fit = min(1f, size.width * 0.72f / max(1f, layout.width))

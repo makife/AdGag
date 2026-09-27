@@ -834,7 +834,12 @@ private fun RowScope.TextRow(viewModel: EditorViewModel, density: Density, onEdi
                 .background(AdGagColors.GradientPink.copy(alpha = 0.45f))
                 .border(BorderStroke(2.dp, AdGagColors.GradientPink), RoundedCornerShape(AdGagRadius.sm.dp))
                 .pointerInput(sel.id) { detectTapGestures { onEditText(sel.id) } }
-                .pointerInput(sel.id) {
+                // Keyed on the committed timing too: the drag reads localStart/
+                // localEnd, which are NEW state objects after every commit
+                // (remember(sel.id, sel.startMs)); a block keyed on the id only
+                // kept writing to the first drag's dead state, so the caption
+                // could be moved once and then never again (user report).
+                .pointerInput(sel.id, sel.startMs, sel.endMs, total) {
                     detectDragGestures(
                         onDragEnd = { commit() },
                         onDrag = { change, drag ->
