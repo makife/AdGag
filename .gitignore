@@ -7,6 +7,10 @@
 .pub/
 build/
 *.g.dart
+# ...except inside vendored packages: their .g.dart files are part of the
+# published package source, not something our build regenerates (the
+# vendored camera plugin failed to compile on CI without it).
+!third_party/**/*.g.dart
 *.freezed.dart
 **/generated_plugin_registrant.dart
 
