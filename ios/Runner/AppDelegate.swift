@@ -34,27 +34,32 @@ import UIKit
     let channel = FlutterMethodChannel(name: "com.adgag.adgag/native_editor", binaryMessenger: messenger)
     channel.setMethodCallHandler { [weak self] call, result in
       guard call.method == "openEditor" else {
+        // readAndClearNativeEditorDebugLog is Android-only; Dart treats this as "nothing to report".
         result(FlutterMethodNotImplemented)
         return
       }
-      guard
-        let args = call.arguments as? [String: Any],
-        let videoPath = args["videoPath"] as? String
-      else {
-        result(FlutterError(code: "MISSING_ARG", message: "videoPath is required", details: nil))
+      let args = call.arguments as? [String: Any] ?? [:]
+      // Same contract as Android (MainActivity): a fresh session from
+      // videoPath, or a resumed one from state (+ an optional new clip
+      // recorded via the timeline's "+").
+      let state: EditorSessionState
+      if let json = args["state"] as? String, let decoded = EditorSessionState.fromJSON(json) {
+        state = decoded
+      } else if let videoPath = args["videoPath"] as? String,
+                let durationMs = EditorViewModel.durationMs(path: videoPath) {
+        state = EditorSessionState.initial(clipPath: videoPath, sourceDurationMs: durationMs)
+      } else {
+        result(FlutterError(code: "MISSING_ARG", message: "videoPath or state is required", details: nil))
         return
       }
-      self?.presentNativeEditor(videoPath: videoPath, result: result)
+      self?.presentNativeEditor(state: state, newClipPath: args["newClipPath"] as? String, result: result)
     }
   }
 
-  /// Presents the native editor screen (`EditorView`/`EditorViewModel`,
-  /// see those files' own doc comments) modally over whatever's
-  /// currently key-window-visible, and resolves Flutter's pending
-  /// `result` when the user either exports (path/duration) or cancels
-  /// (`nil` — not an error, matching how the rest of the creation flow
-  /// already treats "user backed out").
-  private func presentNativeEditor(videoPath: String, result: @escaping FlutterResult) {
+  /// Presents the editor full screen and resolves Flutter's `result` once:
+  /// exported → {action: exported, path, durationMs}; "+" →
+  /// {action: addClip, state, remainingMs}; cancel → nil.
+  private func presentNativeEditor(state: EditorSessionState, newClipPath: String?, result: @escaping FlutterResult) {
     guard
       let windowScene = UIApplication.shared.connectedScenes
         .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
@@ -64,29 +69,29 @@ import UIKit
       return
     }
 
-    let sourceURL = URL(fileURLWithPath: videoPath)
     let outputURL = FileManager.default.temporaryDirectory
       .appendingPathComponent("adgag_native_export_\(Int(Date().timeIntervalSince1970 * 1000)).mp4")
-    let viewModel = EditorViewModel(sourceURL: sourceURL)
+    let viewModel = EditorViewModel(state: state, newClipPath: newClipPath)
 
     var didFinish = false
-    let finish: (String?, Double?) -> Void = { path, durationSeconds in
+    let finish: (Any?) -> Void = { value in
       guard !didFinish else { return }
       didFinish = true
+      viewModel.pause()
       presenter.dismiss(animated: true)
-      if let path, let durationSeconds {
-        result(["path": path, "durationMs": Int(durationSeconds * 1000)])
-      } else {
-        result(nil)
-      }
+      result(value)
     }
 
     let editorView = EditorView(
       viewModel: viewModel,
       exportOutputURL: outputURL,
-      onCancel: { finish(nil, nil) },
-      onExported: { path, durationSeconds in finish(path, durationSeconds) }
-    )
+      onCancel: { finish(nil) },
+      onExported: { path, durationMs in
+        finish(["action": "exported", "path": path, "durationMs": durationMs])
+      },
+      onAddClip: { stateJSON, remainingMs in
+        finish(["action": "addClip", "state": stateJSON, "remainingMs": remainingMs])
+      })
     let hostingController = UIHostingController(rootView: editorView)
     hostingController.modalPresentationStyle = .fullScreen
     presenter.present(hostingController, animated: true)

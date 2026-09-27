@@ -14,6 +14,10 @@
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
 		AD0E0002A1B2C3D4E5F60002 /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0E0001A1B2C3D4E5F60001 /* EditorView.swift */; };
 		AD0E0004A1B2C3D4E5F60004 /* EditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0E0003A1B2C3D4E5F60003 /* EditorViewModel.swift */; };
+		AD0E0006A1B2C3D4E5F60006 /* EditorModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0E0005A1B2C3D4E5F60005 /* EditorModels.swift */; };
+		AD0E0008A1B2C3D4E5F60008 /* EditorComposition.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0E0007A1B2C3D4E5F60007 /* EditorComposition.swift */; };
+		AD0E000AA1B2C3D4E5F6000A /* EditorTimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0E0009A1B2C3D4E5F60009 /* EditorTimelineView.swift */; };
+		AD0E000CA1B2C3D4E5F6000C /* AdGagFilters.metal in Sources */ = {isa = PBXBuildFile; fileRef = AD0E000BA1B2C3D4E5F6000B /* AdGagFilters.metal */; };
 		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
@@ -54,6 +58,10 @@
 		7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		AD0E0001A1B2C3D4E5F60001 /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/EditorView.swift; sourceTree = "<group>"; };
 		AD0E0003A1B2C3D4E5F60003 /* EditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/EditorViewModel.swift; sourceTree = "<group>"; };
+		AD0E0005A1B2C3D4E5F60005 /* EditorModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/EditorModels.swift; sourceTree = "<group>"; };
+		AD0E0007A1B2C3D4E5F60007 /* EditorComposition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/EditorComposition.swift; sourceTree = "<group>"; };
+		AD0E0009A1B2C3D4E5F60009 /* EditorTimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/EditorTimelineView.swift; sourceTree = "<group>"; };
+		AD0E000BA1B2C3D4E5F6000B /* AdGagFilters.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Editor/AdGagFilters.metal; sourceTree = "<group>"; };
 		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
@@ -129,6 +137,10 @@
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				AD0E0001A1B2C3D4E5F60001 /* EditorView.swift */,
 				AD0E0003A1B2C3D4E5F60003 /* EditorViewModel.swift */,
+				AD0E0005A1B2C3D4E5F60005 /* EditorModels.swift */,
+				AD0E0007A1B2C3D4E5F60007 /* EditorComposition.swift */,
+				AD0E0009A1B2C3D4E5F60009 /* EditorTimelineView.swift */,
+				AD0E000BA1B2C3D4E5F6000B /* AdGagFilters.metal */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
@@ -292,6 +304,10 @@
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 				AD0E0002A1B2C3D4E5F60002 /* EditorView.swift in Sources */,
 				AD0E0004A1B2C3D4E5F60004 /* EditorViewModel.swift in Sources */,
+				AD0E0006A1B2C3D4E5F60006 /* EditorModels.swift in Sources */,
+				AD0E0008A1B2C3D4E5F60008 /* EditorComposition.swift in Sources */,
+				AD0E000AA1B2C3D4E5F6000A /* EditorTimelineView.swift in Sources */,
+				AD0E000CA1B2C3D4E5F6000C /* AdGagFilters.metal in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -392,6 +408,8 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.adgag.adgag;
+				MTL_COMPILER_FLAGS = "-fcikernel";
+				MTLLINKER_FLAGS = "-cikernel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -573,6 +591,8 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.adgag.adgag;
+				MTL_COMPILER_FLAGS = "-fcikernel";
+				MTLLINKER_FLAGS = "-cikernel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -595,6 +615,8 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.adgag.adgag;
+				MTL_COMPILER_FLAGS = "-fcikernel";
+				MTLLINKER_FLAGS = "-cikernel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
