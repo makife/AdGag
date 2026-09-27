@@ -67,7 +67,9 @@ struct TextOverlayView: View {
               StickerRenderer.draw(cg, layer: sticker, frameW: size.width, frameH: size.height,
                                    tMs: frozen ? min(sticker.startMs + 400, sticker.endMs - 1) : tMs)
               if sticker.id == selected {
-                let half = StickerRenderer.halfSide(sticker, frameH: size.height) * 1.1
+                let hs = StickerRenderer.halfSize(sticker, frameH: size.height)
+                let hw = hs.width * 1.1
+                let hh = hs.height * 1.1
                 let s = CGFloat(sticker.scale)
                 cg.saveGState()
                 cg.translateBy(x: CGFloat(sticker.x) * size.width, y: CGFloat(sticker.y) * size.height)
@@ -76,7 +78,7 @@ struct TextOverlayView: View {
                 cg.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
                 cg.setLineWidth(1.5 / s)
                 cg.setLineDash(phase: 0, lengths: [9 / s, 6 / s])
-                cg.addPath(CGPath(roundedRect: CGRect(x: -half, y: -half, width: 2 * half, height: 2 * half),
+                cg.addPath(CGPath(roundedRect: CGRect(x: -hw, y: -hh, width: 2 * hw, height: 2 * hh),
                                   cornerWidth: 6 / s, cornerHeight: 6 / s, transform: nil))
                 cg.strokePath()
                 cg.restoreGState()
@@ -282,10 +284,12 @@ struct TextEditorPanel: View {
                            label: { $0.label }, animated: true,
                            onSelect: { exit in var l = layer; l.exit = exit; viewModel.updateText(l) },
                            previewEndMs: 1_600, loopMs: 2_100)
+          // These two are taller than the tab area: they scroll (user report:
+          // some Size controls didn't fit).
           case .color:
-            ColorTab(layer: layer) { viewModel.updateText($0) }
+            ScrollView { ColorTab(layer: layer) { viewModel.updateText($0) } }
           case .size:
-            SizeTab(layer: layer) { viewModel.updateText($0) }
+            ScrollView { SizeTab(layer: layer) { viewModel.updateText($0) } }
           }
         }
         .frame(height: 116, alignment: .top)

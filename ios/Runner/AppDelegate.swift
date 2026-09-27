@@ -39,6 +39,7 @@ import UIKit
         return
       }
       let args = call.arguments as? [String: Any] ?? [:]
+      if let key = args["giphyApiKey"] as? String { GiphyConfig.apiKey = key }
       // Same contract as Android (MainActivity): a fresh session from
       // videoPath, or a resumed one from state (+ an optional new clip
       // recorded via the timeline's "+").

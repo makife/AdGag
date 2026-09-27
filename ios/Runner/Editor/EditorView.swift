@@ -22,25 +22,24 @@ struct EditorView: View {
 
   @State private var panel: Panel?
   @State private var pickingMusic = false
+  /// The bottom panel dragged down out of the way (the video gets the space).
+  @State private var panelCollapsed = false
+
+  private enum BottomKind: Hashable { case editor, text, stickers }
+
+  private var bottomKind: BottomKind {
+    switch panel {
+    case .text: return .text
+    case .stickers: return .stickers
+    default: return .editor
+    }
+  }
 
   var body: some View {
     VStack(spacing: 0) {
       topBar
       videoArea
-      if case .text(let id) = panel {
-        // In place of the timeline + tools, never over the video.
-        TextEditorPanel(viewModel: viewModel, layerId: id, onClose: { panel = nil })
-          .padding(16)
-          .background(EditorPalette.surfaceElevated)
-          .clipShape(RoundedRectangle(cornerRadius: 16))
-      } else if case .stickers(let id) = panel {
-        StickerPanel(viewModel: viewModel, editingId: id, onClose: { panel = nil })
-          .padding(16)
-          .background(EditorPalette.surfaceElevated)
-          .clipShape(RoundedRectangle(cornerRadius: 16))
-      } else {
-        editingPanel
-      }
+      bottomPanel
     }
     .background(EditorPalette.background.ignoresSafeArea())
     .overlay(alignment: .bottom) { panelOverlay }
@@ -110,6 +109,41 @@ struct EditorView: View {
     panel = .text(layer.id)
   }
 
+  // MARK: Bottom panel
+
+  /// The editor (timeline + tools), or the text / sticker editors IN ITS
+  /// PLACE — never over the video. The grab bar collapses it (the video
+  /// grows into the space) and expands it again; a newly opened panel
+  /// slides up.
+  private var bottomPanel: some View {
+    VStack(spacing: 0) {
+      PanelHandle(collapsed: $panelCollapsed,
+                  label: bottomKind == .text ? "Text" : bottomKind == .stickers ? "Stickers" : "Editor",
+                  onDone: bottomKind == .editor ? nil : { panel = nil })
+      if !panelCollapsed {
+        Group {
+          switch panel {
+          case .text(let id):
+            TextEditorPanel(viewModel: viewModel, layerId: id, onClose: { panel = nil })
+          case .stickers(let id):
+            StickerPanel(viewModel: viewModel, editingId: id, onClose: { panel = nil })
+          default:
+            editingPanel
+          }
+        }
+        .id(bottomKind)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+      }
+    }
+    .padding(.horizontal, 16)
+    .padding(.bottom, 12)
+    .background(EditorPalette.surfaceElevated)
+    .clipShape(RoundedRectangle(cornerRadius: 16))
+    .animation(.easeOut(duration: 0.28), value: panelCollapsed)
+    .animation(.easeOut(duration: 0.3), value: bottomKind)
+    .onChange(of: bottomKind) { _ in panelCollapsed = false }
+  }
+
   // MARK: Editing panel
 
   private var editingPanel: some View {
@@ -144,9 +178,6 @@ struct EditorView: View {
         Text("Export failed: \(error)").font(.footnote).foregroundColor(EditorPalette.danger).lineLimit(3)
       }
     }
-    .padding(16)
-    .background(EditorPalette.surfaceElevated)
-    .clipShape(RoundedRectangle(cornerRadius: 16))
   }
 
   private var toolRow: some View {
@@ -483,5 +514,40 @@ private struct ChoiceRow: View {
         }
       }
     }
+  }
+}
+
+/// Grab bar on top of the bottom panel: drag down to collapse it (the video
+/// grows into the freed space), up (or tap) to bring it back. While
+/// collapsed it says which panel is hidden, plus Done for the text / sticker
+/// editors so they can be closed without expanding.
+private struct PanelHandle: View {
+  @Binding var collapsed: Bool
+  let label: String
+  let onDone: (() -> Void)?
+
+  var body: some View {
+    VStack(spacing: 6) {
+      Capsule().fill(Color.white.opacity(0.35)).frame(width: 44, height: 5)
+      if collapsed {
+        HStack {
+          Text("\(label) · drag up to edit").font(.caption).foregroundColor(EditorPalette.muted)
+          Spacer()
+          if let onDone {
+            Button("Done", action: onDone).foregroundColor(EditorPalette.pink)
+          }
+        }
+        .frame(height: 32)
+      }
+    }
+    .frame(maxWidth: .infinity)
+    .padding(.top, 8)
+    .padding(.bottom, collapsed ? 2 : 8)
+    .contentShape(Rectangle())
+    .onTapGesture { collapsed.toggle() }
+    .gesture(DragGesture(minimumDistance: 6).onEnded { value in
+      if value.translation.height > 36 { collapsed = true } else if value.translation.height < -36 { collapsed = false }
+    })
+    .accessibilityLabel(collapsed ? "Expand \(label)" : "Collapse \(label)")
   }
 }

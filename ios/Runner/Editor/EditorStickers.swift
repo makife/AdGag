@@ -7,13 +7,14 @@ import UIKit
 // Mirror of android/.../editor/Stickers.kt + StickerPanel.kt: animated
 // stickers from Google's Noto Animated Emoji (CC BY 4.0, AdGagStickers/
 // LICENSE.txt), pre-packed into one sprite sheet per sticker (uniform 50ms
-// frames, 192px, WebP) + stickers.json — the SAME files as Android. A sheet
-// lets the preview and the export draw any frame at any time.
+// frames, 192px, WebP) + stickers.json — the SAME files as Android — plus
+// GIPHY GIFs imported into the same kind of sheet (EditorGiphy.swift). A
+// sheet lets the preview and the export draw any frame at any time.
 
 // MARK: - Model
 
 /// Same JSON keys as the Kotlin StickerLayer. Centre as frame fractions,
-/// size a fraction of the frame HEIGHT, OUTPUT-time start/end.
+/// size (the long side) a fraction of the frame HEIGHT, OUTPUT-time start/end.
 struct StickerLayer: Codable, Equatable, Identifiable {
   var id: String = UUID().uuidString
   var stickerId: String
@@ -43,14 +44,50 @@ struct StickerLayer: Codable, Equatable, Identifiable {
   }
 }
 
-struct StickerDef: Decodable, Identifiable {
+struct StickerDef: Codable, Identifiable {
   let id: String
   let label: String
+  /// A file name in AdGagStickers, or an absolute path when `local` (imported from GIPHY).
   let file: String
   let frames: Int
   let cols: Int
   let size: Int
   let durationMs: Int64
+  /// Cell size (GIPHY GIFs aren't square); bundled stickers are size x size.
+  var w: Int
+  var h: Int
+  var local: Bool
+
+  init(id: String, label: String, file: String, frames: Int, cols: Int, size: Int, durationMs: Int64,
+       w: Int? = nil, h: Int? = nil, local: Bool = false) {
+    self.id = id
+    self.label = label
+    self.file = file
+    self.frames = frames
+    self.cols = cols
+    self.size = size
+    self.durationMs = durationMs
+    self.w = w ?? size
+    self.h = h ?? size
+    self.local = local
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    let size = try c.decode(Int.self, forKey: .size)
+    self.init(id: try c.decode(String.self, forKey: .id),
+              label: try c.decodeIfPresent(String.self, forKey: .label) ?? "",
+              file: try c.decode(String.self, forKey: .file),
+              frames: try c.decode(Int.self, forKey: .frames),
+              cols: try c.decode(Int.self, forKey: .cols),
+              size: size,
+              durationMs: try c.decode(Int64.self, forKey: .durationMs),
+              w: try c.decodeIfPresent(Int.self, forKey: .w),
+              h: try c.decodeIfPresent(Int.self, forKey: .h),
+              local: try c.decodeIfPresent(Bool.self, forKey: .local) ?? false)
+  }
+
+  var aspect: CGFloat { CGFloat(w) / CGFloat(max(h, 1)) }
 
   /// Frame shown `localMs` into the sticker's time on screen (loops).
   func frameAt(_ localMs: Int64) -> Int {
@@ -70,7 +107,9 @@ final class StickerStore: @unchecked Sendable {
   private let lock = NSLock()
   private var sheets: [String: CGImage] = [:]
   private var order: [String] = []
-  private var thumbs: [String: UIImage] = [:]
+  private var smallSheets: [String: CGImage] = [:]
+  private var smallOrder: [String] = []
+  private var localDefs: [String: StickerDef] = [:]
 
   private init() {
     if let url = Bundle.main.url(forResource: "stickers", withExtension: "json", subdirectory: "AdGagStickers"),
@@ -83,18 +122,45 @@ final class StickerStore: @unchecked Sendable {
     }
   }
 
-  func byId(_ id: String) -> StickerDef? { all.first { $0.id == id } }
+  /// A bundled sticker, or an imported GIPHY one (its def is read from disk once).
+  func byId(_ id: String) -> StickerDef? {
+    if let d = all.first(where: { $0.id == id }) { return d }
+    guard id.hasPrefix("giphy_") else { return nil }
+    lock.lock()
+    defer { lock.unlock() }
+    if let d = localDefs[id] { return d }
+    let url = Giphy.directory.appendingPathComponent("\(id).json")
+    guard let data = try? Data(contentsOf: url),
+          let def = try? JSONDecoder().decode(StickerDef.self, from: data),
+          FileManager.default.fileExists(atPath: def.file) else { return nil }
+    localDefs[id] = def
+    return def
+  }
+
+  func saveLocal(_ def: StickerDef) {
+    if let data = try? JSONEncoder().encode(def) {
+      try? data.write(to: Giphy.directory.appendingPathComponent("\(def.id).json"))
+    }
+    lock.lock()
+    localDefs[def.id] = def
+    lock.unlock()
+  }
+
+  private func url(of def: StickerDef) -> URL? {
+    if def.local { return URL(fileURLWithPath: def.file) }
+    return Bundle.main.url(forResource: (def.file as NSString).deletingPathExtension,
+                           withExtension: (def.file as NSString).pathExtension, subdirectory: "AdGagStickers")
+  }
 
   func sheet(_ def: StickerDef) -> CGImage? {
     lock.lock()
     defer { lock.unlock() }
     if let s = sheets[def.file] { return s }
-    guard let url = Bundle.main.url(forResource: (def.file as NSString).deletingPathExtension,
-                                    withExtension: (def.file as NSString).pathExtension, subdirectory: "AdGagStickers"),
+    guard let url = url(of: def),
           let source = CGImageSourceCreateWithURL(url as CFURL, nil),
           let image = CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
     else { return nil }
-    // Byte-bounded enough: keep the 10 most recently used sheets (each a few MB decoded).
+    // Keep the 10 most recently used full sheets (each a few MB decoded).
     sheets[def.file] = image
     order.removeAll { $0 == def.file }
     order.append(def.file)
@@ -102,28 +168,45 @@ final class StickerStore: @unchecked Sendable {
     return image
   }
 
-  func frame(_ def: StickerDef, _ index: Int) -> CGImage? {
-    guard let sheet = sheet(def) else { return nil }
-    let cell = sheet.width / max(def.cols, 1)
-    return sheet.cropping(to: CGRect(x: (index % def.cols) * cell, y: (index / def.cols) * cell, width: cell, height: cell))
-  }
-
-  /// First frame only (picker thumbnails).
-  func thumbnail(_ def: StickerDef) -> UIImage? {
+  /// Half-resolution sheet for the picker's animated thumbnails (decoded off the main thread by the caller).
+  func smallSheet(_ def: StickerDef) -> CGImage? {
     lock.lock()
-    if let t = thumbs[def.id] { lock.unlock(); return t }
+    if let s = smallSheets[def.file] { lock.unlock(); return s }
     lock.unlock()
-    guard let url = Bundle.main.url(forResource: (def.file as NSString).deletingPathExtension,
-                                    withExtension: (def.file as NSString).pathExtension, subdirectory: "AdGagStickers"),
-          let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-          let sheet = CGImageSourceCreateImageAtIndex(source, 0, nil),
-          let first = sheet.cropping(to: CGRect(x: 0, y: 0, width: def.size, height: def.size))
+    guard let url = url(of: def), let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+          let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+          let pw = props[kCGImagePropertyPixelWidth] as? Int, let ph = props[kCGImagePropertyPixelHeight] as? Int,
+          let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(pw, ph) / 2,
+          ] as CFDictionary)
     else { return nil }
-    let image = UIImage(cgImage: first)
     lock.lock()
-    thumbs[def.id] = image
+    smallSheets[def.file] = image
+    smallOrder.removeAll { $0 == def.file }
+    smallOrder.append(def.file)
+    if smallOrder.count > 40 { smallSheets.removeValue(forKey: smallOrder.removeFirst()) }
     lock.unlock()
     return image
+  }
+
+  /// Already-decoded small sheet, or nil (never decodes — safe to call while drawing).
+  func cachedSmallSheet(_ def: StickerDef) -> CGImage? {
+    lock.lock()
+    defer { lock.unlock() }
+    return smallSheets[def.file]
+  }
+
+  /// One frame cut out of a sheet (full or small), honouring non-square cells.
+  static func frame(_ def: StickerDef, in sheet: CGImage, _ index: Int) -> CGImage? {
+    let cw = sheet.width / max(def.cols, 1)
+    let ch = max(1, cw * def.h / max(def.w, 1))
+    return sheet.cropping(to: CGRect(x: (index % def.cols) * cw, y: (index / def.cols) * ch, width: cw, height: ch))
+  }
+
+  func frame(_ def: StickerDef, _ index: Int) -> CGImage? {
+    guard let sheet = sheet(def) else { return nil }
+    return Self.frame(def, in: sheet, index)
   }
 }
 
@@ -140,8 +223,12 @@ enum StickerRenderer {
     return 1 + c3 * x * x * x + c1 * x * x
   }
 
-  /// Half the sticker's side, in frame units, before its own scale.
-  static func halfSide(_ layer: StickerLayer, frameH: CGFloat) -> CGFloat { CGFloat(layer.sizeFrac) * frameH / 2 }
+  /// Half width / height in frame units before its own scale: the LONG side is sizeFrac of the frame height.
+  static func halfSize(_ layer: StickerLayer, frameH: CGFloat) -> CGSize {
+    let long = CGFloat(layer.sizeFrac) * frameH / 2
+    let aspect = StickerStore.shared.byId(layer.stickerId)?.aspect ?? 1
+    return aspect >= 1 ? CGSize(width: long, height: long / aspect) : CGSize(width: long * aspect, height: long)
+  }
 
   static func hitTest(_ layer: StickerLayer, frameW: CGFloat, frameH: CGFloat, point: CGPoint) -> Bool {
     let rad = -CGFloat(layer.rotationDeg) * .pi / 180
@@ -150,8 +237,8 @@ enum StickerRenderer {
     let s = CGFloat(layer.scale)
     let lx = (dx * cos(rad) - dy * sin(rad)) / s
     let ly = (dx * sin(rad) + dy * cos(rad)) / s
-    let half = halfSide(layer, frameH: frameH) * 1.1
-    return abs(lx) <= half && abs(ly) <= half
+    let half = halfSize(layer, frameH: frameH)
+    return abs(lx) <= half.width * 1.1 && abs(ly) <= half.height * 1.1
   }
 
   /// Draws into a y-DOWN context whose units are the frame's.
@@ -163,7 +250,7 @@ enum StickerRenderer {
     let remaining = layer.endMs - tMs
     let alpha = remaining < outMs ? min(max(CGFloat(remaining) / CGFloat(outMs), 0), 1) : 1
     guard alpha > 0.001, let image = StickerStore.shared.frame(def, def.frameAt(local)) else { return }
-    let half = halfSide(layer, frameH: frameH)
+    let half = halfSize(layer, frameH: frameH)
     let s = CGFloat(layer.scale) * pop
     ctx.saveGState()
     ctx.translateBy(x: CGFloat(layer.x) * frameW, y: CGFloat(layer.y) * frameH)
@@ -172,20 +259,37 @@ enum StickerRenderer {
     ctx.scaleBy(x: layer.flipX ? -s : s, y: -s)
     ctx.setAlpha(alpha)
     ctx.interpolationQuality = .high
-    ctx.draw(image, in: CGRect(x: -half, y: -half, width: 2 * half, height: 2 * half))
+    ctx.draw(image, in: CGRect(x: -half.width, y: -half.height, width: 2 * half.width, height: 2 * half.height))
     ctx.restoreGState()
   }
 }
 
 // MARK: - Picker panel
 
-/// Shown in place of the timeline + tools (never over the video). From the
-/// "Stickers" tool it ADDS the tapped sticker at the playhead; on an
-/// existing sticker it REPLACES it and offers Flip / Delete.
+private enum StickerSource: String, CaseIterable {
+  case emoji = "Emoji", giphy = "GIPHY"
+}
+
+/// Shown in place of the timeline + tools (never over the video). Bundled
+/// animated emoji or GIPHY search (stickers / GIFs, trending when empty);
+/// every thumbnail animates. From the "Stickers" tool it ADDS the tapped
+/// sticker at the playhead; on an existing sticker it REPLACES it and
+/// offers Flip / Delete.
 struct StickerPanel: View {
   @ObservedObject var viewModel: EditorViewModel
   let editingId: String?
   let onClose: () -> Void
+  @State private var source: StickerSource = .emoji
+
+  private func pick(_ def: StickerDef) {
+    if let id = editingId, var s = viewModel.stickerLayers.first(where: { $0.id == id }) {
+      s.stickerId = def.id
+      viewModel.updateSticker(s)
+    } else {
+      viewModel.addSticker(def)
+      onClose()
+    }
+  }
 
   var body: some View {
     let editing = editingId.flatMap { id in viewModel.stickerLayers.first { $0.id == id } }
@@ -208,23 +312,47 @@ struct StickerPanel: View {
         }
         Button("Done", action: onClose).foregroundColor(EditorPalette.pink)
       }
+      HStack(spacing: 6) {
+        ForEach(StickerSource.allCases, id: \.self) { s in
+          Button { source = s } label: {
+            Text(s.rawValue).font(.caption).fontWeight(.semibold)
+              .foregroundColor(s == source ? EditorPalette.pink : .white)
+              .frame(maxWidth: .infinity).padding(.vertical, 7)
+              .background(s == source ? EditorPalette.pink.opacity(0.25) : EditorPalette.surface)
+              .clipShape(Capsule())
+          }
+        }
+      }
+      switch source {
+      case .emoji: EmojiGrid(selectedId: editing?.stickerId, onPick: pick)
+      case .giphy: GiphyGrid(onPick: pick)
+      }
+    }
+  }
+}
+
+private struct EmojiGrid: View {
+  let selectedId: String?
+  let onPick: (StickerDef) -> Void
+  @State private var loaded: Set<String> = []
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
       ScrollView {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 60), spacing: 8)], spacing: 8) {
           ForEach(StickerStore.shared.all) { def in
-            let selected = editing?.stickerId == def.id
-            Button {
-              if var s = editing {
-                s.stickerId = def.id
-                viewModel.updateSticker(s)
-              } else {
-                viewModel.addSticker(def)
-                onClose()
-              }
-            } label: {
+            let selected = selectedId == def.id
+            Button { onPick(def) } label: {
               ZStack {
                 (selected ? EditorPalette.pink.opacity(0.25) : EditorPalette.surface)
-                if let thumb = StickerStore.shared.thumbnail(def) {
-                  Image(uiImage: thumb).resizable().scaledToFit().padding(6)
+                if loaded.contains(def.id) {
+                  TimelineView(.animation) { context in
+                    let ms = Int64(context.date.timeIntervalSinceReferenceDate * 1000)
+                    if let sheet = StickerStore.shared.cachedSmallSheet(def),
+                       let frame = StickerStore.frame(def, in: sheet, def.frameAt(ms)) {
+                      Image(decorative: frame, scale: 1).resizable().scaledToFit().padding(6)
+                    }
+                  }
                 }
               }
               .frame(width: 60, height: 60)
@@ -232,11 +360,109 @@ struct StickerPanel: View {
               .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? EditorPalette.pink : Color.clear, lineWidth: 2))
             }
             .accessibilityLabel(def.label)
+            .task {
+              await Task.detached(priority: .utility) { _ = StickerStore.shared.smallSheet(def) }.value
+              loaded.insert(def.id)
+            }
           }
         }
       }
-      .frame(height: 208)
+      .frame(height: 196)
       Text("Animated emoji: Google Noto Emoji (CC BY 4.0)").font(.caption2).foregroundColor(EditorPalette.muted)
+    }
+  }
+}
+
+private struct GiphyGrid: View {
+  let onPick: (StickerDef) -> Void
+  @State private var kind: GiphyKind = .stickers
+  @State private var query = ""
+  @State private var submitted = ""
+  @State private var results: [GiphyItem] = []
+  @State private var loading = false
+  @State private var error: String?
+  @State private var importing: String?
+
+  var body: some View {
+    if GiphyConfig.apiKey.isEmpty {
+      Text("GIPHY search isn't set up yet (no GIPHY_API_KEY in this build).")
+        .font(.footnote).foregroundColor(EditorPalette.muted).padding(.vertical, 12)
+    } else {
+      VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: 6) {
+          TextField("Search GIPHY", text: $query, onCommit: { submitted = query })
+            .foregroundColor(.white)
+            .submitLabel(.search)
+            .padding(8)
+            .background(EditorPalette.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+          ForEach(GiphyKind.allCases, id: \.self) { k in
+            Button { kind = k } label: {
+              Text(k.label).font(.caption)
+                .foregroundColor(k == kind ? EditorPalette.pink : .white)
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(k == kind ? EditorPalette.pink.opacity(0.25) : EditorPalette.surface)
+                .clipShape(Capsule())
+            }
+          }
+        }
+        ZStack {
+          if loading {
+            ProgressView().tint(EditorPalette.pink)
+          } else if let error {
+            Text(error).font(.footnote).foregroundColor(EditorPalette.danger)
+          } else if results.isEmpty {
+            Text("Nothing found").font(.footnote).foregroundColor(EditorPalette.muted)
+          } else {
+            ScrollView {
+              LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 8)], spacing: 8) {
+                ForEach(results) { item in
+                  Button { importItem(item) } label: {
+                    ZStack {
+                      EditorPalette.surface
+                      AnimatedGifView(url: item.previewURL).padding(4)
+                      if importing == item.id { ProgressView().tint(EditorPalette.pink) }
+                    }
+                    .frame(width: 76, height: 76)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                  }
+                  .disabled(importing != nil)
+                }
+              }
+            }
+          }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 160)
+        // GIPHY's attribution requirement.
+        Text("Powered by GIPHY").font(.caption2).foregroundColor(EditorPalette.muted)
+      }
+      .task(id: "\(kind.rawValue)|\(submitted)") { await load() }
+    }
+  }
+
+  private func load() async {
+    loading = true
+    error = nil
+    do {
+      results = try await Giphy.search(kind: kind, query: submitted)
+    } catch {
+      self.error = error.localizedDescription
+      results = []
+    }
+    loading = false
+  }
+
+  private func importItem(_ item: GiphyItem) {
+    importing = item.id
+    Task {
+      do {
+        let def = try await Giphy.importItem(item)
+        onPick(def)
+      } catch {
+        self.error = "Couldn't add that one: \(error.localizedDescription)"
+      }
+      importing = nil
     }
   }
 }
