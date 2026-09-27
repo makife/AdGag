@@ -5,7 +5,7 @@ name: iOS build
 # native Swift editor under ios/Runner/Editor/) is ever actually
 # compiled. A macOS GitHub-hosted runner stands in for a local Mac.
 #
-# --no-codesign: this workflow only confirms the Swift/Flutter code
+# Simulator build: this workflow only confirms the Swift/Flutter code
 # COMPILES — it does not produce an installable .ipa. Getting a build
 # onto a real iPhone (TestFlight or ad-hoc) needs an Apple Developer
 # Program account for real signing certificates/provisioning profiles,
@@ -46,8 +46,13 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build iOS (no codesign)
-        run: flutter build ios --debug --no-codesign
+      # --simulator, not a device build: a device build still demands a
+      # Development Team even with --no-codesign (every run failed on
+      # "Building a deployable iOS app requires a selected Development
+      # Team" BEFORE compiling any Swift). A simulator build needs no
+      # signing at all and compiles exactly the same Dart/Swift code.
+      - name: Build iOS (simulator, compile check)
+        run: flutter build ios --simulator --debug
 
       - name: Run RunnerTests (XCTest)
         run: |
