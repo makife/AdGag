@@ -91,6 +91,8 @@ data class EditorSessionState(
     val isMuted: Boolean,
     val videoSpeed: Float,
     val videoFilter: VideoFilter,
+    /** Captions over the whole Ad (TextLayers.kt), timed in OUTPUT time. */
+    val textLayers: List<TextLayer> = emptyList(),
 ) {
     fun toJson(): String = JSONObject().apply {
         put("clips", JSONArray().apply {
@@ -124,6 +126,7 @@ data class EditorSessionState(
         put("musicPlayDurationMs", musicPlayDurationMs)
         put("rotationDegrees", rotationDegrees)
         put("isMuted", isMuted)
+        put("textLayers", TextLayer.listToJson(textLayers))
     }.toString()
 
     companion object {
@@ -171,6 +174,7 @@ data class EditorSessionState(
                 videoSpeed = o.optDouble("videoSpeed", 1.0).toFloat(),
                 videoFilter = runCatching { VideoFilter.valueOf(o.optString("videoFilter", "NONE")) }
                     .getOrDefault(VideoFilter.NONE),
+                textLayers = TextLayer.listFromJson(o.optJSONArray("textLayers")),
             )
         }
     }

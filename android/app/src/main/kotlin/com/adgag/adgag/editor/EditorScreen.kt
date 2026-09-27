@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.MusicOff
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.SlowMotionVideo
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -99,6 +100,11 @@ fun EditorScreen(
         var showMusicSheet by remember { mutableStateOf(false) }
         var showSpeedSheet by remember { mutableStateOf(false) }
         var showEffectsSheet by remember { mutableStateOf(false) }
+        var editingTextId by remember { mutableStateOf<String?>(null) }
+        val addText = {
+            viewModel.player.pause()
+            editingTextId = viewModel.addText().id
+        }
 
         // Per-frame GLOBAL position, read ONLY inside the graphicsLayer /
         // drawBehind lambdas below — the entrance transitions animate
@@ -160,13 +166,10 @@ fun EditorScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .clipToBounds()
-                    // Tap anywhere on the video toggles play/pause; the
-                    // center button (a later sibling) still wins taps
-                    // inside its own bounds.
-                    .pointerInput(Unit) {
-                        detectTapGestures(onTap = { viewModel.togglePlayPause() })
-                    },
+                    // Taps (play/pause, selecting captions) are handled by
+                    // TextOverlayLayer below; the center button still wins
+                    // taps inside its own bounds.
+                    .clipToBounds(),
                 contentAlignment = Alignment.Center,
             ) {
                 // TextureView, not SurfaceView: a SurfaceView lives in its
@@ -196,6 +199,17 @@ fun EditorScreen(
                             val b = transitionPoseAt(viewModel, frameGlobalMs.longValue).brightness
                             if (b < 1f) drawRect(Color.Black, alpha = 1f - b)
                         },
+                )
+                // Captions — above the video and transitions (they're
+                // composition-level in the export too, so transitions
+                // never move them).
+                TextOverlayLayer(
+                    viewModel = viewModel,
+                    frameGlobalMs = frameGlobalMs,
+                    onEdit = {
+                        viewModel.player.pause()
+                        editingTextId = it
+                    },
                 )
                 // Center play button — only while paused.
                 androidx.compose.animation.AnimatedVisibility(
@@ -229,6 +243,11 @@ fun EditorScreen(
                     },
                     onPickTransition = { pickingTransitionFor = it },
                     onOpenMusic = { showMusicSheet = true },
+                    onAddText = addText,
+                    onEditText = {
+                        viewModel.player.pause()
+                        editingTextId = it
+                    },
                 )
                 Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
 
@@ -237,6 +256,7 @@ fun EditorScreen(
                     onMusic = { if (viewModel.musicPath != null) showMusicSheet = true else pickMusic.launch("audio/*") },
                     onSpeed = { showSpeedSheet = true },
                     onEffects = { showEffectsSheet = true },
+                    onText = addText,
                 )
 
                 if (viewModel.isExporting) {
@@ -297,6 +317,9 @@ fun EditorScreen(
         if (showEffectsSheet) {
             EffectsSheet(viewModel = viewModel, onDismiss = { showEffectsSheet = false })
         }
+        editingTextId?.let { id ->
+            TextEditorSheet(viewModel = viewModel, layerId = id, onDismiss = { editingTextId = null })
+        }
     }
 }
 
@@ -326,13 +349,25 @@ private fun transitionPoseAt(viewModel: EditorViewModel, globalMs: Long): Transi
 }
 
 @Composable
-private fun ToolRow(viewModel: EditorViewModel, onMusic: () -> Unit, onSpeed: () -> Unit, onEffects: () -> Unit) {
+private fun ToolRow(
+    viewModel: EditorViewModel,
+    onMusic: () -> Unit,
+    onSpeed: () -> Unit,
+    onEffects: () -> Unit,
+    onText: () -> Unit,
+) {
     Row(
         // Scrolls sideways if the tools outgrow a narrow screen.
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(AdGagSpacing.lg.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        EditorToolButton(
+            icon = Icons.Filled.TextFields,
+            label = if (viewModel.textLayers.isEmpty()) "Text" else "Text (${viewModel.textLayers.size})",
+            active = viewModel.textLayers.isNotEmpty(),
+            onClick = onText,
+        )
         EditorToolButton(
             icon = Icons.Filled.RotateRight,
             label = "Rotate",

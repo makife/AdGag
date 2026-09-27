@@ -22,7 +22,9 @@ import androidx.media3.common.Player
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.effect.OverlayEffect
 import androidx.media3.effect.Presentation
+import androidx.media3.effect.TextureOverlay
 import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ClippingMediaSource
@@ -205,6 +207,46 @@ class EditorViewModel(
     var videoFilter by mutableStateOf(initialState.videoFilter)
         private set
 
+    /**
+     * Captions (TextLayers.kt). Pure overlay state: changing them never
+     * rebuilds the player — the preview draws them in Compose over the
+     * video, the export adds them as ONE composition-level overlay.
+     */
+    var textLayers by mutableStateOf(initialState.textLayers)
+        private set
+
+    /** The caption being edited/dragged in the preview (null = none). */
+    var selectedTextId by mutableStateOf<String?>(null)
+
+    val fonts = TypefaceCache(context)
+
+    fun addText(): TextLayer {
+        val total = outputDurationMs.coerceAtLeast(500L)
+        val now = (globalPositionMs() / videoSpeed).toLong().coerceIn(0L, total)
+        val start = if (total - now < 1_000L) (total - 3_000L).coerceAtLeast(0L) else now
+        val layer = TextLayer(startMs = start, endMs = minOf(total, start + 3_000L))
+        textLayers = textLayers + layer
+        selectedTextId = layer.id
+        return layer
+    }
+
+    fun updateText(layer: TextLayer) {
+        textLayers = textLayers.map { if (it.id == layer.id) layer else it }
+    }
+
+    fun removeText(id: String) {
+        textLayers = textLayers.filterNot { it.id == id }
+        if (selectedTextId == id) selectedTextId = null
+    }
+
+    /** Timeline drag of a caption's timing, clamped to the Ad (OUTPUT time), at least 300ms long. */
+    fun setTextTiming(id: String, startMs: Long, endMs: Long) {
+        val total = outputDurationMs
+        val s = startMs.coerceIn(0L, (total - 300L).coerceAtLeast(0L))
+        val e = endMs.coerceIn(s + 300L, total.coerceAtLeast(s + 300L))
+        textLayers = textLayers.map { if (it.id == id) it.copy(startMs = s, endMs = e) else it }
+    }
+
     /** Picker thumbnails: each effect applied (on the CPU) to a frame of the first clip. */
     val filterThumbnails = mutableStateMapOf<VideoFilter, Bitmap>()
 
@@ -357,6 +399,7 @@ class EditorViewModel(
         isMuted = isMuted,
         videoSpeed = videoSpeed,
         videoFilter = videoFilter,
+        textLayers = textLayers,
     )
 
     fun clipStartMs(index: Int): Long = clips.take(index).sumOf { it.keptDurationMs }
@@ -937,7 +980,7 @@ class EditorViewModel(
 
         val music = musicPath
         if (music == null || musicPlayDurationMs <= 0) {
-            return Composition.Builder(ImmutableList.of(videoSequence)).build()
+            return Composition.Builder(ImmutableList.of(videoSequence)).withTextOverlay().build()
         }
         val musicUri = Uri.fromFile(File(music))
         val songDurationUs = probeDurationUs(context, musicUri)
@@ -976,8 +1019,48 @@ class EditorViewModel(
             .apply { if (musicStartOffsetMs > 0) addGap(musicStartOffsetMs * 1000) }
             .addItems(musicItems)
             .build()
-        return Composition.Builder(ImmutableList.of(videoSequence, musicSequence)).build()
+        return Composition.Builder(ImmutableList.of(videoSequence, musicSequence)).withTextOverlay().build()
     }
+
+    /**
+     * Captions go in as ONE composition-level overlay (over every clip, not
+     * moved by per-clip transitions; the composition effects see the final,
+     * speed-adjusted OUTPUT timeline — the same time base as [TextLayer]).
+     */
+    private fun Composition.Builder.withTextOverlay(): Composition.Builder {
+        val visible = textLayers.filter { it.text.isNotBlank() && it.endMs > it.startMs }
+        if (visible.isEmpty()) return this
+        val overlay = OverlayEffect(ImmutableList.of<TextureOverlay>(TextOverlayEffectBitmap(visible, fonts)))
+        return setEffects(Effects(ImmutableList.of<AudioProcessor>(), ImmutableList.of<Effect>(overlay)))
+    }
+
+    private val displaySizeCache = mutableMapOf<String, Pair<Int, Int>?>()
+
+    /**
+     * Width / height of the exported frame (first clip's displayed size,
+     * then the user's rotation) — the rectangle captions are laid out in,
+     * so the preview overlay can be drawn over exactly that frame.
+     */
+    val outputAspect: Float
+        get() {
+            val path = clips.firstOrNull()?.path ?: return 9f / 16f
+            val size = displaySizeCache.getOrPut(path) {
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(path)
+                    val w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
+                    val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
+                    val rot = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+                    if (w == null || h == null || w <= 0 || h <= 0) null else if (rot % 180 == 90) h to w else w to h
+                } catch (e: Exception) {
+                    null
+                } finally {
+                    retriever.release()
+                }
+            } ?: return 9f / 16f
+            val (w, h) = if (rotationDegrees % 180 == 90) size.second to size.first else size
+            return w.toFloat() / h
+        }
 
     /** First clip's displayed size (container rotation applied, then the user's own rotation), even-numbered for the encoder. */
     private fun exportFrameSize(): Pair<Int, Int>? {

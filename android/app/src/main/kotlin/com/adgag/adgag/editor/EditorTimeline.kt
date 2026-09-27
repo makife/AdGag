@@ -81,6 +81,8 @@ fun EditorTimeline(
     onAddClip: () -> Unit,
     onPickTransition: (boundaryIndex: Int) -> Unit,
     onOpenMusic: () -> Unit,
+    onAddText: () -> Unit = {},
+    onEditText: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -135,6 +137,28 @@ fun EditorTimeline(
             }
             Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
             TrimRow(viewModel, selected, clip, density, positionMs)
+        }
+
+        if (viewModel.textLayers.isNotEmpty()) {
+            val sel = viewModel.textLayers.firstOrNull { it.id == viewModel.selectedTextId }
+            Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    text = if (sel != null) "Text · \"${sel.text.lineSequence().first().take(18)}\"" else "Text · tap one to select",
+                    color = AdGagColors.OnSurfaceMuted,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                )
+                if (sel != null) {
+                    Text(
+                        text = "${formatSeconds(sel.startMs)} – ${formatSeconds(sel.endMs)}",
+                        color = AdGagColors.OnSurfaceMuted,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
+            AlignedRow(trailing = { AddTextButton(onClick = onAddText) }) { TextRow(viewModel, density, onEditText) }
         }
 
         if (viewModel.musicPath != null && viewModel.musicDurationMs != null) {
@@ -734,4 +758,121 @@ private fun rememberGlobalPositionMs(viewModel: EditorViewModel): Long {
 private fun formatSeconds(ms: Long): String {
     val totalSeconds = ms / 1000
     return "%d:%02d".format(totalSeconds / 60, totalSeconds % 60)
+}
+
+private const val TextRowHeightDp = 30
+
+@Composable
+private fun AddTextButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(width = AddButtonSizeDp.dp, height = TextRowHeightDp.dp)
+            .clip(RoundedCornerShape(AdGagRadius.sm.dp))
+            .background(AdGagColors.Surface)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(imageVector = Icons.Filled.Add, contentDescription = "Add text", tint = AdGagColors.OnBackground, modifier = Modifier.size(18.dp))
+    }
+}
+
+/**
+ * Captions on the OUTPUT timeline (same width and scale as the clip
+ * strip). Every caption is a bar; tap one to select it (and jump there),
+ * tap the selected one to edit it. The selected caption gets two handles
+ * (start / end) and can be dragged by its body to move it in time. Drags
+ * only move local state; the caption is updated once, on release.
+ */
+@UnstableApi
+@Composable
+private fun RowScope.TextRow(viewModel: EditorViewModel, density: Density, onEditText: (String) -> Unit) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .weight(1f)
+            .height(TextRowHeightDp.dp)
+            .clip(RoundedCornerShape(AdGagRadius.sm.dp))
+            .background(AdGagColors.Surface),
+    ) {
+        val widthPx = with(density) { maxWidth.toPx() }
+        val total = viewModel.outputDurationMs.coerceAtLeast(1L)
+        fun msToPx(ms: Long): Float = ms.toFloat() / total * widthPx
+        fun pxDeltaToMsDelta(deltaPx: Float): Long = (deltaPx / widthPx * total).toLong()
+        val selectedId = viewModel.selectedTextId
+
+        viewModel.textLayers.filter { it.id != selectedId }.forEach { layer ->
+            val left = msToPx(layer.startMs.coerceIn(0L, total))
+            val right = msToPx(layer.endMs.coerceIn(0L, total)).coerceAtLeast(left + 4f)
+            Box(
+                modifier = Modifier
+                    .offset(x = with(density) { left.toDp() })
+                    .width(with(density) { (right - left).toDp() })
+                    .fillMaxHeight()
+                    .padding(vertical = 5.dp)
+                    .clip(RoundedCornerShape(AdGagRadius.sm.dp))
+                    .background(Color(layer.color).copy(alpha = 0.35f))
+                    .border(BorderStroke(1.dp, AdGagColors.Border), RoundedCornerShape(AdGagRadius.sm.dp))
+                    .clickable {
+                        viewModel.selectedTextId = layer.id
+                        viewModel.seekToGlobal((layer.startMs * viewModel.videoSpeed).toLong())
+                    },
+            )
+        }
+
+        val sel = viewModel.textLayers.firstOrNull { it.id == selectedId } ?: return@BoxWithConstraints
+        var localStart by remember(sel.id, sel.startMs) { mutableLongStateOf(sel.startMs) }
+        var localEnd by remember(sel.id, sel.endMs) { mutableLongStateOf(sel.endMs) }
+        val commit by rememberUpdatedState({ viewModel.setTextTiming(sel.id, localStart, localEnd) })
+        val startPx = msToPx(localStart.coerceIn(0L, total))
+        val endPx = msToPx(localEnd.coerceIn(0L, total)).coerceAtLeast(startPx + 4f)
+        Box(
+            modifier = Modifier
+                .offset(x = with(density) { startPx.toDp() })
+                .width(with(density) { (endPx - startPx).toDp() })
+                .fillMaxHeight()
+                .padding(vertical = 3.dp)
+                .clip(RoundedCornerShape(AdGagRadius.sm.dp))
+                .background(AdGagColors.GradientPink.copy(alpha = 0.45f))
+                .border(BorderStroke(2.dp, AdGagColors.GradientPink), RoundedCornerShape(AdGagRadius.sm.dp))
+                .pointerInput(sel.id) { detectTapGestures { onEditText(sel.id) } }
+                .pointerInput(sel.id) {
+                    detectDragGestures(
+                        onDragEnd = { commit() },
+                        onDrag = { change, drag ->
+                            change.consume()
+                            val len = localEnd - localStart
+                            val newStart = (localStart + pxDeltaToMsDelta(drag.x)).coerceIn(0L, (total - len).coerceAtLeast(0L))
+                            localStart = newStart
+                            localEnd = newStart + len
+                        },
+                    )
+                },
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                text = sel.text.lineSequence().first(),
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                modifier = Modifier.padding(horizontal = 18.dp),
+            )
+        }
+        TrimHandle(
+            xPx = startPx,
+            rowWidthPx = widthPx,
+            density = density,
+            onDrag = { deltaPx ->
+                localStart = (localStart + pxDeltaToMsDelta(deltaPx)).coerceIn(0L, (localEnd - 300L).coerceAtLeast(0L))
+            },
+            onDragEnd = { commit() },
+        )
+        TrimHandle(
+            xPx = endPx,
+            rowWidthPx = widthPx,
+            density = density,
+            onDrag = { deltaPx ->
+                localEnd = (localEnd + pxDeltaToMsDelta(deltaPx)).coerceIn(localStart + 300L, total)
+            },
+            onDragEnd = { commit() },
+        )
+    }
 }
