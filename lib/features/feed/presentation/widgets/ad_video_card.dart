@@ -53,9 +53,12 @@ double _navBarClearance(BuildContext context) => MediaQuery.paddingOf(context).b
 
 /// Bottom-anchored overlays (rail, creator text) sit just above the bar and
 /// the scrubber.
-double _bottomClearance(BuildContext context) => _navBarClearance(context) + _scrubberHeight + AppSpacing.xs;
+double _bottomClearance(BuildContext context) => _navBarClearance(context) + _scrubberLift + _scrubberHeight;
 
-const double _scrubberHeight = 28;
+/// Touch area of the scrubber; the visible line sits at its bottom, a few
+/// px above the bar's top border so the two never read as one line.
+const double _scrubberHeight = 36;
+const double _scrubberLift = 6;
 
 const Duration _panelAnimation = Duration(milliseconds: 260);
 
@@ -289,7 +292,7 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
                   Positioned(
                     left: 0,
                     right: 0,
-                    bottom: navClearance,
+                    bottom: navClearance + _scrubberLift,
                     height: _scrubberHeight,
                     child: _Scrubber(controller: controller),
                   ),
@@ -391,6 +394,7 @@ class _ScrubberState extends State<_Scrubber> {
               final int total = value.duration.inMilliseconds;
               final double played = total <= 0 ? 0 : (value.position.inMilliseconds / total).clamp(0.0, 1.0);
               final bool dragging = _dragFraction != null;
+              final bool showKnob = dragging || !value.isPlaying;
               final double fraction = _dragFraction ?? played;
               final double barHeight = dragging ? 6 : 3;
               return Stack(
@@ -415,16 +419,19 @@ class _ScrubberState extends State<_Scrubber> {
                     height: barHeight,
                     child: Stack(
                       children: <Widget>[
-                        const Positioned.fill(child: ColoredBox(color: Colors.white24)),
+                        // Clearly visible over any frame and against the black
+                        // bar below (the first version — white24 track, gradient
+                        // fill — was reported as invisible).
+                        Positioned.fill(child: ColoredBox(color: Colors.white.withValues(alpha: 0.35))),
                         FractionallySizedBox(
                           alignment: Alignment.centerLeft,
                           widthFactor: fraction,
-                          child: const DecoratedBox(decoration: BoxDecoration(gradient: AppColors.brandGradient)),
+                          child: const ColoredBox(color: Colors.white),
                         ),
                       ],
                     ),
                   ),
-                  if (dragging)
+                  if (showKnob)
                     Positioned(
                       left: (width * fraction - 7).clamp(0.0, width - 14),
                       bottom: barHeight / 2 - 7,
