@@ -87,10 +87,10 @@ import UIKit
       exportOutputURL: outputURL,
       onCancel: { finish(nil) },
       onExported: { path, durationMs in
-        finish(["action": "exported", "path": path, "durationMs": durationMs])
+        finish(["action": "exported", "path": path, "durationMs": durationMs] as [String: Any])
       },
       onAddClip: { stateJSON, remainingMs in
-        finish(["action": "addClip", "state": stateJSON, "remainingMs": remainingMs])
+        finish(["action": "addClip", "state": stateJSON, "remainingMs": remainingMs] as [String: Any])
       })
     let hostingController = UIHostingController(rootView: editorView)
     hostingController.modalPresentationStyle = .fullScreen

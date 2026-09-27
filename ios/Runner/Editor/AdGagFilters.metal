@@ -18,13 +18,13 @@ namespace adgag {
   inline float luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
   inline float3 sepia(float3 c) {
     return clamp(float3(dot(c, float3(0.393, 0.769, 0.189)), dot(c, float3(0.349, 0.686, 0.168)),
-                        dot(c, float3(0.272, 0.534, 0.131))), 0.0, 1.0);
+                        dot(c, float3(0.272, 0.534, 0.131))), float3(0.0), float3(1.0));
   }
   inline float vignette(float2 uv, float amount) {
     return 1.0 - smoothstep(0.35, 0.85, distance(uv, float2(0.5))) * amount;
   }
   inline float4 tex(coreimage::sampler src, float2 size, float2 uv) {
-    return src.sample(src.transform(clamp(uv, 0.0, 1.0) * size));
+    return src.sample(src.transform(clamp(uv, float2(0.0), float2(1.0)) * size));
   }
   inline float hash(float2 c) { return rand(floor(c * 1000.0 + 0.5)); }
   inline float3 palette(float h) {
@@ -73,26 +73,26 @@ float4 adgag_sepia(sampler src, float2 size, float time, destination dest) {
 float4 adgag_vintage(sampler src, float2 size, float time, destination dest) {
   float2 vUv = dest.coord() / size;
   float4 c = adgag::tex(src, size, vUv);
-  float3 col = mix(c.rgb, adgag::sepia(c.rgb), 0.6);
+  float3 col = mix(c.rgb, adgag::sepia(c.rgb), float3(0.6));
   col = col * 0.82 + 0.1;
   col *= adgag::vignette(vUv, 0.6);
-  return float4(clamp(col, 0.0, 1.0), c.a);
+  return float4(clamp(col, float3(0.0), float3(1.0)), c.a);
 }
 
 float4 adgag_cool(sampler src, float2 size, float time, destination dest) {
   float4 c = adgag::tex(src, size, dest.coord() / size);
-  return float4(clamp(c.rgb * float3(0.88, 1.0, 1.18), 0.0, 1.0), c.a);
+  return float4(clamp(c.rgb * float3(0.88, 1.0, 1.18), float3(0.0), float3(1.0)), c.a);
 }
 
 float4 adgag_warm(sampler src, float2 size, float time, destination dest) {
   float4 c = adgag::tex(src, size, dest.coord() / size);
-  return float4(clamp(c.rgb * float3(1.15, 1.02, 0.84), 0.0, 1.0), c.a);
+  return float4(clamp(c.rgb * float3(1.15, 1.02, 0.84), float3(0.0), float3(1.0)), c.a);
 }
 
 float4 adgag_vivid(sampler src, float2 size, float time, destination dest) {
   float4 c = adgag::tex(src, size, dest.coord() / size);
   float l = adgag::luma(c.rgb);
-  return float4(clamp(mix(float3(l), c.rgb, 1.7), 0.0, 1.0), c.a);
+  return float4(clamp(mix(float3(l), c.rgb, float3(1.7)), float3(0.0), float3(1.0)), c.a);
 }
 
 float4 adgag_invert(sampler src, float2 size, float time, destination dest) {
@@ -123,7 +123,7 @@ float4 adgag_old_tv(sampler src, float2 size, float time, destination dest) {
   col += (n - 0.5) * 0.18;
   col *= 0.94 + 0.06 * sin(time * 50.0);
   col *= adgag::vignette(vUv, 0.8);
-  return float4(clamp(col, 0.0, 1.0), c.a);
+  return float4(clamp(col, float3(0.0), float3(1.0)), c.a);
 }
 
 float4 adgag_static(sampler src, float2 size, float time, destination dest) {
@@ -131,7 +131,7 @@ float4 adgag_static(sampler src, float2 size, float time, destination dest) {
   float4 c = adgag::tex(src, size, vUv);
   float n = adgag::rand(floor(vUv * float2(270.0, 480.0)) + fract(time * 13.0) * 100.0);
   float band = step(0.93, adgag::rand(float2(floor(vUv.y * 40.0), floor(time * 12.0))));
-  float3 col = mix(c.rgb, float3(n), 0.45 + 0.3 * band);
+  float3 col = mix(c.rgb, float3(n), float3(0.45 + 0.3 * band));
   return float4(col, c.a);
 }
 
@@ -147,7 +147,7 @@ float4 adgag_vhs(sampler src, float2 size, float time, destination dest) {
                       adgag::tex(src, size, uv - float2(off, 0.0)).b);
   col *= 0.93 + 0.07 * sin(vUv.y * 900.0);
   col += (adgag::rand(vUv * 300.0 + time) - 0.5) * 0.08;
-  return float4(clamp(col, 0.0, 1.0), c.a);
+  return float4(clamp(col, float3(0.0), float3(1.0)), c.a);
 }
 
 float4 adgag_glitch(sampler src, float2 size, float time, destination dest) {
@@ -213,7 +213,7 @@ float4 adgag_film(sampler src, float2 size, float time, destination dest) {
   float2 vUv = dest.coord() / size;
   float4 c = adgag::tex(src, size, vUv);
   float2 p = float2(vUv.x * aspect, vUv.y);
-  float3 col = mix(c.rgb, adgag::sepia(c.rgb), 0.35);
+  float3 col = mix(c.rgb, adgag::sepia(c.rgb), float3(0.35));
   float bar = 0.075;
   float fromEdge = min(p.x, aspect - p.x);
   if (fromEdge < bar) {
@@ -243,7 +243,7 @@ float4 adgag_ivy(sampler src, float2 size, float time, destination dest) {
   float2 lq = horizontal ? float2(q.x, q.y - side * 0.018) : float2(q.x - side * 0.018, q.y);
   float2 rad = horizontal ? float2(0.011, 0.02) : float2(0.02, 0.011);
   float2 e = lq / rad;
-  if (dot(e, e) < 1.0) col = mix(float3(0.16, 0.45, 0.14), float3(0.45, 0.75, 0.25), adgag::hash(bp + 0.5));
+  if (dot(e, e) < 1.0) col = mix(float3(0.16, 0.45, 0.14), float3(0.45, 0.75, 0.25), float3(adgag::hash(bp + 0.5)));
   return float4(col, c.a);
 }
 
@@ -263,7 +263,7 @@ float4 adgag_balloons(sampler src, float2 size, float time, destination dest) {
   if (dot(e, e) < 1.0) {
     col = bcol;
     float2 hl = (q - float2(-0.012, 0.018)) / float2(0.008, 0.013);
-    if (dot(hl, hl) < 1.0) col = mix(bcol, float3(1.0), 0.6);
+    if (dot(hl, hl) < 1.0) col = mix(bcol, float3(1.0), float3(0.6));
   }
   return float4(col, c.a);
 }
@@ -282,7 +282,7 @@ float4 adgag_stars(sampler src, float2 size, float time, destination dest) {
   float h = adgag::hash(bp);
   float twinkle = 0.75 + 0.25 * sin(time * 6.0 + h * 6.283);
   float3 col = c.rgb;
-  if (r < radius) col = mix(float3(1.0, 0.85, 0.3), float3(1.0), h < 0.5 ? 0.0 : 0.7) * twinkle;
+  if (r < radius) col = mix(float3(1.0, 0.85, 0.3), float3(1.0), float3(h < 0.5 ? 0.0 : 0.7)) * twinkle;
   return float4(col, c.a);
 }
 
