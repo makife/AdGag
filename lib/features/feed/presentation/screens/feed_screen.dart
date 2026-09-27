@@ -29,6 +29,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
   final VideoControllerPool _pool = VideoControllerPool();
   int _activeIndex = 0;
 
+  /// The page the swipe has crossed into but hasn't settled on yet.
+  int? _pendingIndex;
+
   // Section 63: "After several swipes, subtly surface: 'Think you can do
   // better?' AD THIS." Session-only (not persisted) — a returning user who
   // already knows the mechanic seeing it once more per app launch is a
@@ -58,9 +61,15 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
     super.dispose();
   }
 
-  void _onPageChanged(int index, List<Ad> ads) {
+  /// Called once a swipe has SETTLED (ScrollEndNotification), not when the
+  /// page crosses the halfway mark mid-animation: switching the active
+  /// card (rebuild, play/pause, pool eviction, next-page loading) during
+  /// the swipe animation made it hitch — the reported "hard to swipe".
+  void _activate(int index, List<Ad> ads) {
+    if (index == _activeIndex) {
+      return;
+    }
     setState(() => _activeIndex = index);
-    ref.read(openReviewsAdIdProvider.notifier).state = null;
 
     // Keep the active card plus one neighbor on each side warm; drop the
     // rest (section 17: "Do NOT preload dozens of full videos").
@@ -136,24 +145,40 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
           // would fight the feed's vertical page-swipe. The initial page
           // already loads fresh on cold start; a dedicated manual-refresh
           // affordance can be added later if needed.
-          return PageView.builder(
-            controller: _pageController,
-            scrollDirection: Axis.vertical,
-            // Paging stops while a card's reviews panel is open.
-            physics: ref.watch(openReviewsAdIdProvider) != null
-                ? const NeverScrollableScrollPhysics()
-                : const FeedPagePhysics(),
-            itemCount: feedState.ads.length,
-            onPageChanged: (int index) => _onPageChanged(index, feedState.ads),
-            itemBuilder: (BuildContext context, int index) {
-              final Ad ad = feedState.ads[index];
-              return AdVideoCard(
-                ad: ad,
-                pool: _pool,
-                videoService: ref.read(videoServiceProvider),
-                isActive: index == _activeIndex,
-              );
+          return NotificationListener<ScrollEndNotification>(
+            onNotification: (ScrollEndNotification notification) {
+              final int? pending = _pendingIndex;
+              if (pending != null && notification.depth == 0) {
+                _pendingIndex = null;
+                _activate(pending, feedState.ads);
+              }
+              return false;
             },
+            child: PageView.builder(
+              controller: _pageController,
+              // Keep the neighbours laid out, so revealing the next card
+              // mid-swipe doesn't build it on the spot.
+              allowImplicitScrolling: true,
+              scrollDirection: Axis.vertical,
+              // Paging stops while a card's reviews panel is open.
+              physics: ref.watch(openReviewsAdIdProvider) != null
+                  ? const NeverScrollableScrollPhysics()
+                  : const FeedPagePhysics(),
+              itemCount: feedState.ads.length,
+              onPageChanged: (int index) {
+                _pendingIndex = index;
+                ref.read(openReviewsAdIdProvider.notifier).state = null;
+              },
+              itemBuilder: (BuildContext context, int index) {
+                final Ad ad = feedState.ads[index];
+                return AdVideoCard(
+                  ad: ad,
+                  pool: _pool,
+                  videoService: ref.read(videoServiceProvider),
+                  isActive: index == _activeIndex,
+                );
+              },
+            ),
           );
         },
       ),

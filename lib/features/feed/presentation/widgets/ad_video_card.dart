@@ -7,7 +7,6 @@ import "package:video_player/video_player.dart";
 
 import "../../../../core/analytics/ad_event_type.dart";
 import "../../../../core/analytics/analytics_providers.dart";
-import "../../../../core/router/app_shell.dart";
 import "../../../../core/theme/app_colors.dart";
 import "../../../../core/theme/app_spacing.dart";
 import "../../../../core/video/video_controller_pool.dart";
@@ -44,17 +43,19 @@ class AdVideoCard extends ConsumerStatefulWidget {
   ConsumerState<AdVideoCard> createState() => _AdVideoCardState();
 }
 
-/// `Scaffold(extendBody: true)` (app_shell.dart) draws the feed's body
-/// behind the bottom-nav bar for the full-bleed video look, but the bar
-/// itself is opaque, not translucent — so bottom-anchored overlay content
-/// (the action rail, subject/creator text) needs to clear its full height
-/// plus the safe-area inset the bar itself adds, or it renders hidden
-/// behind it instead of above it. Only a small extra gap (AppSpacing.sm)
-/// on top of that — a larger gap here previously left the action rail
-/// sitting noticeably far above the bar instead of just clear of it.
-double _bottomClearance(BuildContext context) {
-  return AppSpacing.sm + AppShell.barHeightOf(context) + MediaQuery.paddingOf(context).bottom;
-}
+/// Height of the bottom-nav bar (plus the system inset under it) that sits
+/// over the bottom of this card. `Scaffold(extendBody: true)` in AppShell
+/// ALREADY puts exactly that into the body's MediaQuery padding.bottom —
+/// the old code added AppShell's bar height on top of it, counting the bar
+/// twice: the reviews panel stopped a whole bar-height above the bar
+/// (user-reported black gap) and the action rail sat too high.
+double _navBarClearance(BuildContext context) => MediaQuery.paddingOf(context).bottom;
+
+/// Bottom-anchored overlays (rail, creator text) sit just above the bar and
+/// the scrubber.
+double _bottomClearance(BuildContext context) => _navBarClearance(context) + _scrubberHeight + AppSpacing.xs;
+
+const double _scrubberHeight = 28;
 
 const Duration _panelAnimation = Duration(milliseconds: 260);
 
@@ -262,8 +263,7 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
             // The keyboard is read from the raw window insets: the Scaffolds
             // above remove it from MediaQuery once they've resized for it.
             final bool keyboardUp = MediaQueryData.fromView(View.of(context)).viewInsets.bottom > 0;
-            final double navClearance =
-                keyboardUp ? 0 : AppShell.barHeightOf(context) + MediaQuery.paddingOf(context).bottom;
+            final double navClearance = keyboardUp ? 0 : _navBarClearance(context);
             final double panelTop = statusBar + openVideoHeight;
             final double panelHeight = (height - panelTop - navClearance).clamp(0, height);
 
@@ -282,18 +282,16 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
                     child: videoLayer,
                   ),
                 ),
-                // Thin playback progress line along the video's bottom edge
-                // (the video is width-fitted and top-anchored, so its bottom
-                // is statusBar + width / aspect, capped by the space).
+                // Seekable progress bar, pinned right above the nav bar (which
+                // fills the space under a 9:16 video, so this is the video's
+                // bottom edge). Thin while watching; drag or tap to scrub.
                 if (showVideo && !reviewsOpen)
                   Positioned(
-                    top: statusBar +
-                        (constraints.maxWidth / controller.value.aspectRatio).clamp(0, height - statusBar) -
-                        2,
                     left: 0,
                     right: 0,
-                    height: 2,
-                    child: IgnorePointer(child: _ProgressLine(controller: controller)),
+                    bottom: navClearance,
+                    height: _scrubberHeight,
+                    child: _Scrubber(controller: controller),
                   ),
                 if (isPaused && !reviewsOpen)
                   const IgnorePointer(
@@ -343,28 +341,103 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
   }
 }
 
-/// Rebuilds only itself on each position tick (not the whole card).
-class _ProgressLine extends StatelessWidget {
-  const _ProgressLine({required this.controller});
+/// Thin progress line that turns into a scrubber: tap or drag horizontally
+/// to seek (a horizontal drag doesn't compete with the feed's vertical
+/// paging). Rebuilds only itself on position ticks.
+class _Scrubber extends StatefulWidget {
+  const _Scrubber({required this.controller});
 
   final VideoPlayerController controller;
 
   @override
+  State<_Scrubber> createState() => _ScrubberState();
+}
+
+class _ScrubberState extends State<_Scrubber> {
+  /// Fraction being dragged to (null when not dragging).
+  double? _dragFraction;
+
+  void _seekToFraction(double fraction) {
+    final Duration total = widget.controller.value.duration;
+    if (total > Duration.zero) {
+      unawaited(widget.controller.seekTo(total * fraction.clamp(0.0, 1.0)));
+    }
+  }
+
+  String _clock(Duration d) => "${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, "0")}";
+
+  @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<VideoPlayerValue>(
-      valueListenable: controller,
-      builder: (BuildContext context, VideoPlayerValue value, Widget? child) {
-        final int total = value.duration.inMilliseconds;
-        final double fraction = total <= 0 ? 0 : (value.position.inMilliseconds / total).clamp(0, 1);
-        return Stack(
-          children: <Widget>[
-            const Positioned.fill(child: ColoredBox(color: Colors.white24)),
-            FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: fraction,
-              child: const DecoratedBox(decoration: BoxDecoration(gradient: AppColors.brandGradient)),
-            ),
-          ],
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final double width = constraints.maxWidth;
+        double fractionAt(double dx) => (dx / width).clamp(0.0, 1.0);
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapUp: (TapUpDetails d) => _seekToFraction(fractionAt(d.localPosition.dx)),
+          onHorizontalDragStart: (DragStartDetails d) => setState(() => _dragFraction = fractionAt(d.localPosition.dx)),
+          onHorizontalDragUpdate: (DragUpdateDetails d) =>
+              setState(() => _dragFraction = fractionAt(d.localPosition.dx)),
+          onHorizontalDragEnd: (_) {
+            final double? f = _dragFraction;
+            setState(() => _dragFraction = null);
+            if (f != null) {
+              _seekToFraction(f);
+            }
+          },
+          child: ValueListenableBuilder<VideoPlayerValue>(
+            valueListenable: widget.controller,
+            builder: (BuildContext context, VideoPlayerValue value, Widget? child) {
+              final int total = value.duration.inMilliseconds;
+              final double played = total <= 0 ? 0 : (value.position.inMilliseconds / total).clamp(0.0, 1.0);
+              final bool dragging = _dragFraction != null;
+              final double fraction = _dragFraction ?? played;
+              final double barHeight = dragging ? 6 : 3;
+              return Stack(
+                clipBehavior: Clip.none,
+                children: <Widget>[
+                  if (dragging)
+                    Positioned(
+                      bottom: barHeight + 6,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: Text(
+                          "${_clock(value.duration * fraction)} / ${_clock(value.duration)}",
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: barHeight,
+                    child: Stack(
+                      children: <Widget>[
+                        const Positioned.fill(child: ColoredBox(color: Colors.white24)),
+                        FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: fraction,
+                          child: const DecoratedBox(decoration: BoxDecoration(gradient: AppColors.brandGradient)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (dragging)
+                    Positioned(
+                      left: (width * fraction - 7).clamp(0.0, width - 14),
+                      bottom: barHeight / 2 - 7,
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
         );
       },
     );

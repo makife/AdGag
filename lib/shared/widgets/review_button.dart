@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/theme/app_spacing.dart";
+import "../../features/comments/presentation/providers/comments_controller.dart";
 import "../../features/feed/presentation/providers/reviews_panel_provider.dart";
 import "action_rail_icon.dart";
 import "count_label.dart";
@@ -30,7 +31,7 @@ class ReviewButton extends ConsumerWidget {
             children: <Widget>[
               const ActionRailIcon(icon: Icons.chat_bubble_outline),
               const SizedBox(height: AppSpacing.xs),
-              CountLabel(count: commentCount, color: Colors.white),
+              CountLabel(count: commentCount + ref.watch(commentCountDeltaProvider(adId)), color: Colors.white),
             ],
           ),
         ),

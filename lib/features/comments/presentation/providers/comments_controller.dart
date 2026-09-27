@@ -5,6 +5,12 @@ import "comments_providers.dart";
 
 const int _pageSize = 20;
 
+/// Reviews posted (+) / deleted (-) this session per Ad, added to the
+/// feed's server-side comment_count so the REVIEWS badge updates at once
+/// (the feed data isn't refetched after posting).
+final StateProviderFamily<int, String> commentCountDeltaProvider =
+    StateProvider.family<int, String>((ref, String adId) => 0);
+
 final class CommentsState {
   const CommentsState({required this.comments, required this.hasMore, this.isLoadingMore = false});
 
@@ -53,10 +59,12 @@ final class CommentsController extends FamilyAsyncNotifier<CommentsState, String
     if (current != null) {
       state = AsyncData<CommentsState>(current.copyWith(comments: <Comment>[comment, ...current.comments]));
     }
+    ref.read(commentCountDeltaProvider(arg).notifier).state++;
   }
 
   Future<void> deleteOwn(String commentId) async {
     await ref.read(commentsRepositoryProvider).deleteOwn(commentId);
+    ref.read(commentCountDeltaProvider(arg).notifier).state--;
     final CommentsState? current = state.valueOrNull;
     if (current != null) {
       state = AsyncData<CommentsState>(
