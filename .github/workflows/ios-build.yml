@@ -19,6 +19,8 @@ on:
     paths:
       - "ios/**"
       - "lib/**"
+      - "third_party/**"
+      - ".gitignore"
       - "pubspec.yaml"
       - "pubspec.lock"
       - ".github/workflows/ios-build.yml"
@@ -26,6 +28,7 @@ on:
     paths:
       - "ios/**"
       - "lib/**"
+      - "third_party/**"
       - "pubspec.yaml"
       - "pubspec.lock"
   workflow_dispatch: {}
