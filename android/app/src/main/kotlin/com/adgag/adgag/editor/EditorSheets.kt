@@ -13,6 +13,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
@@ -50,15 +53,34 @@ fun MusicSheet(viewModel: EditorViewModel, onReplace: () -> Unit, onDismiss: () 
                 onSelect = { viewModel.changeMusicSpeed(it) },
             )
             if (viewModel.isAttachingMusic) {
-                Text(
-                    text = "Preparing music…",
-                    color = AdGagColors.OnSurfaceMuted,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = AdGagSpacing.lg.dp, vertical = AdGagSpacing.xs.dp),
+                PreparingMusicIndicator(modifier = Modifier.padding(horizontal = AdGagSpacing.lg.dp, vertical = AdGagSpacing.xs.dp))
+            }
+
+            Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { viewModel.changeMusicLoop(!viewModel.musicLoop) }
+                    .padding(horizontal = AdGagSpacing.lg.dp, vertical = AdGagSpacing.xs.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Loop to fill the video", color = AdGagColors.OnBackground, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = "Repeats the selected part until the video ends",
+                        color = AdGagColors.OnSurfaceMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Switch(
+                    checked = viewModel.musicLoop,
+                    onCheckedChange = { viewModel.changeMusicLoop(it) },
+                    colors = SwitchDefaults.colors(checkedTrackColor = AdGagColors.GradientPink),
                 )
             }
 
-            val maxFade = minOf(MaxMusicFadeMs, viewModel.musicPlayDurationMs).coerceAtLeast(0L)
+            val maxFade = minOf(MaxMusicFadeMs, viewModel.musicCoveredMs).coerceAtLeast(0L)
             FadeSlider(
                 label = "Fade in",
                 valueMs = viewModel.musicFadeInMs,
@@ -123,6 +145,20 @@ fun VideoSpeedSheet(viewModel: EditorViewModel, onDismiss: () -> Unit) {
                 modifier = Modifier.padding(horizontal = AdGagSpacing.lg.dp),
             )
         }
+    }
+}
+
+/** "Preparing music…" with a thin indeterminate progress line under it — re-timing a song takes a few seconds. */
+@Composable
+fun PreparingMusicIndicator(modifier: Modifier = Modifier) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(text = "Preparing music…", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.bodySmall)
+        Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
+        LinearProgressIndicator(
+            modifier = Modifier.fillMaxWidth().height(2.dp),
+            color = AdGagColors.GradientPink,
+            trackColor = AdGagColors.Border,
+        )
     }
 }
 

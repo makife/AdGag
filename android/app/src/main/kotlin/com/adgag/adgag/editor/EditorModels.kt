@@ -80,6 +80,8 @@ data class EditorSessionState(
     val musicSpeed: Float,
     val musicFadeInMs: Long,
     val musicFadeOutMs: Long,
+    /** Repeat the selected part of the song until the video ends. */
+    val musicLoop: Boolean,
     /** GLOBAL placement of the music, in OUTPUT time (after [videoSpeed]). */
     val musicStartOffsetMs: Long,
     /** Where in the SONG the used part begins (the music row's left trim). */
@@ -113,6 +115,7 @@ data class EditorSessionState(
         put("musicSpeed", musicSpeed.toDouble())
         put("musicFadeInMs", musicFadeInMs)
         put("musicFadeOutMs", musicFadeOutMs)
+        put("musicLoop", musicLoop)
         put("videoSpeed", videoSpeed.toDouble())
         put("musicStartOffsetMs", musicStartOffsetMs)
         put("musicSourceStartMs", musicSourceStartMs)
@@ -157,6 +160,7 @@ data class EditorSessionState(
                 musicSpeed = o.optDouble("musicSpeed", 1.0).toFloat(),
                 musicFadeInMs = o.optLong("musicFadeInMs", 0L),
                 musicFadeOutMs = o.optLong("musicFadeOutMs", 0L),
+                musicLoop = o.optBoolean("musicLoop", false),
                 musicStartOffsetMs = o.optLong("musicStartOffsetMs", 0L),
                 musicSourceStartMs = o.optLong("musicSourceStartMs", 0L),
                 musicPlayDurationMs = o.optLong("musicPlayDurationMs", 0L),

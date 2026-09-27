@@ -240,7 +240,7 @@ fun EditorScreen(
                 }
                 if (viewModel.isAttachingMusic) {
                     Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
-                    Text(text = "Preparing music…", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.bodyMedium)
+                    PreparingMusicIndicator()
                 }
                 // Errors are capped at a few lines: a long codec dump used
                 // to grow the panel and squeeze the video away.

@@ -158,6 +158,18 @@ class NativeEditorActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Real bug (user report: "the app is in the background but I still
+     * hear the video"): nothing paused the editor's ExoPlayer when this
+     * Activity left the screen — ExoPlayer has no lifecycle awareness of
+     * its own. Pause whenever we're no longer visible (home, app switch,
+     * the screen turning off). Not auto-resumed: the user taps play.
+     */
+    override fun onStop() {
+        viewModel.player.pause()
+        super.onStop()
+    }
+
     override fun onDestroy() {
         Thread.setDefaultUncaughtExceptionHandler(previousExceptionHandler)
         super.onDestroy()

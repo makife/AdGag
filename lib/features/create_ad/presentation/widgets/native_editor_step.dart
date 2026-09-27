@@ -2,6 +2,7 @@ import "dart:async" show unawaited;
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:image_picker/image_picker.dart";
 
 import "../../../../core/media/native_editor_bridge.dart";
 import "../../domain/local_video_draft.dart";
@@ -35,6 +36,10 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
   /// how long the new take may be.
   String? _resumeState;
   Duration? _extraClipMax;
+
+  /// Bumped to rebuild the camera from scratch (e.g. after the gallery
+  /// picker was cancelled — the camera was released before opening it).
+  int _cameraGeneration = 0;
 
   @override
   void initState() {
@@ -76,6 +81,29 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
       return unawaited(_open());
     }
     await _run(() => NativeEditorBridge.openEditor(state: state, newClipPath: newClipPath));
+  }
+
+  /// The "+" take from the gallery instead of the camera. Any length is
+  /// fine — the native editor trims it to the time that's left.
+  Future<void> _pickExtraFromGallery() async {
+    try {
+      final XFile? file = await ImagePicker().pickVideo(source: ImageSource.gallery);
+      if (!mounted) {
+        return;
+      }
+      if (file != null) {
+        await _resume(newClipPath: file.path);
+        return;
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Couldn't import that video: $e")));
+      }
+    }
+    // Cancelled or failed: back to the camera (a fresh one).
+    if (mounted) {
+      setState(() => _cameraGeneration++);
+    }
   }
 
   Future<void> _run(Future<NativeEditorOutcome?> Function() launch) async {
@@ -125,9 +153,11 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
       return Scaffold(
         backgroundColor: Colors.black,
         body: CameraRecordView(
+          key: ValueKey<int>(_cameraGeneration),
           maxDuration: extraClipMax,
           onRecorded: (String filePath, Duration _) => unawaited(_resume(newClipPath: filePath)),
           onCancel: () => unawaited(_resume()),
+          onPickFromGallery: () => unawaited(_pickExtraFromGallery()),
         ),
       );
     }

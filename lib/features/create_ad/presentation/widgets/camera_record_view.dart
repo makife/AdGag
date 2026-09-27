@@ -27,6 +27,7 @@ class CameraRecordView extends StatefulWidget {
     required this.onRecorded,
     this.maxDuration = VideoConstraints.max,
     this.onCancel,
+    this.onPickFromGallery,
     super.key,
   });
 
@@ -38,6 +39,11 @@ class CameraRecordView extends StatefulWidget {
 
   /// When set, a Cancel button is shown top-left (extra-take mode).
   final VoidCallback? onCancel;
+
+  /// When set, a gallery button is shown next to the record button. The
+  /// camera is fully released before this is called (the gallery picker
+  /// is a separate screen, and the editor that follows needs the codecs).
+  final VoidCallback? onPickFromGallery;
 
   @override
   State<CameraRecordView> createState() => _CameraRecordViewState();
@@ -126,10 +132,9 @@ class _CameraRecordViewState extends State<CameraRecordView> {
       _switchingCamera = true;
       _controller = null;
     });
-    final CameraLensDirection nextDirection =
-        current.description.lensDirection == CameraLensDirection.back
-            ? CameraLensDirection.front
-            : CameraLensDirection.back;
+    final CameraLensDirection nextDirection = current.description.lensDirection == CameraLensDirection.back
+        ? CameraLensDirection.front
+        : CameraLensDirection.back;
     final CameraDescription next = _cameras.firstWhere(
       (CameraDescription c) => c.lensDirection == nextDirection,
       orElse: () => _cameras.first,
@@ -225,6 +230,11 @@ class _CameraRecordViewState extends State<CameraRecordView> {
   Future<void> _cancel() async {
     await _releaseCamera();
     widget.onCancel?.call();
+  }
+
+  Future<void> _pickFromGallery() async {
+    await _releaseCamera();
+    widget.onPickFromGallery?.call();
   }
 
   @override
@@ -334,32 +344,59 @@ class _CameraRecordViewState extends State<CameraRecordView> {
                   style: const TextStyle(color: Colors.white),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                GestureDetector(
-                  onTap: _toggleRecording,
-                  child: SizedBox(
-                    width: 76,
-                    height: 76,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: <Widget>[
-                        CircularProgressIndicator(
-                          value: _isRecording ? progress.clamp(0, 1) : 0,
-                          strokeWidth: 4,
-                          color: AppColors.sold,
-                          backgroundColor: Colors.white24,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    // Balances the gallery button so the record button stays centered.
+                    SizedBox(width: widget.onPickFromGallery != null ? 76 : 0),
+                    GestureDetector(
+                      onTap: _toggleRecording,
+                      child: SizedBox(
+                        width: 76,
+                        height: 76,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: <Widget>[
+                            CircularProgressIndicator(
+                              value: _isRecording ? progress.clamp(0, 1) : 0,
+                              strokeWidth: 4,
+                              color: AppColors.sold,
+                              backgroundColor: Colors.white24,
+                            ),
+                            Container(
+                              width: 56,
+                              height: 56,
+                              decoration: BoxDecoration(
+                                shape: _isRecording ? BoxShape.rectangle : BoxShape.circle,
+                                borderRadius: _isRecording ? BorderRadius.circular(8) : null,
+                                color: AppColors.sold,
+                              ),
+                            ),
+                          ],
                         ),
-                        Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            shape: _isRecording ? BoxShape.rectangle : BoxShape.circle,
-                            borderRadius: _isRecording ? BorderRadius.circular(8) : null,
-                            color: AppColors.sold,
+                      ),
+                    ),
+                    if (widget.onPickFromGallery != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: AppSpacing.xl),
+                        child: GestureDetector(
+                          onTap: _isRecording ? null : () => unawaited(_pickFromGallery()),
+                          child: Opacity(
+                            opacity: _isRecording ? 0.4 : 1,
+                            child: Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                color: Colors.black38,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.white70),
+                              ),
+                              child: const Icon(Icons.photo_library_outlined, color: Colors.white),
+                            ),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
+                  ],
                 ),
               ],
             ),

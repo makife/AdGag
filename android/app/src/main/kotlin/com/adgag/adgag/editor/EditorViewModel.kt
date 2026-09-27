@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
@@ -83,7 +84,15 @@ class EditorViewModel(
     newClipPath: String? = null,
 ) : ViewModel() {
 
-    val player: ExoPlayer = ExoPlayer.Builder(context).build().apply {
+    val player: ExoPlayer = ExoPlayer.Builder(context)
+        // Take audio focus like any media app: another app's playback (or
+        // a call) pauses the preview, and so do unplugged headphones.
+        .setAudioAttributes(
+            AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
+            /* handleAudioFocus = */ true,
+        )
+        .setHandleAudioBecomingNoisy(true)
+        .build().apply {
         // The whole playlist loops (REPEAT_MODE_ONE would loop only the
         // current segment). Without a repeat mode a finished player
         // ignores play() — the original "play doesn't work" bug.
@@ -144,6 +153,34 @@ class EditorViewModel(
         private set
     var musicFadeOutMs by mutableStateOf(initialState.musicFadeOutMs)
         private set
+    /** Repeat the selected part of the song back to back until the video ends. */
+    var musicLoop by mutableStateOf(initialState.musicLoop)
+        private set
+
+    /** How much of the timeline the music covers (OUTPUT time): one play, or — looping — up to the video's end. */
+    val musicCoveredMs: Long
+        get() = if (musicLoop && musicPlayDurationMs > 0) {
+            (outputDurationMs - musicStartOffsetMs).coerceAtLeast(musicPlayDurationMs)
+        } else {
+            musicPlayDurationMs
+        }
+
+    /** Each play of the selected part: (OUTPUT start, length). One entry unless looping. */
+    fun musicRepetitions(): List<Pair<Long, Long>> {
+        val unit = musicPlayDurationMs
+        if (musicPath == null || unit <= 0) return emptyList()
+        val end = musicStartOffsetMs + musicCoveredMs
+        val result = mutableListOf<Pair<Long, Long>>()
+        var start = musicStartOffsetMs
+        while (start < end && result.size < 200) {
+            val len = minOf(unit, end - start)
+            // A sliver under 100ms isn't worth its own item (and would click).
+            if (len < 100 && result.isNotEmpty()) break
+            result += start to len
+            start += unit
+        }
+        return result
+    }
 
     /**
      * PREVIEW-ONLY song file. The preview player runs at [videoSpeed] and
@@ -265,6 +302,7 @@ class EditorViewModel(
         musicSpeed = musicSpeed,
         musicFadeInMs = musicFadeInMs,
         musicFadeOutMs = musicFadeOutMs,
+        musicLoop = musicLoop,
         musicStartOffsetMs = musicStartOffsetMs,
         musicSourceStartMs = musicSourceStartMs,
         musicPlayDurationMs = musicPlayDurationMs,
@@ -406,6 +444,9 @@ class EditorViewModel(
             musicStartOffsetMs = 0L
             musicSourceStartMs = 0L
             musicPlayDurationMs = minOf(copied.second, outputDurationMs)
+            // A song shorter than the video starts out looping to fill it
+            // (switchable in the music sheet).
+            musicLoop = copied.second < outputDurationMs
             preparePreviewMusicAndRebuild()
         }
     }
@@ -456,8 +497,15 @@ class EditorViewModel(
         }
     }
 
+    fun changeMusicLoop(loop: Boolean) {
+        if (loop == musicLoop) return
+        musicLoop = loop
+        setMusicFade(musicFadeInMs, musicFadeOutMs) // re-clamp against the new coverage
+        rebuildAndPrepare(startGlobalMs = globalPositionMs(), playWhenReady = player.playWhenReady)
+    }
+
     fun setMusicFade(fadeInMs: Long, fadeOutMs: Long) {
-        val play = musicPlayDurationMs.coerceAtLeast(0L)
+        val play = musicCoveredMs.coerceAtLeast(0L)
         musicFadeInMs = fadeInMs.coerceIn(0L, minOf(MaxMusicFadeMs, play))
         musicFadeOutMs = fadeOutMs.coerceIn(0L, minOf(MaxMusicFadeMs, play))
         // No rebuild: the preview applies fades through player volume.
@@ -485,8 +533,10 @@ class EditorViewModel(
             return
         }
         val local = (globalMs / videoSpeed).toLong() - musicStartOffsetMs
-        player.volume = if (local in 0 until musicPlayDurationMs) {
-            fadeGain(local, musicFadeInMs, musicFadeOutMs, musicPlayDurationMs)
+        val covered = musicCoveredMs
+        // Fades wrap the WHOLE covered span (a loop fades in once, out once).
+        player.volume = if (local in 0 until covered) {
+            fadeGain(local, musicFadeInMs, musicFadeOutMs, covered)
         } else {
             1f
         }
@@ -630,19 +680,19 @@ class EditorViewModel(
      * silence. Without music: one segment per clip, its own audio.
      */
     private fun buildSegments(): List<Segment> {
-        val music = musicPath != null && musicPlayDurationMs > 0
-        // Music placement is OUTPUT time; the playlist is SOURCE time.
-        val mStart = (musicStartOffsetMs * videoSpeed).toLong()
-        val mEnd = ((musicStartOffsetMs + musicPlayDurationMs) * videoSpeed).toLong()
+        // Music placement is OUTPUT time; the playlist is SOURCE time. Every
+        // repetition's start and end is a cut, so each playlist item holds
+        // at most one piece of one repetition.
+        val musicCuts = musicRepetitions().flatMap { (start, len) ->
+            listOf((start * videoSpeed).toLong(), ((start + len) * videoSpeed).toLong())
+        }
         val result = mutableListOf<Segment>()
         var g = 0L
         clips.forEachIndexed { i, clip ->
             val ge = g + clip.keptDurationMs
             val cuts = mutableListOf(g, ge)
             // Skip cut points hugging a clip edge — a few-ms playlist item only adds a hiccup.
-            if (music) {
-                listOf(mStart, mEnd).forEach { c -> if (c > g + 50 && c < ge - 50) cuts += c }
-            }
+            musicCuts.forEach { c -> if (c > g + 50 && c < ge - 50) cuts += c }
             val sorted = cuts.distinct().sorted()
             for (k in 0 until sorted.size - 1) {
                 val a = sorted[k]
@@ -668,6 +718,7 @@ class EditorViewModel(
         )
         val music = musicPath
         val previewMusic = musicPreviewPath
+        val repetitions = musicRepetitions()
         val sources = segments.map { seg ->
             val clip = clips[seg.clipIndex]
             val video: MediaSource = ClippingMediaSource(
@@ -679,17 +730,16 @@ class EditorViewModel(
                 video
             } else {
                 val s = videoSpeed
-                val segEnd = seg.globalStartMs + seg.lengthMs
-                val mStart = (musicStartOffsetMs * s).toLong()
-                val mEnd = ((musicStartOffsetMs + musicPlayDurationMs) * s).toLong()
-                // Cuts within 50ms of a clip edge are skipped (buildSegments),
-                // so a segment can overlap the music range by all but a few
-                // ms — decide by majority overlap rather than full containment.
-                val overlap = minOf(segEnd, mEnd) - maxOf(seg.globalStartMs, mStart)
+                // Which repetition this piece belongs to — by its midpoint:
+                // cuts within 50ms of a clip edge are skipped (buildSegments),
+                // so a piece can straddle a boundary by a few ms.
+                val midOut = ((seg.globalStartMs + seg.lengthMs / 2) / s).toLong()
+                val rep = repetitions.firstOrNull { (start, len) -> midOut >= start && midOut < start + len }
                 val songMs = musicPreviewDurationMs
-                val audio: MediaSource = if (previewMusic != null && musicPlayDurationMs > 0 && overlap * 2 >= seg.lengthMs && songMs > 0) {
+                val audio: MediaSource = if (previewMusic != null && rep != null && songMs > 0) {
+                    val repStartSrc = (rep.first * s).toLong()
                     // Preview-file position = musicPath position × videoSpeed (see musicPreviewPath).
-                    val fromMs = ((musicSourceStartMs * s).toLong() + seg.globalStartMs - mStart)
+                    val fromMs = ((musicSourceStartMs * s).toLong() + seg.globalStartMs - repStartSrc)
                         .coerceIn(0L, (songMs - 1).coerceAtLeast(0L))
                     ClippingMediaSource(
                         factory.createMediaSource(MediaItem.fromUri(Uri.fromFile(File(previewMusic)))),
@@ -784,34 +834,41 @@ class EditorViewModel(
             return Composition.Builder(ImmutableList.of(videoSequence)).build()
         }
         val musicUri = Uri.fromFile(File(music))
-        val musicItem = EditedMediaItem.Builder(
-            MediaItem.Builder()
-                .setUri(musicUri)
-                .setClippingConfiguration(
-                    MediaItem.ClippingConfiguration.Builder()
-                        .setStartPositionMs(musicSourceStartMs)
-                        .setEndPositionMs(musicSourceStartMs + musicPlayDurationMs)
-                        .build(),
-                )
-                .build(),
-        )
-            .apply { probeDurationUs(context, musicUri)?.let { setDurationUs(it) } }
-            .apply {
-                if (musicFadeInMs > 0 || musicFadeOutMs > 0) {
-                    setEffects(
-                        Effects(
-                            ImmutableList.of<AudioProcessor>(
-                                MusicFadeAudioProcessor(musicFadeInMs, musicFadeOutMs, musicPlayDurationMs),
-                            ),
-                            ImmutableList.of(),
-                        ),
+        val songDurationUs = probeDurationUs(context, musicUri)
+        // One item per play of the selected part (just one unless looping),
+        // back to back. The fade-in belongs to the first, the fade-out to
+        // the last — a loop fades in once and out once.
+        val repetitions = musicRepetitions()
+        val musicItems = repetitions.mapIndexed { k, (_, len) ->
+            val fadeIn = if (k == 0) musicFadeInMs else 0L
+            val fadeOut = if (k == repetitions.lastIndex) musicFadeOutMs else 0L
+            EditedMediaItem.Builder(
+                MediaItem.Builder()
+                    .setUri(musicUri)
+                    .setClippingConfiguration(
+                        MediaItem.ClippingConfiguration.Builder()
+                            .setStartPositionMs(musicSourceStartMs)
+                            .setEndPositionMs(musicSourceStartMs + len)
+                            .build(),
                     )
+                    .build(),
+            )
+                .apply { songDurationUs?.let { setDurationUs(it) } }
+                .apply {
+                    if (fadeIn > 0 || fadeOut > 0) {
+                        setEffects(
+                            Effects(
+                                ImmutableList.of<AudioProcessor>(MusicFadeAudioProcessor(fadeIn, fadeOut, len)),
+                                ImmutableList.of(),
+                            ),
+                        )
+                    }
                 }
-            }
-            .build()
+                .build()
+        }
         val musicSequence = EditedMediaItemSequence.Builder(ImmutableSet.of(C.TRACK_TYPE_AUDIO))
             .apply { if (musicStartOffsetMs > 0) addGap(musicStartOffsetMs * 1000) }
-            .addItem(musicItem)
+            .addItems(musicItems)
             .build()
         return Composition.Builder(ImmutableList.of(videoSequence, musicSequence)).build()
     }
@@ -910,6 +967,7 @@ class EditorViewModel(
                 musicSpeed = 1f,
                 musicFadeInMs = 0L,
                 musicFadeOutMs = 0L,
+                musicLoop = false,
                 musicStartOffsetMs = 0L,
                 musicSourceStartMs = 0L,
                 musicPlayDurationMs = 0L,

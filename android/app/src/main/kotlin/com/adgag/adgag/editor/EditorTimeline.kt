@@ -138,7 +138,9 @@ fun EditorTimeline(
             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    text = "Music" + if (viewModel.musicSpeed != 1f) " · ${formatSpeed(viewModel.musicSpeed)}" else "",
+                    text = "Music" +
+                        (if (viewModel.musicSpeed != 1f) " · ${formatSpeed(viewModel.musicSpeed)}" else "") +
+                        (if (viewModel.musicLoop) " · loop" else ""),
                     color = AdGagColors.OnSurfaceMuted,
                     style = MaterialTheme.typography.labelMedium,
                 )
@@ -547,6 +549,25 @@ private fun RowScope.MusicRow(viewModel: EditorViewModel, density: Density) {
                     )
                 },
         )
+
+        // Loop repetitions after the first play: same length, back to
+        // back until the video ends — drawn fainter, not draggable (the
+        // first play is the one being edited; the rest follow it).
+        if (viewModel.musicLoop && localDuration > 0) {
+            var repStart = localStart + localDuration
+            while (repStart < totalMs) {
+                val repLen = minOf(localDuration, totalMs - repStart)
+                Box(
+                    modifier = Modifier
+                        .offset(x = with(density) { msToPx(repStart).toDp() } + 1.dp)
+                        .width(with(density) { (msToPx(repLen) - 1f).coerceAtLeast(1f).toDp() })
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(AdGagRadius.sm.dp))
+                        .background(AdGagColors.GradientBlue.copy(alpha = 0.25f)),
+                )
+                repStart += localDuration
+            }
+        }
 
         // Handles on both edges, drawn over the body so they win touches
         // at the edges; the same clamped-hit-box handle as the trim row.
