@@ -5,6 +5,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../../core/supabase/supabase_providers.dart";
 import "../../../../core/theme/app_spacing.dart";
+import "../../../../shared/widgets/mini_avatar.dart";
 import "../../domain/comment.dart";
 import "../providers/comments_controller.dart";
 
@@ -112,6 +113,7 @@ class _ReviewsPanelState extends ConsumerState<ReviewsPanel> {
                     final bool isOwn = comment.userId == currentUserId;
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
+                      leading: MiniAvatar(avatarUrl: comment.avatarUrl, username: comment.username, size: 32),
                       title: Text("@${comment.username ?? 'unknown'}"),
                       subtitle: Text(comment.body),
                       trailing: isOwn

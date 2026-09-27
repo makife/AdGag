@@ -24,6 +24,7 @@ final class Ad {
     this.publishedAt,
     this.subjectDisplayName,
     this.creatorUsername,
+    this.creatorAvatarUrl,
   });
 
   factory Ad.fromRow(Map<String, dynamic> row) {
@@ -35,8 +36,8 @@ final class Ad {
     final Map<String, dynamic>? profileEmbed = row["profiles"] as Map<String, dynamic>?;
     final String? subjectDisplayName =
         subjectEmbed?["display_name"] as String? ?? row["subject_display_name"] as String?;
-    final String? creatorUsername =
-        profileEmbed?["username"] as String? ?? row["creator_username"] as String?;
+    final String? creatorUsername = profileEmbed?["username"] as String? ?? row["creator_username"] as String?;
+    final String? creatorAvatarUrl = profileEmbed?["avatar_url"] as String? ?? row["creator_avatar_url"] as String?;
 
     return Ad(
       id: row["id"] as String,
@@ -55,10 +56,10 @@ final class Ad {
       shareCount: (row["share_count"] as num).toInt(),
       adThisCount: (row["ad_this_count"] as num).toInt(),
       createdAt: DateTime.parse(row["created_at"] as String),
-      publishedAt:
-          row["published_at"] == null ? null : DateTime.parse(row["published_at"] as String),
+      publishedAt: row["published_at"] == null ? null : DateTime.parse(row["published_at"] as String),
       subjectDisplayName: subjectDisplayName,
       creatorUsername: creatorUsername,
+      creatorAvatarUrl: creatorAvatarUrl,
     );
   }
 
@@ -84,4 +85,5 @@ final class Ad {
   /// [Ad.fromRow]. Not part of the `ads` table itself.
   final String? subjectDisplayName;
   final String? creatorUsername;
+  final String? creatorAvatarUrl;
 }

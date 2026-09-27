@@ -11,17 +11,14 @@ final class CommentsRepositoryImpl implements CommentsRepository {
 
   @override
   Future<List<Comment>> fetchPage({required String adId, DateTime? before, int limit = 20}) async {
-    supa.PostgrestFilterBuilder<List<Map<String, dynamic>>> query = _client
-        .from("comments")
-        .select("*, profiles(username)")
-        .eq("ad_id", adId);
+    supa.PostgrestFilterBuilder<List<Map<String, dynamic>>> query =
+        _client.from("comments").select("*, profiles(username, avatar_url)").eq("ad_id", adId);
 
     if (before != null) {
       query = query.lt("created_at", before.toIso8601String());
     }
 
-    final List<Map<String, dynamic>> rows =
-        await query.order("created_at", ascending: false).limit(limit);
+    final List<Map<String, dynamic>> rows = await query.order("created_at", ascending: false).limit(limit);
     return rows.map(Comment.fromRow).toList(growable: false);
   }
 
@@ -32,7 +29,15 @@ final class CommentsRepositoryImpl implements CommentsRepository {
         "create_comment",
         params: <String, dynamic>{"p_ad_id": adId, "p_body": body},
       );
-      return Comment.fromRow(row);
+      // The RPC returns the bare comments row — no profile embed — which
+      // made a freshly posted review show "@unknown" until a reload. Re-read
+      // it with the author's username/avatar; fall back to the bare row.
+      final Map<String, dynamic>? withAuthor = await _client
+          .from("comments")
+          .select("*, profiles(username, avatar_url)")
+          .eq("id", row["id"] as String)
+          .maybeSingle();
+      return Comment.fromRow(withAuthor ?? row);
     } on supa.PostgrestException catch (e) {
       throw app_error.ValidationException(e.message, e);
     }

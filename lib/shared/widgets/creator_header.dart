@@ -7,15 +7,17 @@ import "../../core/router/route_paths.dart";
 import "../../core/supabase/supabase_providers.dart";
 import "../../core/theme/app_spacing.dart";
 import "../../features/social/presentation/providers/social_providers.dart";
+import "mini_avatar.dart";
 
 /// Creator attribution + FOLLOW toggle (CLAUDE.md section 6/15/64). Hides
 /// the FOLLOW button entirely when viewing your own Ad or when signed
 /// out, rather than showing a button that would just error on tap.
 class CreatorHeader extends ConsumerWidget {
-  const CreatorHeader({required this.userId, required this.username, super.key});
+  const CreatorHeader({required this.userId, required this.username, this.avatarUrl, super.key});
 
   final String userId;
   final String? username;
+  final String? avatarUrl;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -26,15 +28,20 @@ class CreatorHeader extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         GestureDetector(
-          onTap: username == null
-              ? null
-              : () => unawaited(context.pushTo(RoutePaths.userProfileOf(username!))),
+          onTap: username == null ? null : () => unawaited(context.pushTo(RoutePaths.userProfileOf(username!))),
           // Deliberately plainer than SubjectBadge (no chip background,
           // dimmer white, smaller) — the two used to be the same white
           // bold text stacked tightly, easy to mis-tap one for the other.
-          child: Text(
-            "@${username ?? 'unknown'}",
-            style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w500, fontSize: 13),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              MiniAvatar(avatarUrl: avatarUrl, username: username),
+              const SizedBox(width: AppSpacing.xs + 2),
+              Text(
+                "@${username ?? 'unknown'}",
+                style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w500, fontSize: 13),
+              ),
+            ],
           ),
         ),
         if (!isOwnAd && currentUserId != null) ...<Widget>[

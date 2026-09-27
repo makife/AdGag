@@ -39,7 +39,7 @@ final class SubjectRepositoryImpl implements SubjectRepository {
   }) async {
     supa.PostgrestFilterBuilder<List<Map<String, dynamic>>> query = _client
         .from("ads")
-        .select("*, ad_subjects(display_name), profiles!ads_user_id_fkey(username)")
+        .select("*, ad_subjects(display_name), profiles!ads_user_id_fkey(username, avatar_url)")
         .eq("subject_id", subjectId)
         .eq("status", "ready");
 

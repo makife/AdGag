@@ -33,7 +33,21 @@ class AppShell extends ConsumerWidget {
   /// need this to keep bottom-anchored content — the action rail,
   /// subject/creator overlay — from sitting behind the (opaque, not
   /// translucent) bar instead of above it.
-  static const double barHeight = 56;
+  static const double minBarHeight = 56;
+  static const double maxBarHeight = 88;
+
+  /// The bar's height on this screen. A 9:16 Ad shown full-width under the
+  /// status bar leaves a black band below it on today's taller (~9:20)
+  /// phones; the bar grows (up to [maxBarHeight]) to fill exactly that band
+  /// instead, so the feed is video + bar with no dead space. On shorter
+  /// screens it stays at [minBarHeight].
+  static double barHeightOf(BuildContext context) {
+    final Size size = MediaQuery.sizeOf(context);
+    final EdgeInsets padding = MediaQuery.paddingOf(context);
+    final double videoHeight = size.width * 16 / 9;
+    final double gap = size.height - padding.top - videoHeight - padding.bottom;
+    return gap.clamp(minBarHeight, maxBarHeight);
+  }
 
   static const List<_TabSpec> _tabs = <_TabSpec>[
     _TabSpec(icon: Icons.home_outlined, selectedIcon: Icons.home, label: "Home"),
@@ -81,73 +95,98 @@ class AppShell extends ConsumerWidget {
       createAdFlowControllerProvider.select((CreateAdFlowState s) => s.step == CreateAdStep.trim),
     );
 
+    final double barHeight = barHeightOf(context);
+    // Roomier bar -> bigger icons, and labels once there's space for them.
+    final bool roomy = barHeight >= 68;
+    final double iconSize = roomy ? 28 : 24;
+
     return Scaffold(
       extendBody: true,
       body: navigationShell,
-      bottomNavigationBar: onTrimStep ? null : DecoratedBox(
-        decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
-        ),
-        child: SafeArea(
-          child: SizedBox(
-            height: barHeight,
-            child: Row(
-              children: List<Widget>.generate(_tabs.length, (int index) {
-                final _TabSpec tab = _tabs[index];
-                final bool isSelected = navigationShell.currentIndex == index;
+      bottomNavigationBar: onTrimStep
+          ? null
+          : DecoratedBox(
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
+              ),
+              child: SafeArea(
+                child: SizedBox(
+                  height: barHeight,
+                  child: Row(
+                    children: List<Widget>.generate(_tabs.length, (int index) {
+                      final _TabSpec tab = _tabs[index];
+                      final bool isSelected = navigationShell.currentIndex == index;
 
-                if (tab.icon == null) {
-                  // Central AD action — deliberately not a generic "+".
-                  return Expanded(
-                    child: Center(
-                      child: GestureDetector(
-                        onTap: () => unawaited(_onTabTap(context, ref, index)),
-                        child: Container(
-                          width: 44,
-                          height: 32,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            gradient: AppColors.brandGradient,
-                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                      if (tab.icon == null) {
+                        // Central AD action — deliberately not a generic "+".
+                        return Expanded(
+                          child: Center(
+                            child: GestureDetector(
+                              onTap: () => unawaited(_onTabTap(context, ref, index)),
+                              child: Container(
+                                width: roomy ? 54 : 44,
+                                height: roomy ? 38 : 32,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  gradient: AppColors.brandGradient,
+                                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                                ),
+                                child: Text(
+                                  "AD",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: roomy ? 15 : 13,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                          child: const Text(
-                            "AD",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 13,
-                              letterSpacing: 0.5,
+                        );
+                      }
+
+                      return Expanded(
+                        child: InkWell(
+                          onTap: () => unawaited(_onTabTap(context, ref, index)),
+                          child: Semantics(
+                            label: tab.label,
+                            selected: isSelected,
+                            button: true,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: <Widget>[
+                                Icon(
+                                  isSelected ? tab.selectedIcon : tab.icon,
+                                  color: isSelected
+                                      ? Theme.of(context).colorScheme.onSurface
+                                      : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                                  size: iconSize,
+                                ),
+                                if (roomy) ...<Widget>[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    tab.label,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                      color: isSelected
+                                          ? Theme.of(context).colorScheme.onSurface
+                                          : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                  );
-                }
-
-                return Expanded(
-                  child: InkWell(
-                    onTap: () => unawaited(_onTabTap(context, ref, index)),
-                    child: Semantics(
-                      label: tab.label,
-                      selected: isSelected,
-                      button: true,
-                      child: Icon(
-                        isSelected ? tab.selectedIcon : tab.icon,
-                        color: isSelected
-                            ? Theme.of(context).colorScheme.onSurface
-                            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
-                        size: 24,
-                      ),
-                    ),
+                      );
+                    }),
                   ),
-                );
-              }),
+                ),
+              ),
             ),
-          ),
-        ),
-      ),
     );
   }
 }

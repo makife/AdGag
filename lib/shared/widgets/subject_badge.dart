@@ -43,10 +43,8 @@ class SubjectBadge extends StatelessWidget {
             const SizedBox(width: AppSpacing.xs),
             Text(
               "${displayName.toUpperCase()}™",
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
+              style:
+                  Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
             ),
           ],
         ),

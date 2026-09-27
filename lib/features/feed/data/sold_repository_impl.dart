@@ -27,12 +27,8 @@ final class SoldRepositoryImpl implements SoldRepository {
     if (userId == null) {
       return false;
     }
-    final List<dynamic> rows = await _client
-        .from("sold_reactions")
-        .select("ad_id")
-        .eq("ad_id", adId)
-        .eq("user_id", userId)
-        .limit(1);
+    final List<dynamic> rows =
+        await _client.from("sold_reactions").select("ad_id").eq("ad_id", adId).eq("user_id", userId).limit(1);
     return rows.isNotEmpty;
   }
 }

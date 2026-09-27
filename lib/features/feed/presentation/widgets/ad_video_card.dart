@@ -53,7 +53,7 @@ class AdVideoCard extends ConsumerStatefulWidget {
 /// on top of that — a larger gap here previously left the action rail
 /// sitting noticeably far above the bar instead of just clear of it.
 double _bottomClearance(BuildContext context) {
-  return AppSpacing.sm + AppShell.barHeight + MediaQuery.paddingOf(context).bottom;
+  return AppSpacing.sm + AppShell.barHeightOf(context) + MediaQuery.paddingOf(context).bottom;
 }
 
 const Duration _panelAnimation = Duration(milliseconds: 260);
@@ -262,7 +262,8 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
             // The keyboard is read from the raw window insets: the Scaffolds
             // above remove it from MediaQuery once they've resized for it.
             final bool keyboardUp = MediaQueryData.fromView(View.of(context)).viewInsets.bottom > 0;
-            final double navClearance = keyboardUp ? 0 : AppShell.barHeight + MediaQuery.paddingOf(context).bottom;
+            final double navClearance =
+                keyboardUp ? 0 : AppShell.barHeightOf(context) + MediaQuery.paddingOf(context).bottom;
             final double panelTop = statusBar + openVideoHeight;
             final double panelHeight = (height - panelTop - navClearance).clamp(0, height);
 
@@ -281,6 +282,19 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
                     child: videoLayer,
                   ),
                 ),
+                // Thin playback progress line along the video's bottom edge
+                // (the video is width-fitted and top-anchored, so its bottom
+                // is statusBar + width / aspect, capped by the space).
+                if (showVideo && !reviewsOpen)
+                  Positioned(
+                    top: statusBar +
+                        (constraints.maxWidth / controller.value.aspectRatio).clamp(0, height - statusBar) -
+                        2,
+                    left: 0,
+                    right: 0,
+                    height: 2,
+                    child: IgnorePointer(child: _ProgressLine(controller: controller)),
+                  ),
                 if (isPaused && !reviewsOpen)
                   const IgnorePointer(
                     child: Center(
@@ -329,6 +343,34 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
   }
 }
 
+/// Rebuilds only itself on each position tick (not the whole card).
+class _ProgressLine extends StatelessWidget {
+  const _ProgressLine({required this.controller});
+
+  final VideoPlayerController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<VideoPlayerValue>(
+      valueListenable: controller,
+      builder: (BuildContext context, VideoPlayerValue value, Widget? child) {
+        final int total = value.duration.inMilliseconds;
+        final double fraction = total <= 0 ? 0 : (value.position.inMilliseconds / total).clamp(0, 1);
+        return Stack(
+          children: <Widget>[
+            const Positioned.fill(child: ColoredBox(color: Colors.white24)),
+            FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: fraction,
+              child: const DecoratedBox(decoration: BoxDecoration(gradient: AppColors.brandGradient)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _MuteButton extends StatelessWidget {
   const _MuteButton({required this.isMuted, required this.onTap});
 
@@ -365,7 +407,7 @@ class _Overlay extends StatelessWidget {
       children: <Widget>[
         if (ad.subjectDisplayName != null) SubjectBadge(subjectId: ad.subjectId, displayName: ad.subjectDisplayName!),
         const SizedBox(height: AppSpacing.sm),
-        CreatorHeader(userId: ad.userId, username: ad.creatorUsername),
+        CreatorHeader(userId: ad.userId, username: ad.creatorUsername, avatarUrl: ad.creatorAvatarUrl),
         if (ad.caption != null && ad.caption!.isNotEmpty) ...<Widget>[
           const SizedBox(height: AppSpacing.xs),
           Text(ad.caption!, style: const TextStyle(color: Colors.white)),

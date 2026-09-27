@@ -8,6 +8,7 @@ final class Comment {
     required this.body,
     required this.createdAt,
     this.username,
+    this.avatarUrl,
   });
 
   factory Comment.fromRow(Map<String, dynamic> row) {
@@ -19,6 +20,7 @@ final class Comment {
       body: row["body"] as String,
       createdAt: DateTime.parse(row["created_at"] as String),
       username: profileEmbed?["username"] as String?,
+      avatarUrl: profileEmbed?["avatar_url"] as String?,
     );
   }
 
@@ -28,4 +30,5 @@ final class Comment {
   final String body;
   final DateTime createdAt;
   final String? username;
+  final String? avatarUrl;
 }

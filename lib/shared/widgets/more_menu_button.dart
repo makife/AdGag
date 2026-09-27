@@ -67,8 +67,7 @@ class MoreMenuButton extends ConsumerWidget {
                     showModalBottomSheet<void>(
                       context: context,
                       isScrollControlled: true,
-                      builder: (BuildContext context) =>
-                          ReportSheet(targetType: ReportTargetType.ad, targetId: adId),
+                      builder: (BuildContext context) => ReportSheet(targetType: ReportTargetType.ad, targetId: adId),
                     ),
                   );
                 },

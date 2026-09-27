@@ -23,8 +23,7 @@ final class FeedRepositoryImpl implements FeedRepository {
 
     // Fetch one extra row to know whether a next page exists without a
     // separate COUNT query (same trick as the pre-ranking implementation).
-    final List<Map<String, dynamic>> rows =
-        await _client.rpc<List<dynamic>>(
+    final List<Map<String, dynamic>> rows = await _client.rpc<List<dynamic>>(
       "get_feed_page",
       params: <String, dynamic>{
         "p_cursor_score": decoded?.score,
@@ -35,7 +34,13 @@ final class FeedRepositoryImpl implements FeedRepository {
 
     final bool hasMore = rows.length > limit;
     final List<Map<String, dynamic>> pageRows = hasMore ? rows.sublist(0, limit) : rows;
-    final List<Ad> ads = pageRows.map(Ad.fromRow).toList(growable: false);
+    final Map<String, String?> avatars = await _avatarsFor(pageRows);
+    final List<Ad> ads = pageRows
+        .map(
+          (Map<String, dynamic> row) =>
+              Ad.fromRow(<String, dynamic>{...row, "creator_avatar_url": avatars[row["user_id"]]}),
+        )
+        .toList(growable: false);
 
     String? nextCursor;
     if (hasMore) {
@@ -46,11 +51,30 @@ final class FeedRepositoryImpl implements FeedRepository {
     return FeedPage(ads: ads, nextCursor: nextCursor);
   }
 
+  /// Creator avatars for a page of feed rows — ONE query for the whole page
+  /// (the get_feed_page RPC only returns creator_username). Best-effort:
+  /// a failure just means no avatars, never a failed feed page.
+  Future<Map<String, String?>> _avatarsFor(List<Map<String, dynamic>> rows) async {
+    final List<String> userIds = rows.map((Map<String, dynamic> r) => r["user_id"] as String).toSet().toList();
+    if (userIds.isEmpty) {
+      return const <String, String?>{};
+    }
+    try {
+      final List<Map<String, dynamic>> profiles =
+          await _client.from("profiles").select("id, avatar_url").inFilter("id", userIds);
+      return <String, String?>{
+        for (final Map<String, dynamic> p in profiles) p["id"] as String: p["avatar_url"] as String?,
+      };
+    } catch (_) {
+      return const <String, String?>{};
+    }
+  }
+
   @override
   Future<Ad?> getById(String adId) async {
     final Map<String, dynamic>? row = await _client
         .from("ads")
-        .select("*, ad_subjects(display_name), profiles!ads_user_id_fkey(username)")
+        .select("*, ad_subjects(display_name), profiles!ads_user_id_fkey(username, avatar_url)")
         .eq("id", adId)
         .eq("status", "ready")
         .maybeSingle();
@@ -65,8 +89,7 @@ final class _Cursor {
       RegExp(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
 
   factory _Cursor.decode(String encoded) {
-    final Map<String, dynamic> json =
-        jsonDecode(utf8.decode(base64Url.decode(encoded))) as Map<String, dynamic>;
+    final Map<String, dynamic> json = jsonDecode(utf8.decode(base64Url.decode(encoded))) as Map<String, dynamic>;
     final double score = (json["s"] as num).toDouble();
     final String id = json["id"] as String;
 

@@ -35,9 +35,8 @@ final class CommentsController extends FamilyAsyncNotifier<CommentsState, String
       return;
     }
     state = AsyncData<CommentsState>(current.copyWith(isLoadingMore: true));
-    final List<Comment> more = await ref
-        .read(commentsRepositoryProvider)
-        .fetchPage(adId: arg, before: current.comments.last.createdAt);
+    final List<Comment> more =
+        await ref.read(commentsRepositoryProvider).fetchPage(adId: arg, before: current.comments.last.createdAt);
     final CommentsState latest = state.value ?? current;
     state = AsyncData<CommentsState>(
       CommentsState(
