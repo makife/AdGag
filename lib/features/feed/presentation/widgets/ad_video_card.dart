@@ -15,7 +15,9 @@ import "../../../../core/video/video_providers.dart";
 import "../../../../core/video/video_service.dart";
 import "../../../../shared/widgets/creator_header.dart";
 import "../../../../shared/widgets/subject_badge.dart";
+import "../../../comments/presentation/widgets/reviews_panel.dart";
 import "../../domain/ad.dart";
+import "../providers/reviews_panel_provider.dart";
 import "feed_action_rail.dart";
 
 /// One fullscreen feed item (CLAUDE.md section 6): subject badge, creator
@@ -54,8 +56,11 @@ double _bottomClearance(BuildContext context) {
   return AppSpacing.sm + AppShell.barHeight + MediaQuery.paddingOf(context).bottom;
 }
 
+const Duration _panelAnimation = Duration(milliseconds: 260);
+
 class _AdVideoCardState extends ConsumerState<AdVideoCard> {
   VideoPlayerController? _controller;
+  bool _reviewsEverOpened = false;
   Timer? _twoSecondTimer;
   bool _trackedPlayStarted = false;
   bool _trackedTwoSecondView = false;
@@ -104,8 +109,7 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
       return;
     }
     final String url = widget.videoService.playbackUrl(playbackId);
-    final VideoPlayerController controller =
-        widget.pool.controllerFor(adId: widget.ad.id, playbackUrl: url);
+    final VideoPlayerController controller = widget.pool.controllerFor(adId: widget.ad.id, playbackUrl: url);
     unawaited(controller.setLooping(true));
     unawaited(controller.setVolume(ref.read(isFeedMutedProvider) ? 0 : 1));
     controller.addListener(_onControllerTick);
@@ -165,13 +169,9 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
     if (justWrapped) {
       if (!_trackedCompleted) {
         _trackedCompleted = true;
-        ref
-            .read(analyticsServiceProvider)
-            .track(widget.ad.id, AdEventType.completed, watchMs: duration.inMilliseconds);
+        ref.read(analyticsServiceProvider).track(widget.ad.id, AdEventType.completed, watchMs: duration.inMilliseconds);
       } else {
-        ref
-            .read(analyticsServiceProvider)
-            .track(widget.ad.id, AdEventType.rewatched, watchMs: duration.inMilliseconds);
+        ref.read(analyticsServiceProvider).track(widget.ad.id, AdEventType.rewatched, watchMs: duration.inMilliseconds);
       }
     }
     _wasNearEnd = isNearEnd;
@@ -212,68 +212,118 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
     });
     final bool isMuted = ref.watch(isFeedMutedProvider);
 
-    return ColoredBox(
-      color: AppColors.darkBackground,
-      child: Stack(
-        fit: StackFit.expand,
-        children: <Widget>[
-          GestureDetector(
-            onTap: _togglePlayPause,
-            // contain, not cover: a 9:16 Ad on a taller (~9:20) phone used to
-            // be cropped ~12% off each side, cutting off anything placed near
-            // the edges — e.g. the editor's border effects, reported as
-            // "the frame overflows the screen" after export. The viewer now
-            // sees exactly what the creator made (thin bars top/bottom on
-            // tall phones, like Reels).
-            child: showVideo
-                ? FittedBox(
-                    fit: BoxFit.contain,
-                    child: SizedBox(
-                      width: controller.value.size.width,
-                      height: controller.value.size.height,
-                      child: VideoPlayer(controller),
+    final bool reviewsOpen = ref.watch(openReviewsAdIdProvider) == widget.ad.id;
+    if (reviewsOpen) {
+      _reviewsEverOpened = true; // keep the panel mounted so it can slide back out
+    }
+    void closeReviews() => ref.read(openReviewsAdIdProvider.notifier).state = null;
+    final double statusBar = MediaQuery.paddingOf(context).top;
+
+    // contain, not cover: a 9:16 Ad on a taller (~9:20) phone would be
+    // cropped ~12% off each side, cutting off anything near the edges
+    // (the editor's border effects were reported as "overflowing the
+    // screen"). Anchored to the TOP (just under the status bar): centring
+    // left a big black band above the video.
+    final Widget videoLayer = showVideo
+        ? FittedBox(
+            fit: BoxFit.contain,
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: controller.value.size.width,
+              height: controller.value.size.height,
+              child: VideoPlayer(controller),
+            ),
+          )
+        : widget.ad.thumbnailUrl != null
+            ? CachedNetworkImage(
+                imageUrl: widget.ad.thumbnailUrl!,
+                fit: BoxFit.contain,
+                alignment: Alignment.topCenter,
+                errorWidget: (context, url, error) => const SizedBox.shrink(),
+              )
+            : const Center(child: CircularProgressIndicator());
+
+    return PopScope(
+      // System back closes the reviews panel first.
+      canPop: !reviewsOpen,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (!didPop && reviewsOpen) {
+          closeReviews();
+        }
+      },
+      child: ColoredBox(
+        color: AppColors.darkBackground,
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final double height = constraints.maxHeight;
+            final double openVideoHeight = height * 0.36;
+            // The bottom-nav bar sits over the bottom of this card (extendBody)
+            // — except while the keyboard is up, when it's behind the keyboard.
+            // The keyboard is read from the raw window insets: the Scaffolds
+            // above remove it from MediaQuery once they've resized for it.
+            final bool keyboardUp = MediaQueryData.fromView(View.of(context)).viewInsets.bottom > 0;
+            final double navClearance = keyboardUp ? 0 : AppShell.barHeight + MediaQuery.paddingOf(context).bottom;
+            final double panelTop = statusBar + openVideoHeight;
+            final double panelHeight = (height - panelTop - navClearance).clamp(0, height);
+
+            return Stack(
+              children: <Widget>[
+                AnimatedPositioned(
+                  duration: _panelAnimation,
+                  curve: Curves.easeOutCubic,
+                  top: statusBar,
+                  left: 0,
+                  right: 0,
+                  height: reviewsOpen ? openVideoHeight : height - statusBar,
+                  child: GestureDetector(
+                    // With the panel open, tapping the (small) video closes it.
+                    onTap: reviewsOpen ? closeReviews : _togglePlayPause,
+                    child: videoLayer,
+                  ),
+                ),
+                if (isPaused && !reviewsOpen)
+                  const IgnorePointer(
+                    child: Center(
+                      child: Icon(Icons.play_arrow, size: 72, color: Colors.white70),
                     ),
-                  )
-                : widget.ad.thumbnailUrl != null
-                    ? CachedNetworkImage(
-                        imageUrl: widget.ad.thumbnailUrl!,
-                        fit: BoxFit.contain,
-                        errorWidget: (context, url, error) => const SizedBox.shrink(),
-                      )
-                    : const Center(child: CircularProgressIndicator()),
-          ),
-
-          if (isPaused)
-            const IgnorePointer(
-              child: Center(
-                child: Icon(Icons.play_arrow, size: 72, color: Colors.white70),
-              ),
-            ),
-
-          Positioned(
-            top: AppSpacing.md,
-            right: AppSpacing.md,
-            child: SafeArea(
-              child: _MuteButton(
-                isMuted: isMuted,
-                onTap: () => ref.read(isFeedMutedProvider.notifier).state = !isMuted,
-              ),
-            ),
-          ),
-
-          Positioned(
-            right: AppSpacing.md,
-            bottom: _bottomClearance(context),
-            child: FeedActionRail(ad: widget.ad),
-          ),
-
-          Positioned(
-            left: AppSpacing.lg,
-            right: 88, // keep clear of the action rail
-            bottom: _bottomClearance(context),
-            child: _Overlay(ad: widget.ad),
-          ),
-        ],
+                  ),
+                if (!reviewsOpen) ...<Widget>[
+                  Positioned(
+                    top: AppSpacing.md,
+                    right: AppSpacing.md,
+                    child: SafeArea(
+                      child: _MuteButton(
+                        isMuted: isMuted,
+                        onTap: () => ref.read(isFeedMutedProvider.notifier).state = !isMuted,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: AppSpacing.md,
+                    bottom: _bottomClearance(context),
+                    child: FeedActionRail(ad: widget.ad),
+                  ),
+                  Positioned(
+                    left: AppSpacing.lg,
+                    right: 88, // keep clear of the action rail
+                    bottom: _bottomClearance(context),
+                    child: _Overlay(ad: widget.ad),
+                  ),
+                ],
+                if (_reviewsEverOpened)
+                  AnimatedPositioned(
+                    duration: _panelAnimation,
+                    curve: Curves.easeOutCubic,
+                    top: reviewsOpen ? panelTop : height,
+                    left: 0,
+                    right: 0,
+                    height: panelHeight,
+                    child: ReviewsPanel(adId: widget.ad.id, onClose: closeReviews),
+                  ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -313,8 +363,7 @@ class _Overlay extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        if (ad.subjectDisplayName != null)
-          SubjectBadge(subjectId: ad.subjectId, displayName: ad.subjectDisplayName!),
+        if (ad.subjectDisplayName != null) SubjectBadge(subjectId: ad.subjectId, displayName: ad.subjectDisplayName!),
         const SizedBox(height: AppSpacing.sm),
         CreatorHeader(userId: ad.userId, username: ad.creatorUsername),
         if (ad.caption != null && ad.caption!.isNotEmpty) ...<Widget>[

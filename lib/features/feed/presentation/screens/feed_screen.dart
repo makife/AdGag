@@ -10,7 +10,9 @@ import "../../../../core/video/video_providers.dart";
 import "../../../../core/widgets/coming_soon_view.dart";
 import "../../domain/ad.dart";
 import "../providers/feed_controller.dart";
+import "../providers/reviews_panel_provider.dart";
 import "../widgets/ad_video_card.dart";
+import "../widgets/feed_page_physics.dart";
 
 /// HOME / FEED (CLAUDE.md section 6). Fullscreen vertical Ad feed with
 /// bounded-pool preloading (section 17) and the SOLD/REVIEWS/AD THIS/
@@ -58,6 +60,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
 
   void _onPageChanged(int index, List<Ad> ads) {
     setState(() => _activeIndex = index);
+    ref.read(openReviewsAdIdProvider.notifier).state = null;
 
     // Keep the active card plus one neighbor on each side warm; drop the
     // rest (section 17: "Do NOT preload dozens of full videos").
@@ -136,6 +139,10 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
           return PageView.builder(
             controller: _pageController,
             scrollDirection: Axis.vertical,
+            // Paging stops while a card's reviews panel is open.
+            physics: ref.watch(openReviewsAdIdProvider) != null
+                ? const NeverScrollableScrollPhysics()
+                : const FeedPagePhysics(),
             itemCount: feedState.ads.length,
             onPageChanged: (int index) => _onPageChanged(index, feedState.ads),
             itemBuilder: (BuildContext context, int index) {

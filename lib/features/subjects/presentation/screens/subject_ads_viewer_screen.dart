@@ -1,5 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../../feed/presentation/providers/reviews_panel_provider.dart";
+import "../../../feed/presentation/widgets/feed_page_physics.dart";
 
 import "../../../../core/theme/app_colors.dart";
 import "../../../../core/theme/app_spacing.dart";
@@ -35,6 +37,7 @@ class _SubjectAdsViewerScreenState extends ConsumerState<SubjectAdsViewerScreen>
   }
 
   void _onPageChanged(int index) {
+    ref.read(openReviewsAdIdProvider.notifier).state = null;
     setState(() => _activeIndex = index);
     final Set<String> keep = <String>{
       if (index - 1 >= 0) widget.ads[index - 1].id,
@@ -53,6 +56,10 @@ class _SubjectAdsViewerScreenState extends ConsumerState<SubjectAdsViewerScreen>
           PageView.builder(
             controller: _pageController,
             scrollDirection: Axis.vertical,
+            // Same light-swipe paging as the feed; stops while reviews are open.
+            physics: ref.watch(openReviewsAdIdProvider) != null
+                ? const NeverScrollableScrollPhysics()
+                : const FeedPagePhysics(),
             itemCount: widget.ads.length,
             onPageChanged: _onPageChanged,
             itemBuilder: (BuildContext context, int index) {
