@@ -15,7 +15,7 @@ struct EditorView: View {
   let onAddClip: (String, Int64) -> Void
 
   private enum Panel: Equatable {
-    case transition(Int), music, speed, effects
+    case transition(Int), music, speed, effects, text(String)
   }
 
   @State private var panel: Panel?
@@ -68,6 +68,11 @@ struct EditorView: View {
   private var videoArea: some View {
     ZStack {
       PlayerLayerView(player: viewModel.player)
+      // Captions + all taps on the video (play/pause, selecting captions).
+      TextOverlayView(viewModel: viewModel) { id in
+        viewModel.pause()
+        panel = .text(id)
+      }
       if !viewModel.isPlaying {
         Image(systemName: "play.fill")
           .font(.system(size: 30))
@@ -80,8 +85,11 @@ struct EditorView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .clipped()
-    .contentShape(Rectangle())
-    .onTapGesture { viewModel.togglePlayPause() }
+  }
+
+  private func addText() {
+    let layer = viewModel.addText()
+    panel = .text(layer.id)
   }
 
   // MARK: Editing panel
@@ -95,7 +103,12 @@ struct EditorView: View {
           onAddClip(viewModel.sessionState().toJSON(), viewModel.remainingMs)
         },
         onPickTransition: { panel = .transition($0) },
-        onOpenMusic: { panel = .music })
+        onOpenMusic: { panel = .music },
+        onAddText: addText,
+        onEditText: { id in
+          viewModel.pause()
+          panel = .text(id)
+        })
       toolRow
       if viewModel.isExporting {
         VStack(alignment: .leading, spacing: 4) {
@@ -124,6 +137,9 @@ struct EditorView: View {
   private var toolRow: some View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: 16) {
+        ToolButton(icon: "textformat",
+                   label: viewModel.textLayers.isEmpty ? "Text" : "Text (\(viewModel.textLayers.count))",
+                   active: !viewModel.textLayers.isEmpty) { addText() }
         ToolButton(icon: "rotate.right", label: "Rotate", active: false) { viewModel.rotateNinety() }
         ToolButton(icon: viewModel.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
                    label: viewModel.isMuted ? "Muted" : "Mute", active: viewModel.isMuted) { viewModel.toggleMute() }
@@ -157,6 +173,7 @@ struct EditorView: View {
                                 onRemoved: { self.panel = nil })
         case .speed: SpeedPanel(viewModel: viewModel)
         case .effects: EffectsPanel(viewModel: viewModel)
+        case .text(let id): TextEditorPanel(viewModel: viewModel, layerId: id, onClose: { self.panel = nil })
         }
       }
       .padding(16)
@@ -173,6 +190,7 @@ struct EditorView: View {
     case .music: return "Music"
     case .speed: return "Video speed"
     case .effects: return "Effects"
+    case .text: return "Text"
     }
   }
 }

@@ -109,6 +109,8 @@ struct EditorSessionState: Codable {
   var isMuted: Bool
   var videoSpeed: Double
   var videoFilter: VideoFilter
+  /// Captions over the whole Ad (EditorText.swift), timed in OUTPUT time.
+  var textLayers: [TextLayer] = []
 
   static func initial(clipPath: String, sourceDurationMs: Int64) -> EditorSessionState {
     EditorSessionState(
@@ -155,7 +157,8 @@ struct EditorSessionState: Codable {
       rotationDegrees: (obj["rotationDegrees"] as? NSNumber)?.intValue ?? 0,
       isMuted: obj["isMuted"] as? Bool ?? false,
       videoSpeed: (obj["videoSpeed"] as? NSNumber)?.doubleValue ?? 1,
-      videoFilter: VideoFilter(rawValue: obj["videoFilter"] as? String ?? "") ?? .NONE)
+      videoFilter: VideoFilter(rawValue: obj["videoFilter"] as? String ?? "") ?? .NONE,
+      textLayers: (obj["textLayers"] as? [[String: Any]] ?? []).map(TextLayer.from))
   }
 }
 

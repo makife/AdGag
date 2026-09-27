@@ -121,6 +121,12 @@ enum AdGagRenderer {
         "inputBVector": CIVector(x: 0, y: 0, z: b, w: 0),
       ]).cropped(to: renderRect)
     }
+
+    // 5. Captions — composition level, so transitions never move them (as on Android).
+    if let overlay = instruction.textOverlay,
+       let text = overlay.image(size: renderSize, tMs: Int64((seconds.isFinite ? seconds : 0) * 1000)) {
+      image = text.composited(over: image).cropped(to: renderRect)
+    }
     return image
   }
 }
@@ -143,9 +149,12 @@ final class AdGagInstruction: NSObject, AVVideoCompositionInstructionProtocol {
   let exit: TransitionSpec?
   let keptOutMs: Int64
   let filter: VideoFilter
+  /// Captions, drawn over everything (export only — the preview draws them in SwiftUI so edits are instant).
+  let textOverlay: TextOverlayRenderer?
 
   init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, preferredTransform: CGAffineTransform,
-       userRotation: Int, entry: TransitionSpec?, exit: TransitionSpec?, keptOutMs: Int64, filter: VideoFilter) {
+       userRotation: Int, entry: TransitionSpec?, exit: TransitionSpec?, keptOutMs: Int64, filter: VideoFilter,
+       textOverlay: TextOverlayRenderer?) {
     self.timeRange = timeRange
     self.trackID = trackID
     self.requiredSourceTrackIDs = [NSNumber(value: trackID)]
@@ -155,6 +164,7 @@ final class AdGagInstruction: NSObject, AVVideoCompositionInstructionProtocol {
     self.exit = exit
     self.keptOutMs = keptOutMs
     self.filter = filter
+    self.textOverlay = textOverlay
   }
 }
 
@@ -203,6 +213,8 @@ struct BuiltComposition {
   /// With music re-timed, keep its pitch; otherwise let slow motion lower the pitch like Android's.
   let pitchAlgorithm: AVAudioTimePitchAlgorithm
   let outputDurationMs: Int64
+  /// Width / height of the rendered frame — the rectangle captions are laid out in.
+  let renderAspect: Double
 }
 
 enum EditorCompositionBuilder {
@@ -225,7 +237,8 @@ enum EditorCompositionBuilder {
     return result
   }
 
-  static func build(state: EditorSessionState) throws -> BuiltComposition {
+  /// `includeText`: burn the captions in (export). The preview leaves them out and draws them itself.
+  static func build(state: EditorSessionState, includeText: Bool = false) throws -> BuiltComposition {
     let composition = AVMutableComposition()
     guard let videoTrack = composition.addMutableTrack(withMediaType: .video,
                                                        preferredTrackID: kCMPersistentTrackID_Invalid),
@@ -274,6 +287,10 @@ enum EditorCompositionBuilder {
     }
     let outputDurationMs = Int64((CMTimeGetSeconds(outputTotal) * 1000).rounded())
 
+    let textOverlay: TextOverlayRenderer? = includeText
+      ? { let r = TextOverlayRenderer(layers: state.textLayers); return r.isEmpty ? nil : r }()
+      : nil
+
     // One instruction per clip, tiling the whole output timeline exactly.
     var instructions: [AdGagInstruction] = []
     for i in clipStarts.indices {
@@ -293,7 +310,8 @@ enum EditorCompositionBuilder {
         entry: i > 0 && i - 1 < state.transitions.count ? state.transitions[i - 1] : nil,
         exit: i < state.transitions.count ? state.transitions[i] : nil,
         keptOutMs: keptOut,
-        filter: state.videoFilter))
+        filter: state.videoFilter,
+        textOverlay: textOverlay))
     }
 
     let videoComposition = AVMutableVideoComposition()
@@ -349,6 +367,7 @@ enum EditorCompositionBuilder {
 
     return BuiltComposition(
       asset: composition, videoComposition: videoComposition, audioMix: audioMix,
-      pitchAlgorithm: musicRetimed ? .spectral : .varispeed, outputDurationMs: outputDurationMs)
+      pitchAlgorithm: musicRetimed ? .spectral : .varispeed, outputDurationMs: outputDurationMs,
+      renderAspect: Double(firstDisplaySize.width / max(firstDisplaySize.height, 1)))
   }
 }

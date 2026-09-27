@@ -38,6 +38,14 @@ final class EditorViewModel: ObservableObject {
   @Published private(set) var isMuted: Bool
   @Published private(set) var videoSpeed: Double
   @Published private(set) var videoFilter: VideoFilter
+  /// Captions (EditorText.swift). Pure overlay state: changing them never
+  /// rebuilds the player — the preview draws them over the video, the
+  /// export burns them in through the compositor.
+  @Published private(set) var textLayers: [TextLayer]
+  /// The caption being edited/dragged in the preview.
+  @Published var selectedTextId: String?
+  /// Width / height of the rendered frame (the rectangle captions live in).
+  @Published private(set) var renderAspect: Double = 9.0 / 16.0
 
   @Published private(set) var thumbnails: [String: [ThumbnailFrame]] = [:]
   @Published private(set) var filterThumbnails: [VideoFilter: UIImage] = [:]
@@ -76,6 +84,7 @@ final class EditorViewModel: ObservableObject {
     isMuted = state.isMuted
     videoSpeed = state.videoSpeed
     videoFilter = state.videoFilter
+    textLayers = state.textLayers
 
     if let path = musicOriginalPath, let songMs = Self.durationMs(path: path) {
       musicDurationMs = Int64(Double(songMs) / musicSpeed)
@@ -119,7 +128,7 @@ final class EditorViewModel: ObservableObject {
       musicSpeed: musicSpeed, musicFadeInMs: musicFadeInMs, musicFadeOutMs: musicFadeOutMs, musicLoop: musicLoop,
       musicStartOffsetMs: musicStartOffsetMs, musicSourceStartMs: musicSourceStartMs,
       musicPlayDurationMs: musicPlayDurationMs, rotationDegrees: rotationDegrees, isMuted: isMuted,
-      videoSpeed: videoSpeed, videoFilter: videoFilter)
+      videoSpeed: videoSpeed, videoFilter: videoFilter, textLayers: textLayers)
   }
 
   // MARK: Playback
@@ -161,6 +170,7 @@ final class EditorViewModel: ObservableObject {
       item.audioMix = built.audioMix
       item.audioTimePitchAlgorithm = built.pitchAlgorithm
       outputDurationOfItemMs = built.outputDurationMs
+      renderAspect = built.renderAspect
 
       if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
       endObserver = NotificationCenter.default.addObserver(
@@ -369,6 +379,59 @@ final class EditorViewModel: ObservableObject {
     rebuild(resumeAtSourceMs: currentSourcePosition(), play: true)
   }
 
+  // MARK: Text
+
+  /// Player position right now, OUTPUT time (read per frame by the caption overlay).
+  func currentOutputMs() -> Int64 {
+    let seconds = CMTimeGetSeconds(player.currentTime())
+    return seconds.isFinite ? Int64(max(0, seconds) * 1000) : 0
+  }
+
+  func seekToOutput(_ outMs: Int64) {
+    seekToGlobal(Int64(Double(outMs) * videoSpeed))
+  }
+
+  @discardableResult
+  func addText() -> TextLayer {
+    pause()
+    let total = max(outputDurationMs, 500)
+    let now = min(max(currentOutputMs(), 0), total)
+    let start = total - now < 1_000 ? max(total - 3_000, 0) : now
+    var layer = TextLayer()
+    layer.startMs = start
+    layer.endMs = min(total, start + 3_000)
+    textLayers.append(layer)
+    selectedTextId = layer.id
+    return layer
+  }
+
+  func updateText(_ layer: TextLayer) {
+    guard let i = textLayers.firstIndex(where: { $0.id == layer.id }) else { return }
+    textLayers[i] = layer
+  }
+
+  func removeText(_ id: String) {
+    textLayers.removeAll { $0.id == id }
+    if selectedTextId == id { selectedTextId = nil }
+  }
+
+  func removeTextIfBlank(_ id: String) {
+    if let layer = textLayers.first(where: { $0.id == id }),
+       layer.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      removeText(id)
+    }
+  }
+
+  /// Timeline drag of a caption's timing, clamped to the Ad (OUTPUT time), at least 300ms long.
+  func setTextTiming(_ id: String, startMs: Int64, endMs: Int64) {
+    guard let i = textLayers.firstIndex(where: { $0.id == id }) else { return }
+    let total = outputDurationMs
+    let s = min(max(startMs, 0), max(total - 300, 0))
+    let e = min(max(endMs, s + 300), max(total, s + 300))
+    textLayers[i].startMs = s
+    textLayers[i].endMs = e
+  }
+
   // MARK: Thumbnails
 
   private func generateThumbnails() {
@@ -429,7 +492,7 @@ final class EditorViewModel: ObservableObject {
     exportError = nil
     let built: BuiltComposition
     do {
-      built = try EditorCompositionBuilder.build(state: sessionState())
+      built = try EditorCompositionBuilder.build(state: sessionState(), includeText: true)
     } catch {
       exportError = error.localizedDescription
       return

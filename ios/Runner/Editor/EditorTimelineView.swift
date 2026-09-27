@@ -28,6 +28,7 @@ private let stripHeight: CGFloat = 56
 private let rowHeight: CGFloat = 56
 private let musicRowHeight: CGFloat = 32
 private let songRowHeight: CGFloat = 40
+private let textRowHeight: CGFloat = 30
 private let addButtonSize: CGFloat = 48
 private let handleHitWidth: CGFloat = 32
 private let handleWidth: CGFloat = 16
@@ -37,6 +38,8 @@ struct EditorTimelineView: View {
   let onAddClip: () -> Void
   let onPickTransition: (Int) -> Void
   let onOpenMusic: () -> Void
+  var onAddText: () -> Void = {}
+  var onEditText: (String) -> Void = { _ in }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
@@ -62,6 +65,22 @@ struct EditorTimelineView: View {
         }
         TrimRowView(viewModel: viewModel, index: index, clip: clip)
           .id(index) // reset the row's drag state when another clip is selected
+      }
+
+      if !viewModel.textLayers.isEmpty {
+        let selected = viewModel.textLayers.first { $0.id == viewModel.selectedTextId }
+        HStack {
+          if let selected {
+            label("Text · \"\(String((selected.text.components(separatedBy: "\n").first ?? "").prefix(18)))\"")
+              .lineLimit(1)
+            Spacer()
+            label("\(formatClock(selected.startMs)) – \(formatClock(selected.endMs))")
+          } else {
+            label("Text · tap one to select")
+            Spacer()
+          }
+        }
+        aligned(trailing: AnyView(addTextButton)) { TextRowView(viewModel: viewModel, onEditText: onEditText) }
       }
 
       if viewModel.hasMusic {
@@ -108,6 +127,17 @@ struct EditorTimelineView: View {
     }
     .disabled(!viewModel.canAddClip)
     .accessibilityLabel("Record another clip")
+  }
+
+  private var addTextButton: some View {
+    Button(action: onAddText) {
+      Image(systemName: "plus")
+        .foregroundColor(.white)
+        .frame(width: addButtonSize, height: textRowHeight)
+        .background(EditorPalette.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+    .accessibilityLabel("Add text")
   }
 
   private var musicSettingsButton: some View {
@@ -397,6 +427,107 @@ private struct MusicRowView: View {
     liveSource = nil
     liveDuration = nil
     viewModel.setMusicPlacement(startOffsetMs: start, sourceStartMs: source, playDurationMs: duration)
+  }
+}
+
+// MARK: - Text row (OUTPUT time)
+
+/// Captions on the OUTPUT timeline (same width and scale as the clip strip).
+/// Every caption is a bar; tap one to select it (and jump there), tap the
+/// selected one to edit it. The selected caption gets start/end handles and
+/// can be dragged by its body; the change is committed on release.
+private struct TextRowView: View {
+  @ObservedObject var viewModel: EditorViewModel
+  let onEditText: (String) -> Void
+  @State private var liveStart: Int64?
+  @State private var liveEnd: Int64?
+  @State private var origin: (String, Int64, Int64)?
+
+  var body: some View {
+    GeometryReader { geo in
+      let width = geo.size.width
+      let total = max(viewModel.outputDurationMs, 1)
+      let msToX = { (ms: Int64) -> CGFloat in CGFloat(min(max(ms, 0), total)) / CGFloat(total) * width }
+      let dxToMs = { (dx: CGFloat) -> Int64 in Int64(dx / width * CGFloat(total)) }
+      let selectedId = viewModel.selectedTextId
+
+      ZStack(alignment: .topLeading) {
+        ForEach(viewModel.textLayers.filter { $0.id != selectedId }) { layer in
+          let left = msToX(layer.startMs)
+          let right = max(msToX(layer.endMs), left + 4)
+          let c = argbComponents(layer.color)
+          RoundedRectangle(cornerRadius: 6)
+            .fill(Color(red: Double(c.r), green: Double(c.g), blue: Double(c.b)).opacity(0.35))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(EditorPalette.border, lineWidth: 1))
+            .frame(width: right - left, height: textRowHeight - 10)
+            .offset(x: left, y: 5)
+            .onTapGesture {
+              viewModel.selectedTextId = layer.id
+              viewModel.seekToOutput(layer.startMs)
+            }
+        }
+
+        if let sel = viewModel.textLayers.first(where: { $0.id == selectedId }) {
+          let live = origin?.0 == sel.id
+          let start = live ? (liveStart ?? sel.startMs) : sel.startMs
+          let end = live ? (liveEnd ?? sel.endMs) : sel.endMs
+          let startX = msToX(start)
+          let endX = max(msToX(end), startX + 4)
+
+          RoundedRectangle(cornerRadius: 6).fill(EditorPalette.pink.opacity(0.45))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(EditorPalette.pink, lineWidth: 2))
+            .overlay(
+              Text(sel.text.components(separatedBy: "\n").first ?? "")
+                .font(.caption2).foregroundColor(.white).lineLimit(1)
+                .padding(.horizontal, 18),
+              alignment: .leading)
+            .frame(width: endX - startX, height: textRowHeight - 6)
+            .offset(x: startX, y: 3)
+            .onTapGesture { onEditText(sel.id) }
+            .gesture(DragGesture(minimumDistance: 4)
+              .onChanged { value in
+                let o = origin ?? (sel.id, sel.startMs, sel.endMs)
+                if origin == nil { origin = o }
+                let len = o.2 - o.1
+                let s = min(max(o.1 + dxToMs(value.translation.width), 0), max(total - len, 0))
+                liveStart = s
+                liveEnd = s + len
+              }
+              .onEnded { _ in commit() })
+
+          TrimHandle(x: startX, rowWidth: width, height: textRowHeight)
+            .gesture(DragGesture(minimumDistance: 2)
+              .onChanged { value in
+                let o = origin ?? (sel.id, sel.startMs, sel.endMs)
+                if origin == nil { origin = o }
+                liveStart = min(max(o.1 + dxToMs(value.translation.width), 0), max(o.2 - 300, 0))
+                liveEnd = o.2
+              }
+              .onEnded { _ in commit() })
+          TrimHandle(x: endX, rowWidth: width, height: textRowHeight)
+            .gesture(DragGesture(minimumDistance: 2)
+              .onChanged { value in
+                let o = origin ?? (sel.id, sel.startMs, sel.endMs)
+                if origin == nil { origin = o }
+                liveStart = o.1
+                liveEnd = min(max(o.2 + dxToMs(value.translation.width), o.1 + 300), total)
+              }
+              .onEnded { _ in commit() })
+        }
+      }
+    }
+    .frame(height: textRowHeight)
+    .background(EditorPalette.surface)
+    .clipShape(RoundedRectangle(cornerRadius: 8))
+  }
+
+  private func commit() {
+    if let o = origin {
+      viewModel.setTextTiming(o.0, startMs: liveStart ?? o.1, endMs: liveEnd ?? o.2)
+    }
+    origin = nil
+    liveStart = nil
+    liveEnd = nil
   }
 }
 
