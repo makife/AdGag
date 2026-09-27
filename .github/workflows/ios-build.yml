@@ -39,9 +39,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # cache: reuse the Flutter SDK between runs — a run once failed
+      # downloading it (curl exit 56) before any code was compiled.
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
 
       - name: Flutter doctor
         run: flutter doctor -v
