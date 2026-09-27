@@ -125,9 +125,12 @@ struct TextOverlayView: View {
             isShown(layer.id, layer.startMs, layer.endMs, at: tMs)
               && TextRenderer.hitTest(layer, frameW: frame.width, frameH: frame.height, point: value.startLocation)
           }
-          let stickerHit = hit != nil ? nil : viewModel.stickerLayers.reversed().first { s in
-            isShown(s.id, s.startMs, s.endMs, at: tMs)
-              && StickerRenderer.hitTest(s, frameW: frame.width, frameH: frame.height, point: value.startLocation)
+          var stickerHit: StickerLayer?
+          if hit == nil {
+            stickerHit = viewModel.stickerLayers.reversed().first(where: { s in
+              isShown(s.id, s.startMs, s.endMs, at: tMs)
+                && StickerRenderer.hitTest(s, frameW: frame.width, frameH: frame.height, point: value.startLocation)
+            })
           }
           let hitId = hit?.id ?? stickerHit?.id
           drag = DragState(hitId: hitId, wasSelected: hitId != nil && hitId == viewModel.selectedTextId,
