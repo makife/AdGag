@@ -200,6 +200,33 @@ class EditorViewModel(
 
     var rotationDegrees by mutableStateOf(initialState.rotationDegrees)
         private set
+
+    /** Whole-video look effect (VideoFilters.kt). */
+    var videoFilter by mutableStateOf(initialState.videoFilter)
+        private set
+
+    /** Picker thumbnails: each effect applied (on the CPU) to a frame of the first clip. */
+    val filterThumbnails = mutableStateMapOf<VideoFilter, Bitmap>()
+
+    /**
+     * PREVIEW EFFECTS CRASH GUARD. Showing an effect live means
+     * ExoPlayer.setVideoEffects, which builds a GPU frame-processing
+     * pipeline — the same kind of GL machinery that made
+     * CompositionPlayer.Builder().build() crash natively on the user's
+     * device earlier (see the checkpoint history). A native crash can't be
+     * caught, so: before the first enable we write "pending" to disk
+     * (synchronously), and "ok" once a frame has actually rendered. If a
+     * later launch still finds "pending", the process died in between —
+     * live preview of effects is switched off on this device (the export,
+     * which already runs through Transformer's own GL pipeline, still
+     * applies them). Not attempted at all until an effect is chosen, so
+     * editing without effects never touches this path.
+     */
+    private val prefs = context.getSharedPreferences("adgag_editor", Context.MODE_PRIVATE)
+    var previewEffectsSupported by mutableStateOf(prefs.getString(PrefPreviewEffects, null) != "pending")
+        private set
+    private var previewEffectsActive = false
+    private var awaitingEffectsFirstFrame = false
     var isMuted by mutableStateOf(initialState.isMuted)
         private set
 
@@ -253,6 +280,14 @@ class EditorViewModel(
                 isPlaying = playing
             }
 
+            override fun onRenderedFirstFrame() {
+                if (awaitingEffectsFirstFrame) {
+                    awaitingEffectsFirstFrame = false
+                    prefs.edit().putString(PrefPreviewEffects, "ok").commit()
+                    DebugLog.log(context, "preview effects: first frame rendered OK")
+                }
+            }
+
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY) {
                     decoderRetries = 0
@@ -262,6 +297,18 @@ class EditorViewModel(
 
             override fun onPlayerError(error: PlaybackException) {
                 Log.e("EditorViewModel", "Preview player error", error)
+                if (previewEffectsActive &&
+                    (error.errorCode == PlaybackException.ERROR_CODE_VIDEO_FRAME_PROCESSOR_INIT_FAILED ||
+                        error.errorCode == PlaybackException.ERROR_CODE_VIDEO_FRAME_PROCESSING_FAILED)
+                ) {
+                    // The GL effects pipeline failed (but didn't crash): stop
+                    // previewing effects for this session and carry on.
+                    previewEffectsSupported = false
+                    DebugLog.log(context, "preview effects failed: ${error.errorCodeName}")
+                    val resumeAt = globalPositionMs()
+                    editorScope.launch { rebuildAndPrepare(startGlobalMs = resumeAt, playWhenReady = true) }
+                    return
+                }
                 DebugLog.log(context, "player error: ${error.errorCodeName} ${error.message}")
                 // Don't hold thumbnails back forever behind a broken preview.
                 previewReady.complete(Unit)
@@ -309,6 +356,7 @@ class EditorViewModel(
         rotationDegrees = rotationDegrees,
         isMuted = isMuted,
         videoSpeed = videoSpeed,
+        videoFilter = videoFilter,
     )
 
     fun clipStartMs(index: Int): Long = clips.take(index).sumOf { it.keptDurationMs }
@@ -601,6 +649,59 @@ class EditorViewModel(
         rotationDegrees = (rotationDegrees + 90) % 360
     }
 
+    fun changeFilter(filter: VideoFilter) {
+        if (filter == videoFilter) return
+        videoFilter = filter
+        rebuildAndPrepare(startGlobalMs = globalPositionMs(), playWhenReady = true)
+    }
+
+    /** Lets the user retry live effect preview after the crash guard switched it off. */
+    fun retryPreviewEffects() {
+        prefs.edit().remove(PrefPreviewEffects).commit()
+        previewEffectsSupported = true
+        rebuildAndPrepare(startGlobalMs = globalPositionMs(), playWhenReady = true)
+    }
+
+    /** Renders the picker thumbnails once (from a frame of the first clip), off the main thread. */
+    fun ensureFilterThumbnails() {
+        if (filterThumbnails.isNotEmpty()) return
+        val frames = clips.firstOrNull()?.let { thumbnails[it.path] }.orEmpty()
+        val source = frames.getOrNull(frames.size / 2)?.second ?: return
+        editorScope.launch {
+            val small = withContext(Dispatchers.Default) {
+                val w = 72
+                val h = (w * source.height.toFloat() / source.width).toInt().coerceAtLeast(1)
+                val scaled = Bitmap.createScaledBitmap(source, w, h, true)
+                VideoFilter.entries.associateWith { FilterCpu.render(it, scaled) }
+            }
+            filterThumbnails.putAll(small)
+        }
+    }
+
+    /**
+     * Applies [videoFilter] to the PREVIEW player — see the crash guard on
+     * [previewEffectsSupported]. Must run before prepare() (ExoPlayer sets
+     * the effects pipeline up at prepare time).
+     */
+    private fun applyPreviewFilter() {
+        if (!previewEffectsSupported) return
+        if (videoFilter == VideoFilter.NONE && !previewEffectsActive) return
+        if (!previewEffectsActive) {
+            prefs.edit().putString(PrefPreviewEffects, "pending").commit()
+            DebugLog.log(context, "preview effects: enabling (pending)")
+            previewEffectsActive = true
+            awaitingEffectsFirstFrame = true
+        }
+        try {
+            player.setVideoEffects(
+                if (videoFilter == VideoFilter.NONE) emptyList() else listOf<Effect>(FilterEffect(videoFilter)),
+            )
+        } catch (e: Exception) {
+            Log.w("EditorViewModel", "setVideoEffects failed", e)
+            previewEffectsSupported = false
+        }
+    }
+
     fun toggleMute() {
         isMuted = !isMuted
         applyPreviewVolume()
@@ -759,6 +860,7 @@ class EditorViewModel(
         }
         DebugLog.log(context, "rebuildAndPrepare: ${sources.size} segments startGlobalMs=$startGlobalMs")
         player.stop()
+        applyPreviewFilter()
         player.setMediaSources(sources)
         applyPreviewVolume()
         // With music attached the preview carries only the (pre-timed)
@@ -803,6 +905,10 @@ class EditorViewModel(
                     Presentation.LAYOUT_SCALE_TO_FIT,
                 )
             }
+            // The look effect goes BEFORE the transitions, matching the
+            // preview (where the filter is applied inside the player and the
+            // transition is a Compose transform of the result).
+            if (videoFilter != VideoFilter.NONE) videoEffects += FilterEffect(videoFilter)
             if (reducedSize) videoEffects += Presentation.createForShortSide(720)
             // Transition timing is OUTPUT time: with setSpeed, Transformer
             // re-times samples at the source (SpeedChangingMediaSource), so
@@ -956,6 +1062,8 @@ class EditorViewModel(
     }
 
     companion object {
+        private const val PrefPreviewEffects = "preview_effects_state"
+
         /** The state for a brand-new session from a single captured clip — capped at the 30s total. */
         fun initialStateFor(context: Context, path: String): EditorSessionState {
             val sourceMs = probeDurationUs(context, Uri.fromFile(File(path)))?.div(1000) ?: 0L
@@ -974,6 +1082,7 @@ class EditorViewModel(
                 rotationDegrees = 0,
                 isMuted = false,
                 videoSpeed = 1f,
+                videoFilter = VideoFilter.NONE,
             )
         }
 

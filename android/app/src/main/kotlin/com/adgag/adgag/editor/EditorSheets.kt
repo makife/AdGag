@@ -1,6 +1,16 @@
 package com.adgag.adgag.editor
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -159,6 +169,93 @@ fun PreparingMusicIndicator(modifier: Modifier = Modifier) {
             color = AdGagColors.GradientPink,
             trackColor = AdGagColors.Border,
         )
+    }
+}
+
+/**
+ * Look effects: every [VideoFilter] as a card showing that effect applied
+ * to a frame of the user's own clip, in a horizontally scrolling row.
+ */
+@UnstableApi
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EffectsSheet(viewModel: EditorViewModel, onDismiss: () -> Unit) {
+    LaunchedEffect(Unit) { viewModel.ensureFilterThumbnails() }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = AdGagColors.SurfaceElevated,
+    ) {
+        Column(modifier = Modifier.padding(bottom = AdGagSpacing.xl.dp)) {
+            SheetHeader(title = "Effects", onDone = onDismiss)
+            LazyRow(
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = AdGagSpacing.lg.dp),
+                horizontalArrangement = Arrangement.spacedBy(AdGagSpacing.md.dp),
+            ) {
+                items(VideoFilter.entries) { filter ->
+                    val selected = filter == viewModel.videoFilter
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.width(72.dp).clickable { viewModel.changeFilter(filter) },
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = 64.dp, height = 112.dp)
+                                .clip(RoundedCornerShape(AdGagRadius.sm.dp))
+                                .border(
+                                    BorderStroke(
+                                        if (selected) 2.dp else 1.dp,
+                                        if (selected) AdGagColors.GradientPink else AdGagColors.Border,
+                                    ),
+                                    RoundedCornerShape(AdGagRadius.sm.dp),
+                                )
+                                .background(AdGagColors.Surface),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            val thumb = viewModel.filterThumbnails[filter]
+                            if (thumb != null) {
+                                Image(
+                                    bitmap = thumb.asImageBitmap(),
+                                    contentDescription = filter.label,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.matchParentSize(),
+                                )
+                            } else {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = AdGagColors.GradientPink,
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
+                        Text(
+                            text = filter.label,
+                            color = if (selected) AdGagColors.GradientPink else AdGagColors.OnSurfaceMuted,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+            if (!viewModel.previewEffectsSupported) {
+                Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = AdGagSpacing.lg.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Live preview of effects is off on this device. The effect is still applied to your Ad.",
+                        color = AdGagColors.OnSurfaceMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { viewModel.retryPreviewEffects() }) {
+                        Text(text = "Try again", color = AdGagColors.GradientPink, style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+        }
     }
 }
 

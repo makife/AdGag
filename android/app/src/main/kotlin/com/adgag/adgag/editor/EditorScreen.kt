@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.MusicOff
 import androidx.compose.material.icons.filled.PlayArrow
@@ -41,6 +42,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -95,6 +98,7 @@ fun EditorScreen(
         var pickingTransitionFor by remember { mutableIntStateOf(-1) }
         var showMusicSheet by remember { mutableStateOf(false) }
         var showSpeedSheet by remember { mutableStateOf(false) }
+        var showEffectsSheet by remember { mutableStateOf(false) }
 
         // Per-frame GLOBAL position, read ONLY inside the graphicsLayer /
         // drawBehind lambdas below — the entrance transitions animate
@@ -232,6 +236,7 @@ fun EditorScreen(
                     viewModel = viewModel,
                     onMusic = { if (viewModel.musicPath != null) showMusicSheet = true else pickMusic.launch("audio/*") },
                     onSpeed = { showSpeedSheet = true },
+                    onEffects = { showEffectsSheet = true },
                 )
 
                 if (viewModel.isExporting) {
@@ -289,6 +294,9 @@ fun EditorScreen(
         if (showSpeedSheet) {
             VideoSpeedSheet(viewModel = viewModel, onDismiss = { showSpeedSheet = false })
         }
+        if (showEffectsSheet) {
+            EffectsSheet(viewModel = viewModel, onDismiss = { showEffectsSheet = false })
+        }
     }
 }
 
@@ -318,9 +326,10 @@ private fun transitionPoseAt(viewModel: EditorViewModel, globalMs: Long): Transi
 }
 
 @Composable
-private fun ToolRow(viewModel: EditorViewModel, onMusic: () -> Unit, onSpeed: () -> Unit) {
+private fun ToolRow(viewModel: EditorViewModel, onMusic: () -> Unit, onSpeed: () -> Unit, onEffects: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        // Scrolls sideways if the tools outgrow a narrow screen.
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(AdGagSpacing.lg.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -340,6 +349,12 @@ private fun ToolRow(viewModel: EditorViewModel, onMusic: () -> Unit, onSpeed: ()
             label = if (viewModel.videoSpeed == 1f) "Speed" else formatSpeed(viewModel.videoSpeed),
             active = viewModel.videoSpeed != 1f,
             onClick = onSpeed,
+        )
+        EditorToolButton(
+            icon = Icons.Filled.AutoFixHigh,
+            label = if (viewModel.videoFilter == VideoFilter.NONE) "Effects" else viewModel.videoFilter.label,
+            active = viewModel.videoFilter != VideoFilter.NONE,
+            onClick = onEffects,
         )
         EditorToolButton(
             icon = if (viewModel.musicPath != null) Icons.Filled.MusicNote else Icons.Filled.MusicOff,

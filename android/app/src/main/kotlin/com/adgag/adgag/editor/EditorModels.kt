@@ -90,6 +90,7 @@ data class EditorSessionState(
     val rotationDegrees: Int,
     val isMuted: Boolean,
     val videoSpeed: Float,
+    val videoFilter: VideoFilter,
 ) {
     fun toJson(): String = JSONObject().apply {
         put("clips", JSONArray().apply {
@@ -117,6 +118,7 @@ data class EditorSessionState(
         put("musicFadeOutMs", musicFadeOutMs)
         put("musicLoop", musicLoop)
         put("videoSpeed", videoSpeed.toDouble())
+        put("videoFilter", videoFilter.name)
         put("musicStartOffsetMs", musicStartOffsetMs)
         put("musicSourceStartMs", musicSourceStartMs)
         put("musicPlayDurationMs", musicPlayDurationMs)
@@ -167,6 +169,8 @@ data class EditorSessionState(
                 rotationDegrees = o.optInt("rotationDegrees", 0),
                 isMuted = o.optBoolean("isMuted", false),
                 videoSpeed = o.optDouble("videoSpeed", 1.0).toFloat(),
+                videoFilter = runCatching { VideoFilter.valueOf(o.optString("videoFilter", "NONE")) }
+                    .getOrDefault(VideoFilter.NONE),
             )
         }
     }
