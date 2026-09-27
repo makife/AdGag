@@ -1,5 +1,7 @@
 package com.adgag.adgag.editor
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import android.graphics.DashPathEffect
 import android.graphics.Paint
 import androidx.activity.compose.BackHandler
@@ -132,7 +134,7 @@ fun TextOverlayLayer(
                                 TextRenderer.hitTest(layer, w, h, down.position.x, down.position.y, viewModel.fonts)
                         }?.let { HitOverlay(it.id) } ?: viewModel.stickerLayers.asReversed().firstOrNull { layer ->
                             shown(layer.id, layer.startMs, layer.endMs) &&
-                                StickerRenderer.hitTest(layer, w, h, down.position.x, down.position.y)
+                                StickerRenderer.hitTest(layer, viewModel.stickers, w, h, down.position.x, down.position.y)
                         }?.let { HitOverlay(it.id) }
                         val wasSelected = hit != null && hit.id == viewModel.selectedTextId
                         if (hit != null) viewModel.selectedTextId = hit.id
@@ -215,13 +217,15 @@ private fun DrawScope.drawCaptions(viewModel: EditorViewModel, globalMs: Long) {
             val t = if (frozen) minOf(layer.startMs + 400L, layer.endMs - 1) else tMs
             StickerRenderer.draw(canvas, layer, w, h, t, viewModel.stickers)
             if (layer.id == selected) {
-                val half = StickerRenderer.halfSide(layer, h) * 1.1f
+                val (hw0, hh0) = StickerRenderer.halfSize(layer, h, viewModel.stickers)
+                val hw = hw0 * 1.1f
+                val hh = hh0 * 1.1f
                 canvas.save()
                 canvas.translate(layer.x * w, layer.y * h)
                 canvas.rotate(layer.rotationDeg)
                 canvas.scale(layer.scale, layer.scale)
                 selectionPaint.strokeWidth = 3f / layer.scale
-                canvas.drawRoundRect(-half, -half, half, half, 12f / layer.scale, 12f / layer.scale, selectionPaint)
+                canvas.drawRoundRect(-hw, -hh, hw, hh, 12f / layer.scale, 12f / layer.scale, selectionPaint)
                 canvas.restore()
             }
         }
@@ -367,8 +371,14 @@ fun TextEditorPanel(viewModel: EditorViewModel, layerId: String, onDismiss: () -
                         previewEndMs = 1_600L,
                         loopMs = 2_100L,
                     )
-                    TextTab.COLOR -> ColorTab(layer, onChange = { viewModel.updateText(it) })
-                    TextTab.SIZE -> SizeTab(layer, onChange = { viewModel.updateText(it) })
+                    // These two are taller than the tab area: they scroll (user
+                    // report: some Size controls didn't fit).
+                    TextTab.COLOR -> Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                        ColorTab(layer, onChange = { viewModel.updateText(it) })
+                    }
+                    TextTab.SIZE -> Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                        SizeTab(layer, onChange = { viewModel.updateText(it) })
+                    }
                 }
             }
         }

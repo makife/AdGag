@@ -78,7 +78,19 @@ data class StickerDef(
     val cols: Int,
     val size: Int,
     val durationMs: Long,
+    /** Cell size (GIPHY GIFs aren't square); bundled stickers are size x size. */
+    val w: Int = size,
+    val h: Int = size,
+    /** [file] is an absolute path (an imported GIPHY sticker), not an asset name. */
+    val local: Boolean = false,
 ) {
+    val aspect: Float get() = w.toFloat() / h.coerceAtLeast(1)
+
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("id", id); put("label", label); put("file", file); put("frames", frames); put("cols", cols)
+        put("size", size); put("durationMs", durationMs); put("w", w); put("h", h); put("local", local)
+    }
+
     /** Frame shown [localMs] into the sticker's time on screen (loops). */
     fun frameAt(localMs: Long): Int {
         if (frames <= 1 || durationMs <= 0) return 0
@@ -113,20 +125,55 @@ class StickerStore(private val context: Context) {
         }.getOrDefault(emptyList())
     }
 
-    fun byId(id: String): StickerDef? = all.firstOrNull { it.id == id }
+    private val localDefs = HashMap<String, StickerDef?>()
+
+    /** A bundled sticker, or an imported GIPHY one (its def is read from filesDir/giphy once). */
+    fun byId(id: String): StickerDef? {
+        all.firstOrNull { it.id == id }?.let { return it }
+        if (!id.startsWith("giphy_")) return null
+        return synchronized(localDefs) { localDefs.getOrPut(id) { readLocalDef(Giphy.dir(context), id) } }
+    }
+
+    fun registerLocal(def: StickerDef) {
+        synchronized(localDefs) { localDefs[def.id] = def }
+    }
+
+    companion object {
+        fun readLocalDef(dir: java.io.File, id: String): StickerDef? = runCatching {
+            val o = JSONObject(java.io.File(dir, "$id.json").readText())
+            val file = o.getString("file")
+            if (!java.io.File(file).exists()) return null
+            StickerDef(
+                id = o.getString("id"), label = o.optString("label"), file = file, frames = o.getInt("frames"),
+                cols = o.getInt("cols"), size = o.getInt("size"), durationMs = o.getLong("durationMs"),
+                w = o.optInt("w", o.getInt("size")), h = o.optInt("h", o.getInt("size")), local = true,
+            )
+        }.getOrNull()
+
+        fun writeLocalDef(dir: java.io.File, def: StickerDef) {
+            java.io.File(dir, "${def.id}.json").writeText(def.toJson().toString())
+        }
+    }
 
     private val cache = object : LruCache<String, Bitmap>(48 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
+
+    /** Already decoded (never decodes — for drawing on the UI thread while the picker loads sheets in the background). */
+    @Synchronized
+    fun cachedSheet(def: StickerDef, sample: Int): Bitmap? = cache.get("${def.file}@$sample")
 
     /** The sheet at full resolution ([sample] 1) or reduced (2 = half). Null if it can't be decoded. */
     @Synchronized
     fun sheet(def: StickerDef, sample: Int = 1): Bitmap? {
         val key = "${def.file}@$sample"
         cache.get(key)?.let { return it }
+        val options = BitmapFactory.Options().apply { inSampleSize = sample }
         val bitmap = runCatching {
-            context.assets.open("stickers/${def.file}").use {
-                BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
+            if (def.local) {
+                BitmapFactory.decodeFile(def.file, options)
+            } else {
+                context.assets.open("stickers/${def.file}").use { BitmapFactory.decodeStream(it, null, options) }
             }
         }.getOrNull() ?: return null
         cache.put(key, bitmap)
@@ -139,11 +186,12 @@ class StickerStore(private val context: Context) {
     fun thumbnail(def: StickerDef): Bitmap? {
         synchronized(thumbs) { thumbs[def.id]?.let { return it } }
         val bitmap = runCatching {
-            context.assets.open("stickers/${def.file}").use { stream ->
+            val stream = if (def.local) java.io.FileInputStream(def.file) else context.assets.open("stickers/${def.file}")
+            stream.use {
                 @Suppress("DEPRECATION")
-                val decoder = BitmapRegionDecoder.newInstance(stream, false) ?: return@use null
+                val decoder = BitmapRegionDecoder.newInstance(it, false) ?: return@use null
                 try {
-                    decoder.decodeRegion(Rect(0, 0, def.size, def.size), null)
+                    decoder.decodeRegion(Rect(0, 0, def.w, def.h), null)
                 } finally {
                     decoder.recycle()
                 }
@@ -177,17 +225,33 @@ object StickerRenderer {
         return scale to alpha
     }
 
-    /** Half the sticker's side, in frame pixels, before its own scale. */
-    fun halfSide(layer: StickerLayer, frameH: Float): Float = layer.sizeFrac * frameH / 2f
+    /**
+     * Half the sticker's width and height, in frame pixels, before its own
+     * scale: the LONG side is sizeFrac of the frame height (square bundled
+     * stickers; wide or tall GIPHY GIFs keep their aspect).
+     */
+    fun halfSize(layer: StickerLayer, frameH: Float, store: StickerStore): Pair<Float, Float> {
+        val long = layer.sizeFrac * frameH / 2f
+        val aspect = store.byId(layer.stickerId)?.aspect ?: 1f
+        return if (aspect >= 1f) long to long / aspect else long * aspect to long
+    }
 
-    fun hitTest(layer: StickerLayer, frameW: Float, frameH: Float, px: Float, py: Float): Boolean {
+    fun hitTest(layer: StickerLayer, store: StickerStore, frameW: Float, frameH: Float, px: Float, py: Float): Boolean {
         val rad = -layer.rotationDeg * PI.toFloat() / 180f
         val dx = px - layer.x * frameW
         val dy = py - layer.y * frameH
         val lx = (dx * cos(rad) - dy * sin(rad)) / layer.scale
         val ly = (dx * sin(rad) + dy * cos(rad)) / layer.scale
-        val half = halfSide(layer, frameH) * 1.1f
-        return lx in -half..half && ly in -half..half
+        val (hw, hh) = halfSize(layer, frameH, store)
+        return lx in -hw * 1.1f..hw * 1.1f && ly in -hh * 1.1f..hh * 1.1f
+    }
+
+    private fun cellRect(def: StickerDef, sheet: Bitmap, frame: Int): Rect {
+        val cw = sheet.width / def.cols
+        val ch = (cw * def.h / def.w.coerceAtLeast(1)).coerceAtLeast(1)
+        val c = frame % def.cols
+        val r = frame / def.cols
+        return Rect(c * cw, r * ch, (c + 1) * cw, (r + 1) * ch)
     }
 
     fun draw(canvas: Canvas, layer: StickerLayer, frameW: Float, frameH: Float, tMs: Long, store: StickerStore, sample: Int = 1) {
@@ -197,23 +261,21 @@ object StickerRenderer {
         val (pop, alpha) = envelope(layer, tMs)
         if (alpha <= 0.001f) return
         val frame = def.frameAt(tMs - layer.startMs)
-        val cell = sheet.width / def.cols
-        val src = Rect((frame % def.cols) * cell, (frame / def.cols) * cell, (frame % def.cols + 1) * cell, (frame / def.cols + 1) * cell)
-        val half = halfSide(layer, frameH)
+        val src = cellRect(def, sheet, frame)
+        val (hw, hh) = halfSize(layer, frameH, store)
         canvas.save()
         canvas.translate(layer.x * frameW, layer.y * frameH)
         canvas.rotate(layer.rotationDeg)
         val s = layer.scale * pop
         canvas.scale(if (layer.flipX) -s else s, s)
         val paint = newPaint().apply { this.alpha = (255 * alpha).toInt() }
-        canvas.drawBitmap(sheet, src, RectF(-half, -half, half, half), paint)
+        canvas.drawBitmap(sheet, src, RectF(-hw, -hh, hw, hh), paint)
         canvas.restore()
     }
 
     /** Draws frame [frame] of [def] filling [dst] (picker thumbnails). */
     fun drawFrame(canvas: Canvas, def: StickerDef, sheet: Bitmap, frame: Int, dst: RectF) {
-        val cell = sheet.width / def.cols
-        val src = Rect((frame % def.cols) * cell, (frame / def.cols) * cell, (frame % def.cols + 1) * cell, (frame / def.cols + 1) * cell)
+        val src = cellRect(def, sheet, frame)
         canvas.drawBitmap(sheet, src, dst, newPaint())
     }
 }

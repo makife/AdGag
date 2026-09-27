@@ -40,6 +40,7 @@ class NativeEditorActivity : ComponentActivity() {
         const val EXTRA_OUTPUT_PATH = "output_path"
         const val EXTRA_OUTPUT_DURATION_MS = "output_duration_ms"
         const val EXTRA_ERROR = "error"
+        const val EXTRA_GIPHY_API_KEY = "giphy_api_key"
         private const val TAG = "NativeEditorActivity"
     }
 
@@ -65,6 +66,7 @@ class NativeEditorActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         DebugLog.log(applicationContext, "onCreate: start")
         super.onCreate(savedInstanceState)
+        intent.getStringExtra(EXTRA_GIPHY_API_KEY)?.let { GiphyConfig.apiKey = it }
         DebugLog.log(applicationContext, "onCreate: super.onCreate done")
         // Real user report: this screen crashed the whole app on first
         // physical-device test with no way to see why (no ADB access in

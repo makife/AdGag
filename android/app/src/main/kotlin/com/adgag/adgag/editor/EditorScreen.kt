@@ -1,5 +1,15 @@
 package com.adgag.adgag.editor
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.AnimatedContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -102,6 +112,8 @@ fun EditorScreen(
         var showSpeedSheet by remember { mutableStateOf(false) }
         var showEffectsSheet by remember { mutableStateOf(false) }
         var editingTextId by remember { mutableStateOf<String?>(null) }
+        // The bottom panel dragged down out of the way (the video gets the space).
+        var panelCollapsed by remember { mutableStateOf(false) }
         // Sticker picker: null = closed; "" = adding; otherwise the sticker being changed.
         var stickerPanelFor by remember { mutableStateOf<String?>(null) }
         val addText = {
@@ -243,100 +255,131 @@ fun EditorScreen(
                 }
             }
 
-            // Text editing replaces the timeline + tools in this same space
-            // (the video above just shrinks a little), instead of a sheet
-            // over the video.
-            val editingText = editingTextId
-            val stickerPanel = stickerPanelFor
-            if (stickerPanel != null) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(topStart = AdGagRadius.lg.dp, topEnd = AdGagRadius.lg.dp))
-                        .background(AdGagColors.SurfaceElevated)
-                        .windowInsetsPadding(WindowInsets.navigationBars)
-                        .padding(vertical = AdGagSpacing.sm.dp),
-                ) {
-                    StickerPanel(
-                        viewModel = viewModel,
-                        editingId = stickerPanel.ifEmpty { null },
-                        onDismiss = { stickerPanelFor = null },
-                    )
-                }
-            } else if (editingText != null) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(topStart = AdGagRadius.lg.dp, topEnd = AdGagRadius.lg.dp))
-                        .background(AdGagColors.SurfaceElevated)
-                        .windowInsetsPadding(WindowInsets.navigationBars)
-                        .padding(vertical = AdGagSpacing.sm.dp),
-                ) {
-                    TextEditorPanel(viewModel = viewModel, layerId = editingText, onDismiss = { editingTextId = null })
-                }
-            } else
-            // Editing panel — its own space below the video, never over it.
+            // The panel under the video: the editor (timeline + tools), or the
+            // text / sticker editors IN ITS PLACE — never over the video. A
+            // drag handle on top collapses it (the video grows into the
+            // space) and expands it again; a newly opened panel slides up.
+            val panelKind = when {
+                stickerPanelFor != null -> PanelKind.STICKERS
+                editingTextId != null -> PanelKind.TEXT
+                else -> PanelKind.EDITOR
+            }
+            LaunchedEffect(panelKind) { panelCollapsed = false }
+            // Back closes the text / sticker panel instead of leaving the editor.
+            BackHandler(enabled = panelKind != PanelKind.EDITOR) {
+                editingTextId = null
+                stickerPanelFor = null
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(topStart = AdGagRadius.lg.dp, topEnd = AdGagRadius.lg.dp))
                     .background(AdGagColors.SurfaceElevated)
                     .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(horizontal = AdGagSpacing.lg.dp, vertical = AdGagSpacing.md.dp),
+                    .animateContentSize(tween(260)),
             ) {
-                EditorTimeline(
-                    viewModel = viewModel,
-                    onAddClip = {
-                        viewModel.player.pause()
-                        onAddClip()
+                PanelHandle(
+                    collapsed = panelCollapsed,
+                    label = when (panelKind) {
+                        PanelKind.EDITOR -> "Editor"
+                        PanelKind.TEXT -> "Text"
+                        PanelKind.STICKERS -> "Stickers"
                     },
-                    onPickTransition = { pickingTransitionFor = it },
-                    onOpenMusic = { showMusicSheet = true },
-                    onAddText = addText,
-                    onEditText = editOverlay,
+                    onCollapsedChange = { panelCollapsed = it },
+                    onDone = if (panelKind == PanelKind.EDITOR) {
+                        null
+                    } else {
+                        {
+                            editingTextId = null
+                            stickerPanelFor = null
+                        }
+                    },
                 )
-                Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
+                if (!panelCollapsed) {
+                    AnimatedContent(
+                        targetState = panelKind,
+                        transitionSpec = {
+                            (slideInVertically(tween(300)) { it } + fadeIn(tween(200))) togetherWith
+                                fadeOut(tween(120)) using SizeTransform(clip = false)
+                        },
+                        label = "editorPanel",
+                    ) { kind ->
+                        when (kind) {
+                            PanelKind.STICKERS -> Column(modifier = Modifier.padding(bottom = AdGagSpacing.sm.dp)) {
+                                val editing = stickerPanelFor?.ifEmpty { null }
+                                StickerPanelHeader(viewModel = viewModel, editingId = editing, onDismiss = { stickerPanelFor = null })
+                                StickerPanel(viewModel = viewModel, editingId = editing, onDismiss = { stickerPanelFor = null })
+                            }
+                            PanelKind.TEXT -> Column(modifier = Modifier.padding(bottom = AdGagSpacing.sm.dp)) {
+                                editingTextId?.let { id ->
+                                    TextEditorPanel(viewModel = viewModel, layerId = id, onDismiss = { editingTextId = null })
+                                }
+                            }
+                            PanelKind.EDITOR -> Column(
+                                modifier = Modifier.padding(
+                                    start = AdGagSpacing.lg.dp,
+                                    end = AdGagSpacing.lg.dp,
+                                    bottom = AdGagSpacing.md.dp,
+                                ),
+                            ) {
+                        EditorTimeline(
+                            viewModel = viewModel,
+                            onAddClip = {
+                                viewModel.player.pause()
+                                onAddClip()
+                            },
+                            onPickTransition = { pickingTransitionFor = it },
+                            onOpenMusic = { showMusicSheet = true },
+                            onAddText = addText,
+                            onEditText = editOverlay,
+                        )
+                        Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
 
-                ToolRow(
-                    viewModel = viewModel,
-                    onMusic = { if (viewModel.musicPath != null) showMusicSheet = true else pickMusic.launch("audio/*") },
-                    onSpeed = { showSpeedSheet = true },
-                    onEffects = { showEffectsSheet = true },
-                    onText = addText,
-                    onStickers = openStickers,
-                )
+                        ToolRow(
+                            viewModel = viewModel,
+                            onMusic = { if (viewModel.musicPath != null) showMusicSheet = true else pickMusic.launch("audio/*") },
+                            onSpeed = { showSpeedSheet = true },
+                            onEffects = { showEffectsSheet = true },
+                            onText = addText,
+                            onStickers = openStickers,
+                        )
 
-                if (viewModel.isExporting) {
-                    Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
-                    ExportProgress(viewModel.exportProgress)
-                }
-                if (viewModel.isAttachingMusic) {
-                    Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
-                    PreparingMusicIndicator()
-                }
-                // Errors are capped at a few lines: a long codec dump used
-                // to grow the panel and squeeze the video away.
-                val previewError = viewModel.previewError
-                if (previewError != null) {
-                    Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
-                    Text(
-                        text = "Preview problem: $previewError",
-                        color = AdGagColors.Danger,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                val error = viewModel.exportError
-                if (error != null) {
-                    Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
-                    Text(
-                        text = "Export failed: $error",
-                        color = AdGagColors.Danger,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                        if (viewModel.isExporting) {
+                            Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
+                            ExportProgress(viewModel.exportProgress)
+                        }
+                        if (viewModel.isAttachingMusic) {
+                            Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
+                            PreparingMusicIndicator()
+                        }
+                        // Errors are capped at a few lines: a long codec dump used
+                        // to grow the panel and squeeze the video away.
+                        val previewError = viewModel.previewError
+                        if (previewError != null) {
+                            Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
+                            Text(
+                                text = "Preview problem: $previewError",
+                                color = AdGagColors.Danger,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        val error = viewModel.exportError
+                        if (error != null) {
+                            Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
+                            Text(
+                                text = "Export failed: $error",
+                                color = AdGagColors.Danger,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -564,6 +607,73 @@ private fun ExportProgress(progress: Float) {
                     .clip(RoundedCornerShape(AdGagRadius.pill.dp))
                     .background(AdGagColors.BrandGradient),
             )
+        }
+    }
+}
+
+private enum class PanelKind { EDITOR, TEXT, STICKERS }
+
+/**
+ * Grab bar on top of the bottom panel: drag it down to collapse the panel
+ * (the video grows into the freed space), up (or tap) to bring it back.
+ * While collapsed it shows which panel is hidden, plus Done for the text /
+ * sticker editors so they can be closed without expanding.
+ */
+@Composable
+private fun PanelHandle(
+    collapsed: Boolean,
+    label: String,
+    onCollapsedChange: (Boolean) -> Unit,
+    onDone: (() -> Unit)?,
+) {
+    val change by rememberUpdatedState(onCollapsedChange)
+    val isCollapsed by rememberUpdatedState(collapsed)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) {
+                var travelled = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { travelled = 0f },
+                    onDragEnd = {
+                        val threshold = 36.dp.toPx()
+                        if (travelled > threshold) change(true) else if (travelled < -threshold) change(false)
+                    },
+                ) { pointer, dy ->
+                    pointer.consume()
+                    travelled += dy
+                }
+            }
+            .clickable { change(!isCollapsed) }
+            .padding(top = AdGagSpacing.sm.dp, bottom = if (collapsed) AdGagSpacing.xs.dp else AdGagSpacing.sm.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(44.dp)
+                .height(5.dp)
+                .clip(RoundedCornerShape(AdGagRadius.pill.dp))
+                .background(Color.White.copy(alpha = 0.35f)),
+        )
+        if (collapsed) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = AdGagSpacing.lg.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "$label · drag up to edit",
+                    color = AdGagColors.OnSurfaceMuted,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                if (onDone != null) {
+                    TextButton(onClick = onDone) {
+                        Text(text = "Done", color = AdGagColors.GradientPink, style = MaterialTheme.typography.labelLarge)
+                    }
+                } else {
+                    Spacer(modifier = Modifier.height(40.dp))
+                }
+            }
         }
     }
 }

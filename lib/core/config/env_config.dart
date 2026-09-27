@@ -29,6 +29,11 @@ abstract final class EnvConfig {
     defaultValue: "adgag.app",
   );
 
+  /// GIPHY API key for sticker/GIF search in the native editor. A client
+  /// key by GIPHY's design (their SDKs ship it in apps); empty = the GIPHY
+  /// tab just says it isn't configured. Get one at developers.giphy.com.
+  static const String giphyApiKey = String.fromEnvironment("GIPHY_API_KEY");
+
   static bool get isProduction => environment == AppEnvironment.production;
 
   /// Fails fast with a readable message instead of a null-Supabase crash
