@@ -1,5 +1,4 @@
 import "package:flutter/services.dart";
-import "../config/env_config.dart";
 
 /// What a native editor session ended with (a `null` from
 /// [NativeEditorBridge.openEditor] means the user backed out).
@@ -53,7 +52,6 @@ abstract final class NativeEditorBridge {
       "videoPath": videoPath,
       "state": state,
       "newClipPath": newClipPath,
-      "giphyApiKey": EnvConfig.giphyApiKey,
     });
     if (raw == null) {
       return null;

@@ -2,6 +2,5 @@
   "APP_ENV": "staging",
   "SUPABASE_URL": "https://YOUR-STAGING-PROJECT.supabase.co",
   "SUPABASE_ANON_KEY": "YOUR-STAGING-ANON-KEY",
-  "APP_LINK_HOST": "staging.adgag.app",
-  "GIPHY_API_KEY": "YOUR-GIPHY-API-KEY"
+  "APP_LINK_HOST": "staging.adgag.app"
 }

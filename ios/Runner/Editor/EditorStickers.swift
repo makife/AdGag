@@ -7,9 +7,8 @@ import UIKit
 // Mirror of android/.../editor/Stickers.kt + StickerPanel.kt: animated
 // stickers from Google's Noto Animated Emoji (CC BY 4.0, AdGagStickers/
 // LICENSE.txt), pre-packed into one sprite sheet per sticker (uniform 50ms
-// frames, 192px, WebP) + stickers.json — the SAME files as Android — plus
-// GIPHY GIFs imported into the same kind of sheet (EditorGiphy.swift). A
-// sheet lets the preview and the export draw any frame at any time.
+// frames, 192px, WebP) + stickers.json — the SAME files as Android. A sheet
+// lets the preview and the export draw any frame at any time.
 
 // MARK: - Model
 
@@ -47,13 +46,13 @@ struct StickerLayer: Codable, Equatable, Identifiable {
 struct StickerDef: Codable, Identifiable {
   let id: String
   let label: String
-  /// A file name in AdGagStickers, or an absolute path when `local` (imported from GIPHY).
+  /// A file name in AdGagStickers, or an absolute path when `local`.
   let file: String
   let frames: Int
   let cols: Int
   let size: Int
   let durationMs: Int64
-  /// Cell size (GIPHY GIFs aren't square); bundled stickers are size x size.
+  /// Cell size (non-square stickers keep their aspect); the bundled ones are size x size.
   var w: Int
   var h: Int
   var local: Bool
@@ -109,7 +108,6 @@ final class StickerStore: @unchecked Sendable {
   private var order: [String] = []
   private var smallSheets: [String: CGImage] = [:]
   private var smallOrder: [String] = []
-  private var localDefs: [String: StickerDef] = [:]
 
   private init() {
     if let url = Bundle.main.url(forResource: "stickers", withExtension: "json", subdirectory: "AdGagStickers"),
@@ -122,29 +120,7 @@ final class StickerStore: @unchecked Sendable {
     }
   }
 
-  /// A bundled sticker, or an imported GIPHY one (its def is read from disk once).
-  func byId(_ id: String) -> StickerDef? {
-    if let d = all.first(where: { $0.id == id }) { return d }
-    guard id.hasPrefix("giphy_") else { return nil }
-    lock.lock()
-    defer { lock.unlock() }
-    if let d = localDefs[id] { return d }
-    let url = Giphy.directory.appendingPathComponent("\(id).json")
-    guard let data = try? Data(contentsOf: url),
-          let def = try? JSONDecoder().decode(StickerDef.self, from: data),
-          FileManager.default.fileExists(atPath: def.file) else { return nil }
-    localDefs[id] = def
-    return def
-  }
-
-  func saveLocal(_ def: StickerDef) {
-    if let data = try? JSONEncoder().encode(def) {
-      try? data.write(to: Giphy.directory.appendingPathComponent("\(def.id).json"))
-    }
-    lock.lock()
-    localDefs[def.id] = def
-    lock.unlock()
-  }
+  func byId(_ id: String) -> StickerDef? { all.first { $0.id == id } }
 
   private func url(of def: StickerDef) -> URL? {
     if def.local { return URL(fileURLWithPath: def.file) }
@@ -266,20 +242,14 @@ enum StickerRenderer {
 
 // MARK: - Picker panel
 
-private enum StickerSource: String, CaseIterable {
-  case emoji = "Emoji", giphy = "GIPHY"
-}
-
-/// Shown in place of the timeline + tools (never over the video). Bundled
-/// animated emoji or GIPHY search (stickers / GIFs, trending when empty);
-/// every thumbnail animates. From the "Stickers" tool it ADDS the tapped
+/// Shown in place of the timeline + tools (never over the video): the
+/// bundled animated emoji, every thumbnail animating. From the "Stickers" tool it ADDS the tapped
 /// sticker at the playhead; on an existing sticker it REPLACES it and
 /// offers Flip / Delete.
 struct StickerPanel: View {
   @ObservedObject var viewModel: EditorViewModel
   let editingId: String?
   let onClose: () -> Void
-  @State private var source: StickerSource = .emoji
 
   private func pick(_ def: StickerDef) {
     if let id = editingId, var s = viewModel.stickerLayers.first(where: { $0.id == id }) {
@@ -312,21 +282,7 @@ struct StickerPanel: View {
         }
         Button("Done", action: onClose).foregroundColor(EditorPalette.pink)
       }
-      HStack(spacing: 6) {
-        ForEach(StickerSource.allCases, id: \.self) { s in
-          Button { source = s } label: {
-            Text(s.rawValue).font(.caption).fontWeight(.semibold)
-              .foregroundColor(s == source ? EditorPalette.pink : .white)
-              .frame(maxWidth: .infinity).padding(.vertical, 7)
-              .background(s == source ? EditorPalette.pink.opacity(0.25) : EditorPalette.surface)
-              .clipShape(Capsule())
-          }
-        }
-      }
-      switch source {
-      case .emoji: EmojiGrid(selectedId: editing?.stickerId, onPick: pick)
-      case .giphy: GiphyGrid(onPick: pick)
-      }
+      EmojiGrid(selectedId: editing?.stickerId, onPick: pick)
     }
   }
 }
@@ -369,100 +325,6 @@ private struct EmojiGrid: View {
       }
       .frame(height: 196)
       Text("Animated emoji: Google Noto Emoji (CC BY 4.0)").font(.caption2).foregroundColor(EditorPalette.muted)
-    }
-  }
-}
-
-private struct GiphyGrid: View {
-  let onPick: (StickerDef) -> Void
-  @State private var kind: GiphyKind = .stickers
-  @State private var query = ""
-  @State private var submitted = ""
-  @State private var results: [GiphyItem] = []
-  @State private var loading = false
-  @State private var error: String?
-  @State private var importing: String?
-
-  var body: some View {
-    if GiphyConfig.apiKey.isEmpty {
-      Text("GIPHY search isn't set up yet (no GIPHY_API_KEY in this build).")
-        .font(.footnote).foregroundColor(EditorPalette.muted).padding(.vertical, 12)
-    } else {
-      VStack(alignment: .leading, spacing: 6) {
-        HStack(spacing: 6) {
-          TextField("Search GIPHY", text: $query, onCommit: { submitted = query })
-            .foregroundColor(.white)
-            .submitLabel(.search)
-            .padding(8)
-            .background(EditorPalette.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-          ForEach(GiphyKind.allCases, id: \.self) { k in
-            Button { kind = k } label: {
-              Text(k.label).font(.caption)
-                .foregroundColor(k == kind ? EditorPalette.pink : .white)
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(k == kind ? EditorPalette.pink.opacity(0.25) : EditorPalette.surface)
-                .clipShape(Capsule())
-            }
-          }
-        }
-        ZStack {
-          if loading {
-            ProgressView().tint(EditorPalette.pink)
-          } else if let error {
-            Text(error).font(.footnote).foregroundColor(EditorPalette.danger)
-          } else if results.isEmpty {
-            Text("Nothing found").font(.footnote).foregroundColor(EditorPalette.muted)
-          } else {
-            ScrollView {
-              LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 8)], spacing: 8) {
-                ForEach(results) { item in
-                  Button { importItem(item) } label: {
-                    ZStack {
-                      EditorPalette.surface
-                      AnimatedGifView(url: item.previewURL).padding(4)
-                      if importing == item.id { ProgressView().tint(EditorPalette.pink) }
-                    }
-                    .frame(width: 76, height: 76)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                  }
-                  .disabled(importing != nil)
-                }
-              }
-            }
-          }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 160)
-        // GIPHY's attribution requirement.
-        Text("Powered by GIPHY").font(.caption2).foregroundColor(EditorPalette.muted)
-      }
-      .task(id: "\(kind.rawValue)|\(submitted)") { await load() }
-    }
-  }
-
-  private func load() async {
-    loading = true
-    error = nil
-    do {
-      results = try await Giphy.search(kind: kind, query: submitted)
-    } catch {
-      self.error = error.localizedDescription
-      results = []
-    }
-    loading = false
-  }
-
-  private func importItem(_ item: GiphyItem) {
-    importing = item.id
-    Task {
-      do {
-        let def = try await Giphy.importItem(item)
-        onPick(def)
-      } catch {
-        self.error = "Couldn't add that one: \(error.localizedDescription)"
-      }
-      importing = nil
     }
   }
 }

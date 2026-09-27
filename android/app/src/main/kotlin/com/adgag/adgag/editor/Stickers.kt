@@ -78,10 +78,10 @@ data class StickerDef(
     val cols: Int,
     val size: Int,
     val durationMs: Long,
-    /** Cell size (GIPHY GIFs aren't square); bundled stickers are size x size. */
+    /** Cell size (non-square stickers keep their aspect); the bundled ones are size x size. */
     val w: Int = size,
     val h: Int = size,
-    /** [file] is an absolute path (an imported GIPHY sticker), not an asset name. */
+    /** [file] is an absolute path, not an asset name. */
     val local: Boolean = false,
 ) {
     val aspect: Float get() = w.toFloat() / h.coerceAtLeast(1)
@@ -125,35 +125,7 @@ class StickerStore(private val context: Context) {
         }.getOrDefault(emptyList())
     }
 
-    private val localDefs = HashMap<String, StickerDef?>()
-
-    /** A bundled sticker, or an imported GIPHY one (its def is read from filesDir/giphy once). */
-    fun byId(id: String): StickerDef? {
-        all.firstOrNull { it.id == id }?.let { return it }
-        if (!id.startsWith("giphy_")) return null
-        return synchronized(localDefs) { localDefs.getOrPut(id) { readLocalDef(Giphy.dir(context), id) } }
-    }
-
-    fun registerLocal(def: StickerDef) {
-        synchronized(localDefs) { localDefs[def.id] = def }
-    }
-
-    companion object {
-        fun readLocalDef(dir: java.io.File, id: String): StickerDef? = runCatching {
-            val o = JSONObject(java.io.File(dir, "$id.json").readText())
-            val file = o.getString("file")
-            if (!java.io.File(file).exists()) return null
-            StickerDef(
-                id = o.getString("id"), label = o.optString("label"), file = file, frames = o.getInt("frames"),
-                cols = o.getInt("cols"), size = o.getInt("size"), durationMs = o.getLong("durationMs"),
-                w = o.optInt("w", o.getInt("size")), h = o.optInt("h", o.getInt("size")), local = true,
-            )
-        }.getOrNull()
-
-        fun writeLocalDef(dir: java.io.File, def: StickerDef) {
-            java.io.File(dir, "${def.id}.json").writeText(def.toJson().toString())
-        }
-    }
+    fun byId(id: String): StickerDef? = all.firstOrNull { it.id == id }
 
     private val cache = object : LruCache<String, Bitmap>(48 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
@@ -228,7 +200,7 @@ object StickerRenderer {
     /**
      * Half the sticker's width and height, in frame pixels, before its own
      * scale: the LONG side is sizeFrac of the frame height (square bundled
-     * stickers; wide or tall GIPHY GIFs keep their aspect).
+     * stickers; wide or tall ones keep their aspect).
      */
     fun halfSize(layer: StickerLayer, frameH: Float, store: StickerStore): Pair<Float, Float> {
         val long = layer.sizeFrac * frameH / 2f

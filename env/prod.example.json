@@ -2,6 +2,5 @@
   "APP_ENV": "production",
   "SUPABASE_URL": "https://YOUR-PROD-PROJECT.supabase.co",
   "SUPABASE_ANON_KEY": "YOUR-PROD-ANON-KEY",
-  "APP_LINK_HOST": "adgag.app",
-  "GIPHY_API_KEY": "YOUR-GIPHY-API-KEY"
+  "APP_LINK_HOST": "adgag.app"
 }

@@ -35,7 +35,6 @@ class MainActivity : FlutterActivity() {
                     // Relaunch after the timeline's "+" (see NativeEditorActivity.EXTRA_STATE_JSON).
                     val stateJson = call.argument<String>("state")
                     val newClipPath = call.argument<String>("newClipPath")
-                    val giphyApiKey = call.argument<String>("giphyApiKey").orEmpty()
                     if (videoPath == null && stateJson == null) {
                         result.error("MISSING_ARG", "videoPath or state is required", null)
                         return@setMethodCallHandler
@@ -50,7 +49,6 @@ class MainActivity : FlutterActivity() {
                     }
                     pendingResult = result
                     val intent = Intent(this, NativeEditorActivity::class.java).apply {
-                        putExtra(NativeEditorActivity.EXTRA_GIPHY_API_KEY, giphyApiKey)
                         if (stateJson != null) {
                             putExtra(NativeEditorActivity.EXTRA_STATE_JSON, stateJson)
                             if (newClipPath != null) putExtra(NativeEditorActivity.EXTRA_NEW_CLIP_PATH, newClipPath)
