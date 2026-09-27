@@ -1444,6 +1444,23 @@ The ultimate product promise is:
 
 Repo: `C:\Users\LENOVO10OCT2020\Desktop\makifbilgisayar\AdGag`, brand name **AdGag** (codename `everything_is_an_ad` retired — the real name was decided). 14 commits, 124 `lib/` files, 14 test files (59 test cases), 17 SQL migrations, 2 Supabase Edge Functions. Full narrative detail for all of this lives in `README.md` (architecture, ER model, RLS plan, tech choices, and — most importantly — the "Verification log" entries, which are the authoritative record of what's actually been proven against real infrastructure vs. only written).
 
+## >>> RESUME HERE (last session ended 2026-09-27, commit 39bdef3) <<<
+
+Everything is committed and pushed to `master` (github.com/makife/AdGag). Android debug APK built (`flutter build apk --debug --dart-define-from-file=env/dev.json`, kernel_blob check = 1); iOS only compiles in CI (simulator build + template XCTest green) — **no iOS code has ever run on a device or simulator UI.**
+
+**Done on 2026-09-27 (details in the dated entries below, newest first):**
+1. Feed: nav-bar double counting fixed, white seekable scrubber, live REVIEWS badge, mini avatars, settle-time page activation, reviews panel shrinks the video.
+2. iOS native editor ported to parity with Android (AVFoundation composition + custom compositor + Core Image Metal effects); iOS CI finally compiles real code.
+3. Text effects (both editors): 39 fonts (all with Turkish letters), 26 styles, 20 entrance/loop motions + 12 exit ("Out") effects, colour swatches + spectrum, size/spacing/alignment, drag/pinch/twist on the preview, timeline row; captions burned in by a composition-level overlay.
+4. Animated stickers (both): 43 Google Noto Animated Emoji (CC BY 4.0) as sprite sheets; "Stickers" tool next to "Text"; share the overlay timeline row with captions.
+5. Bottom panel with a grab bar (drag down = video grows) and slide-up panel transitions; Size/Color tabs scroll; animated sticker picker.
+6. Release-build bug: INTERNET permission added to the main Android manifest.
+7. GIPHY search built then REMOVED (production key is paid) — owner doesn't want paid services without asking.
+
+**Waiting on the owner's device test of the latest APK.** Top things to check: (a) exported Ad actually contains captions + stickers (Media3 composition-level `OverlayEffect` in Transformer has never run — if they're missing, move the overlay into each clip's effects with a per-clip time offset); (b) grab-bar collapse/expand and slide-up animation feel; (c) Size tab scrolling; (d) animated sticker picker performance on a mid-range phone; (e) export time with stickers on screen (overlay redraws every frame).
+
+**Open items / ideas not started:** an "Open source licenses" screen (`showLicensePage`) before store release; privacy policy / store data-safety forms must mention third-party processing (Supabase, Mux); Apple Developer account needed for TestFlight; the long-standing "no real video through Mux end-to-end" verification gap; push notifications not dispatched; Universal/App Links not hosted.
+
 ## Status: all 8 development-order phases (section 52) implemented
 
 Phases A through H are done — auth, social graph, video pipeline, creation flow, engagement (SOLD/REVIEWS/AD THIS/share/subject pages), discovery/ranking, safety (reports/blocks/rate-limiting), and polish (notifications/deep-link target/analytics/onboarding hint). See the per-phase git commits and README's "Implementation Milestones" section for what shipped in each.
