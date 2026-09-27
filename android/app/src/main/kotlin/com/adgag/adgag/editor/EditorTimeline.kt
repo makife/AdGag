@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -62,8 +63,8 @@ import kotlinx.coroutines.delay
  * 3. Music row (once music is attached) — on the GLOBAL timeline,
  *    aligned under the clip strip; trim handles on both ends, drag the
  *    middle to move it.
- * 4. Song row — the whole song, any length; the used section is a window
- *    that can be dragged anywhere in the song and resized.
+ * 4. Song row — the whole song, any length; the used section is a
+ *    fixed-length window slid anywhere in the song.
  *
  * Fits one screen width (≤30s) — no horizontal scrolling, which avoids
  * the scroll/seek feedback-loop bug class the old Flutter editor had.
@@ -181,11 +182,16 @@ private const val SongRowHeightDp = 40
 private const val SongTickEveryMs = 10_000L
 
 /**
- * The whole song at full width, the used section as a draggable window:
- * drag the window to pick a different part of the song (only the song
- * in-point changes — where the music sits in the video stays put), drag
- * its edges to change the section's length. Same commit-on-release and
- * rememberUpdatedState rules as every other row here.
+ * The whole song at full width, the used section as a window of FIXED
+ * length (the music's play length — by default the video's length; resize
+ * it on the music row above). Drag ANYWHERE on this row to slide the
+ * window through the song, or tap to centre it there — e.g. any 5 seconds
+ * of a 3-minute song for a 5-second video.
+ *
+ * Deliberately no edge handles here: on a long song the window is only a
+ * few pixels wide and two 32dp handle hit areas swallowed it completely,
+ * so every drag resized instead of moved (user report). Only the song
+ * in-point changes; where the music sits in the video stays put.
  */
 @UnstableApi
 @Composable
@@ -200,32 +206,43 @@ private fun SongRow(viewModel: EditorViewModel, density: Density, globalPosition
     ) {
         val widthPx = with(density) { maxWidth.toPx() }
         fun msToPx(ms: Long): Float = ms.toFloat() / songMs * widthPx
-        fun pxDeltaToMsDelta(deltaPx: Float): Long = (deltaPx / widthPx * songMs).toLong()
 
         var localSource by remember(viewModel.musicSourceStartMs) { mutableLongStateOf(viewModel.musicSourceStartMs) }
-        var localDuration by remember(viewModel.musicPlayDurationMs) { mutableLongStateOf(viewModel.musicPlayDurationMs) }
-        // The section can't be longer than the time left in the video after the music's start.
-        val maxSectionMs = (viewModel.outputDurationMs - viewModel.musicStartOffsetMs).coerceAtLeast(MinTrimGapMs)
+        val sectionMs = viewModel.musicPlayDurationMs.coerceIn(0L, songMs)
+        val maxSource = (songMs - sectionMs).coerceAtLeast(0L)
 
         val commit by rememberUpdatedState({
-            viewModel.setMusicPlacement(viewModel.musicStartOffsetMs, localSource, localDuration)
+            viewModel.setMusicPlacement(viewModel.musicStartOffsetMs, localSource, viewModel.musicPlayDurationMs)
         })
-        val onWindowDrag by rememberUpdatedState({ deltaPx: Float ->
-            localSource = (localSource + pxDeltaToMsDelta(deltaPx)).coerceIn(0L, (songMs - localDuration).coerceAtLeast(0L))
+        val onDrag by rememberUpdatedState({ deltaPx: Float ->
+            val deltaMs = (deltaPx / widthPx * songMs).toLong()
+            localSource = (localSource + deltaMs).coerceIn(0L, maxSource)
         })
-        val onLeftDrag by rememberUpdatedState({ deltaPx: Float ->
-            // Keep the section's END fixed in the song.
-            val end = localSource + localDuration
-            val lower = maxOf(0L, end - maxSectionMs)
-            val upper = (end - MinTrimGapMs).coerceAtLeast(lower)
-            val newSource = (localSource + pxDeltaToMsDelta(deltaPx)).coerceIn(lower, upper)
-            localDuration = end - newSource
-            localSource = newSource
+        val onTap by rememberUpdatedState({ xPx: Float ->
+            val centerMs = (xPx / widthPx * songMs).toLong()
+            localSource = (centerMs - sectionMs / 2).coerceIn(0L, maxSource)
         })
-        val onRightDrag by rememberUpdatedState({ deltaPx: Float ->
-            val upper = minOf(songMs - localSource, maxSectionMs).coerceAtLeast(MinTrimGapMs)
-            localDuration = (localDuration + pxDeltaToMsDelta(deltaPx)).coerceIn(MinTrimGapMs, upper)
-        })
+
+        // The whole row is the touch target (see the doc comment).
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectDragGestures(
+                        onDragEnd = { commit() },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            onDrag(dragAmount.x)
+                        },
+                    )
+                }
+                .pointerInput(Unit) {
+                    detectTapGestures { offset ->
+                        onTap(offset.x)
+                        commit()
+                    }
+                },
+        )
 
         // 10-second ticks so long songs can be navigated by eye.
         var tick = SongTickEveryMs
@@ -240,24 +257,20 @@ private fun SongRow(viewModel: EditorViewModel, density: Density, globalPosition
             tick += SongTickEveryMs
         }
 
-        val windowStartPx = msToPx(localSource)
-        val windowEndPx = msToPx(localSource + localDuration)
+        // The window — at least a few dp wide so a short section on a long
+        // song is still visible, centred on its real position.
+        val minWindowPx = with(density) { 6.dp.toPx() }
+        val realStartPx = msToPx(localSource)
+        val realWidthPx = msToPx(sectionMs)
+        val drawWidthPx = realWidthPx.coerceAtLeast(minWindowPx)
+        val drawStartPx = (realStartPx - (drawWidthPx - realWidthPx) / 2).coerceIn(0f, (widthPx - drawWidthPx).coerceAtLeast(0f))
         Box(
             modifier = Modifier
-                .offset(x = with(density) { windowStartPx.toDp() })
-                .width(with(density) { (windowEndPx - windowStartPx).coerceAtLeast(1f).toDp() })
+                .offset(x = with(density) { drawStartPx.toDp() })
+                .width(with(density) { drawWidthPx.toDp() })
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                .background(AdGagColors.GradientBlue.copy(alpha = 0.55f))
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragEnd = { commit() },
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            onWindowDrag(dragAmount.x)
-                        },
-                    )
-                },
+                .background(AdGagColors.GradientPink.copy(alpha = 0.75f)),
         )
 
         // Where in the SONG the preview is right now (only while the music plays).
@@ -269,12 +282,9 @@ private fun SongRow(viewModel: EditorViewModel, density: Density, globalPosition
                     .offset(x = with(density) { msToPx(songPos).toDp() } - 1.dp)
                     .width(2.dp)
                     .fillMaxHeight()
-                    .background(AdGagColors.BrandGradient),
+                    .background(Color.White),
             )
         }
-
-        TrimHandle(xPx = windowStartPx, rowWidthPx = widthPx, density = density, onDrag = { onLeftDrag(it) }, onDragEnd = { commit() })
-        TrimHandle(xPx = windowEndPx, rowWidthPx = widthPx, density = density, onDrag = { onRightDrag(it) }, onDragEnd = { commit() })
     }
 }
 

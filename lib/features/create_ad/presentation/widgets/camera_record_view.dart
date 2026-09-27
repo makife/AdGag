@@ -37,7 +37,7 @@ class CameraRecordView extends StatefulWidget {
   /// extra take, since all takes together share the 30s cap.
   final Duration maxDuration;
 
-  /// When set, a Cancel button is shown top-left (extra-take mode).
+  /// When set, a back/cancel button is shown top-left.
   final VoidCallback? onCancel;
 
   /// When set, a gallery button is shown next to the record button. The
@@ -303,7 +303,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
               top: AppSpacing.md,
               left: AppSpacing.md,
               child: SafeArea(
-                child: TextButton(
+                child: TextButton.icon(
                   // Disabled mid-recording: stop first, so a take is never
                   // silently thrown away by a stray tap.
                   onPressed: _isRecording ? null : () => unawaited(_cancel()),
@@ -312,7 +312,8 @@ class _CameraRecordViewState extends State<CameraRecordView> {
                     foregroundColor: Colors.white,
                     shape: const StadiumBorder(),
                   ),
-                  child: Text(AppLocalizations.of(context).captureCancelExtraClip),
+                  icon: const Icon(Icons.arrow_back),
+                  label: Text(AppLocalizations.of(context).captureCancelExtraClip),
                 ),
               ),
             ),

@@ -30,6 +30,8 @@ class _CaptureStepState extends ConsumerState<CaptureStep> {
           onRecorded: (String path, Duration duration) {
             Navigator.of(routeContext).pop((path, duration));
           },
+          // A visible way back (the recording screen had only system back).
+          onCancel: () => Navigator.of(routeContext).pop(),
         ),
       ),
     );
