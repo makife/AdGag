@@ -159,12 +159,12 @@ final class AdGagInstruction: NSObject, AVVideoCompositionInstructionProtocol {
 }
 
 final class AdGagCompositor: NSObject, AVVideoCompositing {
-  private static let pixelAttributes: [String: Any] = [
+  private static let pixelAttributes: [String: any Sendable] = [
     kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
     kCVPixelBufferMetalCompatibilityKey as String: true,
   ]
-  let sourcePixelBufferAttributes: [String: Any]? = AdGagCompositor.pixelAttributes
-  let requiredPixelBufferAttributesForRenderContext: [String: Any] = AdGagCompositor.pixelAttributes
+  let sourcePixelBufferAttributes: [String: any Sendable]? = AdGagCompositor.pixelAttributes
+  let requiredPixelBufferAttributesForRenderContext: [String: any Sendable] = AdGagCompositor.pixelAttributes
 
   private let queue = DispatchQueue(label: "com.adgag.compositor")
   private let context = CIContext(options: [.cacheIntermediates: false])

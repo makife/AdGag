@@ -417,7 +417,8 @@ final class EditorViewModel: ObservableObject {
           result[filter] = UIImage(cgImage: cg)
         }
       }
-      await MainActor.run { [weak self] in self?.filterThumbnails = result }
+      let rendered = result
+      await MainActor.run { [weak self] in self?.filterThumbnails = rendered }
     }
   }
 
