@@ -33,6 +33,13 @@ import kotlin.math.sin
  *   thumbnails from a frame of the user's own clip.
  * Coordinates: uv in 0..1 with y UP (GL convention); p = (uv.x * aspect,
  * uv.y) measures in "frame heights" so shapes stay round on any aspect.
+ *
+ * Border decorations sit on [borderPoint]s: evenly spaced around the inset
+ * rectangle with the four CORNERS shared by both edges, so nothing
+ * overlaps or gets cut at a corner (the first version laid each edge on
+ * its own grid — user-reported corner mismatches). Colours come from a
+ * hash of the point's POSITION, so a corner looks the same from either
+ * edge.
  */
 enum class VideoFilter(val label: String, val fragment: String?) {
     NONE("Original", null),
@@ -130,12 +137,12 @@ enum class VideoFilter(val label: String, val fragment: String?) {
     FLOWERS("Flowers", """
         vec4 c = tex(vUv);
         vec2 p = vec2(vUv.x * uAspect, vUv.y);
-        vec3 bc = borderCenter(p, 0.11, 0.055);
-        vec2 d = p - bc.xy;
+        vec2 bp = borderPoint(p, 0.11, 0.055);
+        vec2 d = p - bp;
         float r = length(d);
         float a = atan(d.y, d.x);
         float petal = 0.05 * (0.45 + 0.55 * (0.5 + 0.5 * cos(5.0 * a)));
-        vec3 petalColor = mod(bc.z, 2.0) < 1.0 ? vec3(1.0, 0.55, 0.75) : vec3(1.0, 0.95, 0.97);
+        vec3 petalColor = hash(bp) < 0.5 ? vec3(1.0, 0.55, 0.75) : vec3(1.0, 0.95, 0.97);
         vec3 col = c.rgb;
         if (r < petal) col = petalColor;
         if (r < 0.014) col = vec3(1.0, 0.82, 0.25);
@@ -144,12 +151,12 @@ enum class VideoFilter(val label: String, val fragment: String?) {
     HEARTS("Hearts", """
         vec4 c = tex(vUv);
         vec2 p = vec2(vUv.x * uAspect, vUv.y);
-        vec3 bc = borderCenter(p, 0.1, 0.05);
-        vec2 q = (p - bc.xy) / 0.035;
+        vec2 bp = borderPoint(p, 0.1, 0.05);
+        vec2 q = (p - bp) / 0.035;
         float k = q.x * q.x + q.y * q.y - 1.0;
         float h = k * k * k - q.x * q.x * q.y * q.y * q.y;
         vec3 col = c.rgb;
-        if (h <= 0.0) col = mod(bc.z, 2.0) < 1.0 ? vec3(0.95, 0.15, 0.35) : vec3(1.0, 0.45, 0.6);
+        if (h <= 0.0) col = hash(bp) < 0.5 ? vec3(0.95, 0.15, 0.35) : vec3(1.0, 0.45, 0.6);
         gl_FragColor = vec4(col, c.a);
     """),
     FILM("Film", """
@@ -163,6 +170,76 @@ enum class VideoFilter(val label: String, val fragment: String?) {
             float hy = abs(fract(p.y / 0.055) - 0.5);
             float hx = abs(fromEdge - bar * 0.5);
             if (hy < 0.2 && hx < bar * 0.22) col = vec3(0.92);
+        }
+        gl_FragColor = vec4(col, c.a);
+    """),
+    IVY("Ivy", """
+        vec4 c = tex(vUv);
+        vec2 p = vec2(vUv.x * uAspect, vUv.y);
+        float inset = 0.045;
+        vec3 col = c.rgb;
+        vec2 rel = abs(p - vec2(uAspect * 0.5, 0.5)) - vec2(uAspect * 0.5 - inset, 0.5 - inset);
+        float sd = max(rel.x, rel.y);
+        float wave = 0.006 * sin((p.x + p.y) * 70.0);
+        if (abs(sd - wave) < 0.0035) col = vec3(0.2, 0.42, 0.16);
+        vec2 bp = borderPoint(p, 0.06, inset);
+        vec2 q = p - bp;
+        float side = hash(bp) < 0.5 ? 1.0 : -1.0;
+        bool horizontal = abs(bp.y - inset) < 0.001 || abs(bp.y - (1.0 - inset)) < 0.001;
+        vec2 lq = horizontal ? vec2(q.x, q.y - side * 0.018) : vec2(q.x - side * 0.018, q.y);
+        vec2 rad = horizontal ? vec2(0.011, 0.02) : vec2(0.02, 0.011);
+        vec2 e = lq / rad;
+        if (dot(e, e) < 1.0) col = mix(vec3(0.16, 0.45, 0.14), vec3(0.45, 0.75, 0.25), hash(bp + 0.5));
+        gl_FragColor = vec4(col, c.a);
+    """),
+    BALLOONS("Balloons", """
+        vec4 c = tex(vUv);
+        vec2 p = vec2(vUv.x * uAspect, vUv.y);
+        vec2 bp = borderPoint(p, 0.14, 0.07);
+        vec2 q = p - bp;
+        vec3 bcol = palette(hash(bp));
+        vec3 col = c.rgb;
+        if (abs(q.x + 0.004 * sin(q.y * 120.0)) < 0.0018 && q.y < -0.04 && q.y > -0.068) col = vec3(0.95);
+        vec2 knot = (q - vec2(0.0, -0.05)) / 0.006;
+        if (dot(knot, knot) < 1.0) col = bcol * 0.8;
+        vec2 e = q / vec2(0.038, 0.048);
+        if (dot(e, e) < 1.0) {
+            col = bcol;
+            vec2 hl = (q - vec2(-0.012, 0.018)) / vec2(0.008, 0.013);
+            if (dot(hl, hl) < 1.0) col = mix(bcol, vec3(1.0), 0.6);
+        }
+        gl_FragColor = vec4(col, c.a);
+    """),
+    STARS("Stars", """
+        vec4 c = tex(vUv);
+        vec2 p = vec2(vUv.x * uAspect, vUv.y);
+        vec2 bp = borderPoint(p, 0.1, 0.05);
+        vec2 q = p - bp;
+        float r = length(q);
+        float a = atan(q.y, q.x) - 1.5708;
+        float spike = pow(0.5 + 0.5 * cos(5.0 * a), 3.0);
+        float radius = 0.036 * (0.42 + 0.58 * spike);
+        float h = hash(bp);
+        float twinkle = 0.75 + 0.25 * sin(uTime * 6.0 + h * 6.283);
+        vec3 col = c.rgb;
+        if (r < radius) col = mix(vec3(1.0, 0.85, 0.3), vec3(1.0), h < 0.5 ? 0.0 : 0.7) * twinkle;
+        gl_FragColor = vec4(col, c.a);
+    """),
+    CONFETTI("Confetti", """
+        vec4 c = tex(vUv);
+        vec2 p = vec2(vUv.x * uAspect, vUv.y);
+        vec2 cell = floor(p / 0.045);
+        float h1 = rand(cell);
+        float h2 = rand(cell + 17.0);
+        float h3 = rand(cell + 41.0);
+        vec2 center = (cell + vec2(0.2 + 0.6 * h1, 0.2 + 0.6 * h2)) * 0.045;
+        float edgeDist = min(min(center.x, uAspect - center.x), min(center.y, 1.0 - center.y));
+        vec3 col = c.rgb;
+        if (edgeDist < 0.11 && h3 < 0.7) {
+            vec2 q = p - center;
+            float ang = h1 * 6.283 + uTime * 2.0 * (h2 - 0.5);
+            vec2 rq = vec2(cos(ang) * q.x - sin(ang) * q.y, sin(ang) * q.x + cos(ang) * q.y);
+            if (abs(rq.x) < 0.008 && abs(rq.y) < 0.004) col = palette(h3 / 0.7);
         }
         gl_FragColor = vec4(col, c.a);
     """),
@@ -186,19 +263,31 @@ vec3 sepia(vec3 c) {
 }
 float vignette(vec2 uv, float amount) { return 1.0 - smoothstep(0.35, 0.85, distance(uv, vec2(0.5))) * amount; }
 vec4 tex(vec2 uv) { return texture2D(uTexSampler, clamp(uv, 0.0, 1.0)); }
-vec3 borderCenter(vec2 p, float spacing, float inset) {
-    float ix = floor(p.x / spacing);
-    float iy = floor(p.y / spacing);
-    vec2 c = vec2((ix + 0.5) * spacing, inset);
-    float idx = ix;
+float hash(vec2 c) { return rand(floor(c * 1000.0 + 0.5)); }
+vec3 palette(float h) {
+    if (h < 0.25) return vec3(0.95, 0.25, 0.35);
+    if (h < 0.5) return vec3(0.25, 0.6, 0.95);
+    if (h < 0.75) return vec3(1.0, 0.8, 0.2);
+    return vec3(0.6, 0.35, 0.95);
+}
+vec2 borderPoint(vec2 p, float spacing, float inset) {
+    float w = uAspect - 2.0 * inset;
+    float h = 1.0 - 2.0 * inset;
+    float nx = max(1.0, floor(w / spacing + 0.5));
+    float ny = max(1.0, floor(h / spacing + 0.5));
+    float sx = w / nx;
+    float sy = h / ny;
+    float kx = clamp(floor((p.x - inset) / sx + 0.5), 0.0, nx);
+    float ky = clamp(floor((p.y - inset) / sy + 0.5), 0.0, ny);
+    vec2 c = vec2(inset + kx * sx, inset);
     float d = distance(p, c);
-    vec2 c2 = vec2((ix + 0.5) * spacing, 1.0 - inset);
-    if (distance(p, c2) < d) { c = c2; d = distance(p, c2); idx = ix + 1.0; }
-    vec2 c3 = vec2(inset, (iy + 0.5) * spacing);
-    if (distance(p, c3) < d) { c = c3; d = distance(p, c3); idx = iy; }
-    vec2 c4 = vec2(uAspect - inset, (iy + 0.5) * spacing);
-    if (distance(p, c4) < d) { c = c4; d = distance(p, c4); idx = iy + 1.0; }
-    return vec3(c, idx);
+    vec2 c2 = vec2(uAspect - inset, inset + ky * sy);
+    if (distance(p, c2) < d) { c = c2; d = distance(p, c2); }
+    vec2 c3 = vec2(inset + kx * sx, 1.0 - inset);
+    if (distance(p, c3) < d) { c = c3; d = distance(p, c3); }
+    vec2 c4 = vec2(inset, inset + ky * sy);
+    if (distance(p, c4) < d) { c = c4; }
+    return c;
 }
 """
 
@@ -325,22 +414,36 @@ object FilterCpu {
     )
     private fun mix(a: Rgb, b: Rgb, k: Float) = Rgb(a.r + (b.r - a.r) * k, a.g + (b.g - a.g) * k, a.b + (b.b - a.b) * k)
 
-    /** Mirrors the GLSL borderCenter(): nearest decoration centre on the frame's edge, plus its index. */
-    private fun borderCenter(px: Float, py: Float, spacing: Float, inset: Float, aspect: Float): Triple<Float, Float, Float> {
-        val ix = floor(px / spacing)
-        val iy = floor(py / spacing)
-        var cx = (ix + 0.5f) * spacing
+    private fun hash(x: Float, y: Float) = rand(floor(x * 1000f + 0.5f), floor(y * 1000f + 0.5f))
+
+    private fun palette(h: Float): Rgb = when {
+        h < 0.25f -> Rgb(0.95f, 0.25f, 0.35f)
+        h < 0.5f -> Rgb(0.25f, 0.6f, 0.95f)
+        h < 0.75f -> Rgb(1f, 0.8f, 0.2f)
+        else -> Rgb(0.6f, 0.35f, 0.95f)
+    }
+
+    /** Mirrors the GLSL borderPoint(): nearest evenly spaced point on the inset rectangle, corners shared. */
+    private fun borderPoint(px: Float, py: Float, spacing: Float, inset: Float, aspect: Float): Pair<Float, Float> {
+        val w = aspect - 2f * inset
+        val h = 1f - 2f * inset
+        val nx = maxOf(1f, floor(w / spacing + 0.5f))
+        val ny = maxOf(1f, floor(h / spacing + 0.5f))
+        val sx = w / nx
+        val sy = h / ny
+        val kx = floor((px - inset) / sx + 0.5f).coerceIn(0f, nx)
+        val ky = floor((py - inset) / sy + 0.5f).coerceIn(0f, ny)
+        var cx = inset + kx * sx
         var cy = inset
-        var idx = ix
         var d = hypot(px - cx, py - cy)
-        fun consider(x: Float, y: Float, i: Float) {
+        fun consider(x: Float, y: Float) {
             val dd = hypot(px - x, py - y)
-            if (dd < d) { cx = x; cy = y; d = dd; idx = i }
+            if (dd < d) { cx = x; cy = y; d = dd }
         }
-        consider((ix + 0.5f) * spacing, 1f - inset, ix + 1f)
-        consider(inset, (iy + 0.5f) * spacing, iy)
-        consider(aspect - inset, (iy + 0.5f) * spacing, iy + 1f)
-        return Triple(cx, cy, idx)
+        consider(aspect - inset, inset + ky * sy)
+        consider(inset + kx * sx, 1f - inset)
+        consider(inset, inset + ky * sy)
+        return cx to cy
     }
 
     private fun shade(f: VideoFilter, u: Float, v: Float, aspect: Float, input: IntArray, w: Int, h: Int): Int {
@@ -410,7 +513,7 @@ object FilterCpu {
             VideoFilter.MIRROR -> tex(if (u < 0.5f) u else 1f - u, v)
             VideoFilter.FLOWERS -> {
                 val px = u * aspect
-                val (bx, by, idx) = borderCenter(px, v, 0.11f, 0.055f, aspect)
+                val (bx, by) = borderPoint(px, v, 0.11f, 0.055f, aspect)
                 val dx = px - bx
                 val dy = v - by
                 val r = hypot(dx, dy)
@@ -418,19 +521,19 @@ object FilterCpu {
                 val petal = 0.05f * (0.45f + 0.55f * (0.5f + 0.5f * cos(5f * a)))
                 when {
                     r < 0.014f -> Rgb(1f, 0.82f, 0.25f)
-                    r < petal -> if (idx.mod(2f) < 1f) Rgb(1f, 0.55f, 0.75f) else Rgb(1f, 0.95f, 0.97f)
+                    r < petal -> if (hash(bx, by) < 0.5f) Rgb(1f, 0.55f, 0.75f) else Rgb(1f, 0.95f, 0.97f)
                     else -> tex(u, v)
                 }
             }
             VideoFilter.HEARTS -> {
                 val px = u * aspect
-                val (bx, by, idx) = borderCenter(px, v, 0.1f, 0.05f, aspect)
+                val (bx, by) = borderPoint(px, v, 0.1f, 0.05f, aspect)
                 val qx = (px - bx) / 0.035f
                 val qy = (v - by) / 0.035f
                 val k = qx * qx + qy * qy - 1f
                 val hh = k * k * k - qx * qx * qy * qy * qy
                 if (hh <= 0f) {
-                    if (idx.mod(2f) < 1f) Rgb(0.95f, 0.15f, 0.35f) else Rgb(1f, 0.45f, 0.6f)
+                    if (hash(bx, by) < 0.5f) Rgb(0.95f, 0.15f, 0.35f) else Rgb(1f, 0.45f, 0.6f)
                 } else {
                     tex(u, v)
                 }
@@ -447,6 +550,90 @@ object FilterCpu {
                     val s = tex(u, v)
                     mix(s, sepia(s), 0.35f)
                 }
+            }
+            VideoFilter.IVY -> {
+                val px = u * aspect
+                val inset = 0.045f
+                var col = tex(u, v)
+                val relX = abs(px - aspect * 0.5f) - (aspect * 0.5f - inset)
+                val relY = abs(v - 0.5f) - (0.5f - inset)
+                val sd = maxOf(relX, relY)
+                val wave = 0.006f * sin((px + v) * 70f)
+                if (abs(sd - wave) < 0.0035f) col = Rgb(0.2f, 0.42f, 0.16f)
+                val (bx, by) = borderPoint(px, v, 0.06f, inset, aspect)
+                val qx = px - bx
+                val qy = v - by
+                val side = if (hash(bx, by) < 0.5f) 1f else -1f
+                val horizontal = abs(by - inset) < 0.001f || abs(by - (1f - inset)) < 0.001f
+                val lx = if (horizontal) qx else qx - side * 0.018f
+                val ly = if (horizontal) qy - side * 0.018f else qy
+                val rx = if (horizontal) 0.011f else 0.02f
+                val ry = if (horizontal) 0.02f else 0.011f
+                if ((lx / rx) * (lx / rx) + (ly / ry) * (ly / ry) < 1f) {
+                    col = mix(Rgb(0.16f, 0.45f, 0.14f), Rgb(0.45f, 0.75f, 0.25f), hash(bx + 0.5f, by + 0.5f))
+                }
+                col
+            }
+            VideoFilter.BALLOONS -> {
+                val px = u * aspect
+                val (bx, by) = borderPoint(px, v, 0.14f, 0.07f, aspect)
+                val qx = px - bx
+                val qy = v - by
+                val bcol = palette(hash(bx, by))
+                var col = tex(u, v)
+                if (abs(qx + 0.004f * sin(qy * 120f)) < 0.0018f && qy < -0.04f && qy > -0.068f) col = Rgb(0.95f, 0.95f, 0.95f)
+                val kx = qx / 0.006f
+                val ky = (qy + 0.05f) / 0.006f
+                if (kx * kx + ky * ky < 1f) col = Rgb(bcol.r * 0.8f, bcol.g * 0.8f, bcol.b * 0.8f)
+                val ex = qx / 0.038f
+                val ey = qy / 0.048f
+                if (ex * ex + ey * ey < 1f) {
+                    col = bcol
+                    val hx = (qx + 0.012f) / 0.008f
+                    val hy = (qy - 0.018f) / 0.013f
+                    if (hx * hx + hy * hy < 1f) col = mix(bcol, Rgb(1f, 1f, 1f), 0.6f)
+                }
+                col
+            }
+            VideoFilter.STARS -> {
+                val px = u * aspect
+                val (bx, by) = borderPoint(px, v, 0.1f, 0.05f, aspect)
+                val qx = px - bx
+                val qy = v - by
+                val r = hypot(qx, qy)
+                val a = atan2(qy, qx) - 1.5708f
+                val base = 0.5f + 0.5f * cos(5f * a)
+                val spike = base * base * base
+                val radius = 0.036f * (0.42f + 0.58f * spike)
+                val h = hash(bx, by)
+                val twinkle = 0.75f + 0.25f * sin(T * 6f + h * 6.283f)
+                if (r < radius) {
+                    val s = mix(Rgb(1f, 0.85f, 0.3f), Rgb(1f, 1f, 1f), if (h < 0.5f) 0f else 0.7f)
+                    Rgb(s.r * twinkle, s.g * twinkle, s.b * twinkle)
+                } else {
+                    tex(u, v)
+                }
+            }
+            VideoFilter.CONFETTI -> {
+                val px = u * aspect
+                val cx = floor(px / 0.045f)
+                val cy = floor(v / 0.045f)
+                val h1 = rand(cx, cy)
+                val h2 = rand(cx + 17f, cy + 17f)
+                val h3 = rand(cx + 41f, cy + 41f)
+                val centerX = (cx + 0.2f + 0.6f * h1) * 0.045f
+                val centerY = (cy + 0.2f + 0.6f * h2) * 0.045f
+                val edgeDist = min(min(centerX, aspect - centerX), min(centerY, 1f - centerY))
+                var col = tex(u, v)
+                if (edgeDist < 0.11f && h3 < 0.7f) {
+                    val qx = px - centerX
+                    val qy = v - centerY
+                    val ang = h1 * 6.283f + T * 2f * (h2 - 0.5f)
+                    val rx = cos(ang) * qx - sin(ang) * qy
+                    val ry = sin(ang) * qx + cos(ang) * qy
+                    if (abs(rx) < 0.008f && abs(ry) < 0.004f) col = palette(h3 / 0.7f)
+                }
+                col
             }
         }
         fun ch(x: Float) = (x.coerceIn(0f, 1f) * 255f + 0.5f).toInt()

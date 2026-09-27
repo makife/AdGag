@@ -219,9 +219,15 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
         children: <Widget>[
           GestureDetector(
             onTap: _togglePlayPause,
+            // contain, not cover: a 9:16 Ad on a taller (~9:20) phone used to
+            // be cropped ~12% off each side, cutting off anything placed near
+            // the edges — e.g. the editor's border effects, reported as
+            // "the frame overflows the screen" after export. The viewer now
+            // sees exactly what the creator made (thin bars top/bottom on
+            // tall phones, like Reels).
             child: showVideo
                 ? FittedBox(
-                    fit: BoxFit.cover,
+                    fit: BoxFit.contain,
                     child: SizedBox(
                       width: controller.value.size.width,
                       height: controller.value.size.height,
@@ -231,7 +237,7 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
                 : widget.ad.thumbnailUrl != null
                     ? CachedNetworkImage(
                         imageUrl: widget.ad.thumbnailUrl!,
-                        fit: BoxFit.cover,
+                        fit: BoxFit.contain,
                         errorWidget: (context, url, error) => const SizedBox.shrink(),
                       )
                     : const Center(child: CircularProgressIndicator()),
