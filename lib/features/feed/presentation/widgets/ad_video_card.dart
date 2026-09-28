@@ -62,7 +62,7 @@ const double _scrubberLift = 6;
 
 const Duration _panelAnimation = Duration(milliseconds: 260);
 
-class _AdVideoCardState extends ConsumerState<AdVideoCard> {
+class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingObserver {
   VideoPlayerController? _controller;
   bool _reviewsEverOpened = false;
   Timer? _twoSecondTimer;
@@ -74,6 +74,7 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     ref.read(analyticsServiceProvider).track(widget.ad.id, AdEventType.impression);
     _attach();
   }
@@ -181,8 +182,17 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
     _wasNearEnd = isNearEnd;
   }
 
+  /// The keyboard opening/closing: the reviews panel lays itself out around it.
+  @override
+  void didChangeMetrics() {
+    if (mounted && ref.read(openReviewsAdIdProvider) == widget.ad.id) {
+      setState(() {});
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _twoSecondTimer?.cancel();
     _controller?.removeListener(_onControllerTick);
     super.dispose();
@@ -260,12 +270,18 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> {
         child: LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final double height = constraints.maxHeight;
-            final double openVideoHeight = height * 0.36;
-            // The bottom-nav bar sits over the bottom of this card (extendBody)
-            // — except while the keyboard is up, when it's behind the keyboard.
-            // The keyboard is read from the raw window insets: the Scaffolds
-            // above remove it from MediaQuery once they've resized for it.
+            // The home tab does NOT resize for the keyboard (AppShell /
+            // FeedScreen): the card keeps its full height and the reviews
+            // panel makes room itself. Resizing the whole pager under an open
+            // panel is what made it jump up and vanish (user report). The
+            // keyboard is read from the window insets (didChangeMetrics
+            // rebuilds this card while its panel is open).
             final bool keyboardUp = MediaQueryData.fromView(View.of(context)).viewInsets.bottom > 0;
+            // Smaller video while typing, so the reviews stay readable.
+            final double openVideoHeight = height * (keyboardUp ? 0.2 : 0.36);
+            // The bottom-nav bar sits over the bottom of this card (extendBody)
+            // — except while the keyboard is up, when it's behind the keyboard
+            // and the panel reaches the screen bottom (it pads for the keyboard).
             final double navClearance = keyboardUp ? 0 : _navBarClearance(context);
             final double panelTop = statusBar + openVideoHeight;
             final double panelHeight = (height - panelTop - navClearance).clamp(0, height);

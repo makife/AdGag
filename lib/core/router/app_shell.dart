@@ -102,6 +102,9 @@ class AppShell extends ConsumerWidget {
 
     return Scaffold(
       extendBody: true,
+      // The home feed lays itself out around the keyboard (reviews panel);
+      // resizing the whole pager made the open panel jump away.
+      resizeToAvoidBottomInset: navigationShell.currentIndex != 0,
       body: navigationShell,
       bottomNavigationBar: onTrimStep
           ? null

@@ -1,8 +1,5 @@
 package com.adgag.adgag.editor
 
-import androidx.media3.common.C
-import androidx.media3.common.audio.SpeedProvider
-import androidx.media3.common.util.UnstableApi
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -112,32 +109,6 @@ class SpeedMap(ranges: List<SpeedRange>) {
     /** Lowest speed anywhere in [fromMs, toMs) — 1 if no range overlaps. */
     fun minSpeedIn(fromMs: Long, toMs: Long): Float =
         ranges.filter { it.startMs < toMs && it.endMs > fromMs }.minOfOrNull { it.speed }?.coerceAtMost(1f) ?: 1f
-}
-
-/**
- * EXPORT speed for one clip: the part of [map] between that clip's GLOBAL
- * [clipStartMs] and [clipEndMs]. Media3 calls this with time measured from
- * the start of the clip's KEPT part (verified in the media3-transformer
- * 1.11.0 sources: SpeedChangingMediaSource subtracts the clipping start
- * before asking the provider, and SpeedChangingAudioProcessor counts
- * samples from the item's own start), so a clip-local time t is GLOBAL
- * clipStart + t. Video timestamps and audio (tape-style, pitch drops) are
- * both re-timed from this one provider.
- */
-@UnstableApi
-class RangeSpeedProvider(
-    private val map: SpeedMap,
-    private val clipStartMs: Long,
-    private val clipEndMs: Long,
-) : SpeedProvider {
-    override fun getSpeed(timeUs: Long): Float = map.speedAt(clipStartMs + timeUs.coerceAtLeast(0L) / 1000)
-
-    override fun getNextSpeedChangeTimeUs(timeUs: Long): Long {
-        val next = map.nextBoundaryAfter(clipStartMs + timeUs.coerceAtLeast(0L) / 1000) ?: return C.TIME_UNSET
-        if (next >= clipEndMs) return C.TIME_UNSET
-        // Strictly after timeUs, as the interface requires.
-        return maxOf((next - clipStartMs) * 1000, timeUs + 1)
-    }
 }
 
 /**

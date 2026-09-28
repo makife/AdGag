@@ -32,6 +32,8 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
@@ -286,7 +288,12 @@ fun EditorScreen(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(topStart = AdGagRadius.lg.dp, topEnd = AdGagRadius.lg.dp))
                     .background(AdGagColors.SurfaceElevated)
-                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    // The keyboard too: targetSdk 36 makes the window edge-to-edge
+                    // on Android 15+, where adjustResize no longer shrinks it —
+                    // the keyboard covered this panel (user report). With the
+                    // ime inset here the panel sits on the keyboard and the
+                    // video (weight 1f) shrinks upward instead.
+                    .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
                     .animateContentSize(tween(260)),
             ) {
                 PanelHandle(

@@ -1192,55 +1192,75 @@ class EditorViewModel(
     private fun buildComposition(reducedSize: Boolean = false): Composition {
         val map = speedMap
         val targetSize = if (clips.size > 1) exportFrameSize() else null
-        val items = clips.mapIndexed { i, clip ->
-            val mediaItem = MediaItem.Builder()
-                .setUri(Uri.fromFile(File(clip.path)))
-                .setClippingConfiguration(
-                    MediaItem.ClippingConfiguration.Builder()
-                        .setStartPositionMs(clip.trimStartMs)
-                        .setEndPositionMs(clip.trimEndMs)
-                        .build(),
-                )
-                .build()
-            val videoEffects = mutableListOf<Effect>()
-            if (rotationDegrees != 0) {
-                videoEffects += ScaleAndRotateTransformation.Builder().setRotationDegrees(rotationDegrees.toFloat()).build()
-            }
-            // Clips can differ in size/orientation (front vs back camera);
-            // normalize every clip to the first one's frame so the
-            // encoder sees one resolution. Only needed with 2+ clips.
-            if (targetSize != null) {
-                videoEffects += Presentation.createForWidthAndHeight(
-                    targetSize.first,
-                    targetSize.second,
-                    Presentation.LAYOUT_SCALE_TO_FIT,
-                )
-            }
-            // The look effect goes BEFORE the transitions, matching the
-            // preview (where the filter is applied inside the player and the
-            // transition is a Compose transform of the result).
-            if (videoFilter != VideoFilter.NONE) videoEffects += FilterEffect(videoFilter)
-            if (reducedSize) videoEffects += Presentation.createForShortSide(720)
-            // Transition timing is OUTPUT time: with setSpeed, Transformer
-            // re-times samples at the source (SpeedChangingMediaSource), so
-            // effects already see slowed-down timestamps.
+        // Each clip becomes one or more items: it's cut at every speed-range
+        // edge, and every piece plays at ONE constant speed. A speed provider
+        // that changes speed mid-item made the export fail with
+        // ERROR_CODE_MUXING_TIMEOUT (user report): the muxer only writes a
+        // track while it's within 500ms of the other one, and the re-timed
+        // audio and video drifted apart until both waited forever. With a
+        // constant speed per item there's nothing to drift.
+        val items = clips.flatMapIndexed { i, clip ->
             val clipStart = clipStartMs(i)
             val clipEnd = clipStart + clip.keptDurationMs
-            videoEffects += clipTransitionEffects(
-                entry = transitions.getOrNull(i - 1),
-                exit = transitions.getOrNull(i),
-                keptMs = map.toOutput(clipEnd) - map.toOutput(clipStart),
-            )
-            val slowed = speedRanges.any { it.startMs < clipEnd && it.endMs > clipStart }
-            EditedMediaItem.Builder(mediaItem)
-                .setDurationUs(clip.sourceDurationMs * 1000)
-                .apply { if (slowed) setSpeed(RangeSpeedProvider(map, clipStart, clipEnd)) }
-                .apply {
-                    if (videoEffects.isNotEmpty()) {
-                        setEffects(Effects(ImmutableList.of<AudioProcessor>(), ImmutableList.copyOf(videoEffects)))
-                    }
+            // Cuts closer than 100ms to a clip edge or to each other are
+            // dropped — a sliver of an item only adds a hiccup.
+            val cuts = mutableListOf(clipStart)
+            map.boundariesIn(clipStart, clipEnd).forEach { c ->
+                if (c - cuts.last() >= 100 && clipEnd - c >= 100) cuts += c
+            }
+            cuts += clipEnd
+            val pieceCount = cuts.size - 1
+            (0 until pieceCount).map { k ->
+                val a = cuts[k]
+                val b = cuts[k + 1]
+                val speed = map.speedAt(a + (b - a) / 2)
+                val mediaItem = MediaItem.Builder()
+                    .setUri(Uri.fromFile(File(clip.path)))
+                    .setClippingConfiguration(
+                        MediaItem.ClippingConfiguration.Builder()
+                            .setStartPositionMs(clip.trimStartMs + (a - clipStart))
+                            .setEndPositionMs(clip.trimStartMs + (b - clipStart))
+                            .build(),
+                    )
+                    .build()
+                val videoEffects = mutableListOf<Effect>()
+                if (rotationDegrees != 0) {
+                    videoEffects += ScaleAndRotateTransformation.Builder().setRotationDegrees(rotationDegrees.toFloat()).build()
                 }
-                .build()
+                // Clips can differ in size/orientation (front vs back camera);
+                // normalize every clip to the first one's frame so the
+                // encoder sees one resolution. Only needed with 2+ clips.
+                if (targetSize != null) {
+                    videoEffects += Presentation.createForWidthAndHeight(
+                        targetSize.first,
+                        targetSize.second,
+                        Presentation.LAYOUT_SCALE_TO_FIT,
+                    )
+                }
+                // The look effect goes BEFORE the transitions, matching the
+                // preview (where the filter is applied inside the player and the
+                // transition is a Compose transform of the result).
+                if (videoFilter != VideoFilter.NONE) videoEffects += FilterEffect(videoFilter)
+                if (reducedSize) videoEffects += Presentation.createForShortSide(720)
+                // Transitions belong to the clip's first piece (entrance) and
+                // last piece (exit), timed in OUTPUT time: with setSpeed,
+                // Transformer re-times samples at the source, so effects
+                // already see slowed-down timestamps.
+                videoEffects += clipTransitionEffects(
+                    entry = if (k == 0) transitions.getOrNull(i - 1) else null,
+                    exit = if (k == pieceCount - 1) transitions.getOrNull(i) else null,
+                    keptMs = map.toOutput(b) - map.toOutput(a),
+                )
+                EditedMediaItem.Builder(mediaItem)
+                    .setDurationUs(clip.sourceDurationMs * 1000)
+                    .apply { if (speed != 1f) setSpeed(ConstantSpeedProvider(speed)) }
+                    .apply {
+                        if (videoEffects.isNotEmpty()) {
+                            setEffects(Effects(ImmutableList.of<AudioProcessor>(), ImmutableList.copyOf(videoEffects)))
+                        }
+                    }
+                    .build()
+            }
         }
         val hasAudio = !isMuted && clips.all { sourceHasAudioTrack(it.path) }
         val videoSequence = if (hasAudio) {
@@ -1380,7 +1400,12 @@ class EditorViewModel(
                 override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
                     DebugLog.log(context, "export: error reducedSize=$reducedSize ${exportException.errorCodeName}")
                     Log.e("EditorViewModel", "Export failed (reducedSize=$reducedSize)", exportException)
-                    if (!reducedSize) {
+                    // One automatic retry at 720p — but only for codec failures,
+                    // which a smaller frame can actually fix. Anything else (e.g.
+                    // a muxing timeout) would just fail a second time, making
+                    // the user sit through two exports (user report).
+                    val codecFailure = exportException.errorCode in ExportException.ERROR_CODE_DECODER_INIT_FAILED..ExportException.ERROR_CODE_ENCODING_FORMAT_UNSUPPORTED
+                    if (!reducedSize && codecFailure) {
                         // One automatic retry at 720p before bothering the user.
                         exportProgress = 0f
                         startTransformer(outputPath, reducedSize = true, resumeAt = resumeAt, onComplete = onComplete)

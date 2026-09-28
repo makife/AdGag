@@ -53,6 +53,8 @@ class _ReviewsPanelState extends ConsumerState<ReviewsPanel> {
     try {
       await ref.read(commentsControllerProvider(widget.adId).notifier).post(body);
       _input.clear();
+      // Posted: put the keyboard away (it used to stay up).
+      FocusManager.instance.primaryFocus?.unfocus();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Couldn't post: $e")));
@@ -69,93 +71,106 @@ class _ReviewsPanelState extends ConsumerState<ReviewsPanel> {
     final AsyncValue<CommentsState> commentsAsync = ref.watch(commentsControllerProvider(widget.adId));
     final String? currentUserId = ref.watch(currentUserIdProvider);
 
+    // While typing, the panel reaches the screen bottom (see AdVideoCard);
+    // this keeps the input row just above the keyboard.
+    final double keyboard = MediaQueryData.fromView(View.of(context)).viewInsets.bottom;
+
     return Material(
       color: Theme.of(context).scaffoldBackgroundColor,
       borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              const SizedBox(width: 48),
-              const Expanded(
-                child: Center(
-                  child: Text("REVIEWS", style: TextStyle(fontWeight: FontWeight.w700)),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                tooltip: "Close reviews",
-                onPressed: widget.onClose,
-              ),
-            ],
-          ),
-          Expanded(
-            child: commentsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (Object error, StackTrace stackTrace) => Center(child: Text("$error")),
-              data: (CommentsState state) {
-                if (state.comments.isEmpty) {
-                  return const Center(child: Text("No reviews yet."));
-                }
-                return ListView.builder(
-                  controller: _scroll,
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                  itemCount: state.comments.length + (state.isLoadingMore ? 1 : 0),
-                  itemBuilder: (BuildContext context, int index) {
-                    if (index >= state.comments.length) {
-                      return const Padding(
-                        padding: EdgeInsets.all(AppSpacing.md),
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-                    final Comment comment = state.comments[index];
-                    final bool isOwn = comment.userId == currentUserId;
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: MiniAvatar(avatarUrl: comment.avatarUrl, username: comment.username, size: 32),
-                      title: Text("@${comment.username ?? 'unknown'}"),
-                      subtitle: Text(comment.body),
-                      trailing: isOwn
-                          ? IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 18),
-                              onPressed: () => unawaited(
-                                ref.read(commentsControllerProvider(widget.adId).notifier).deleteOwn(comment.id),
-                              ),
-                            )
-                          : null,
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: Row(
+      child: Padding(
+        padding: EdgeInsets.only(bottom: keyboard),
+        child: Column(
+          children: <Widget>[
+            Row(
               children: <Widget>[
-                Expanded(
-                  child: TextField(
-                    controller: _input,
-                    maxLength: 500,
-                    decoration: const InputDecoration(hintText: "Add a review…", counterText: ""),
-                    onSubmitted: (_) => _post(),
+                const SizedBox(width: 48),
+                const Expanded(
+                  child: Center(
+                    child: Text("REVIEWS", style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ),
                 IconButton(
-                  icon: _posting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send),
-                  onPressed: _posting ? null : _post,
+                  icon: const Icon(Icons.close),
+                  tooltip: "Close reviews",
+                  onPressed: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    widget.onClose();
+                  },
                 ),
               ],
             ),
-          ),
-        ],
+            Expanded(
+              child: commentsAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (Object error, StackTrace stackTrace) => Center(child: Text("$error")),
+                data: (CommentsState state) {
+                  if (state.comments.isEmpty) {
+                    return const Center(child: Text("No reviews yet."));
+                  }
+                  return ListView.builder(
+                    controller: _scroll,
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                    itemCount: state.comments.length + (state.isLoadingMore ? 1 : 0),
+                    itemBuilder: (BuildContext context, int index) {
+                      if (index >= state.comments.length) {
+                        return const Padding(
+                          padding: EdgeInsets.all(AppSpacing.md),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      final Comment comment = state.comments[index];
+                      final bool isOwn = comment.userId == currentUserId;
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: MiniAvatar(avatarUrl: comment.avatarUrl, username: comment.username, size: 32),
+                        title: Text("@${comment.username ?? 'unknown'}"),
+                        subtitle: Text(comment.body),
+                        trailing: isOwn
+                            ? IconButton(
+                                icon: const Icon(Icons.delete_outline, size: 18),
+                                onPressed: () => unawaited(
+                                  ref.read(commentsControllerProvider(widget.adId).notifier).deleteOwn(comment.id),
+                                ),
+                              )
+                            : null,
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextField(
+                      controller: _input,
+                      maxLength: 500,
+                      decoration: const InputDecoration(hintText: "Add a review…", counterText: ""),
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _post(),
+                      // Tapping the video or the list closes the keyboard.
+                      onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+                    ),
+                  ),
+                  IconButton(
+                    icon: _posting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send),
+                    onPressed: _posting ? null : _post,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
