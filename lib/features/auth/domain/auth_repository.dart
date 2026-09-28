@@ -28,6 +28,10 @@ abstract interface class AuthRepository {
 
   Future<void> signOut();
 
+  /// Settings > Account > Password. Sets a password on the signed-in
+  /// account (for an OAuth-only account this adds email+password sign-in).
+  Future<void> changePassword(String newPassword);
+
   /// True if [username] is available. Server-validated at insert time too
   /// (unique constraint) — this is a UX convenience, not the source of
   /// truth (section 24: "Do not trust client-side validation alone").

@@ -125,7 +125,7 @@ fun TextOverlayLayer(
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val w = size.width.toFloat()
                         val h = size.height.toFloat()
-                        val tMs = (viewModel.globalPositionMs() / viewModel.videoSpeed).toLong()
+                        val tMs = viewModel.toOutputMs(viewModel.globalPositionMs())
                         fun shown(id: String, start: Long, end: Long) =
                             (tMs >= start && tMs < end) || (id == viewModel.selectedTextId && !viewModel.isPlaying)
                         // Captions are drawn over stickers, so they win the touch.
@@ -205,7 +205,7 @@ private fun DrawScope.drawCaptions(viewModel: EditorViewModel, globalMs: Long) {
     val layers = viewModel.textLayers
     val stickers = viewModel.stickerLayers
     if (layers.isEmpty() && stickers.isEmpty()) return
-    val tMs = (globalMs / viewModel.videoSpeed).toLong()
+    val tMs = viewModel.toOutputMs(globalMs)
     val w = size.width
     val h = size.height
     val selected = viewModel.selectedTextId

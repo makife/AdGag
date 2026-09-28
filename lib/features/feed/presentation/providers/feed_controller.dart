@@ -55,9 +55,12 @@ final class FeedController extends AsyncNotifier<FeedState> {
     }
   }
 
+  /// Pull-to-refresh: fetches the first page again and swaps it in. The
+  /// current Ads stay on screen while it loads, and on a failure (the error
+  /// is rethrown for the caller to show) — never a full-screen spinner.
   Future<void> refresh() async {
-    ref.invalidateSelf();
-    await future;
+    final page = await ref.read(feedRepositoryProvider).fetchPage();
+    state = AsyncData<FeedState>(FeedState(ads: page.ads, nextCursor: page.nextCursor, isLoadingMore: false));
   }
 }
 

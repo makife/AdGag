@@ -83,6 +83,8 @@ fun EditorTimeline(
     onOpenMusic: () -> Unit,
     onAddText: () -> Unit = {},
     onEditText: (String) -> Unit = {},
+    onAddSpeedRange: () -> Unit = {},
+    onEditSpeedRange: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -93,7 +95,7 @@ fun EditorTimeline(
             Text(text = "Clips", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
             Text(
                 // OUTPUT length — what the 30s cap applies to (differs from the strip under slow motion).
-                text = (if (viewModel.videoSpeed != 1f) "${formatSpeed(viewModel.videoSpeed)} · " else "") +
+                text = (if (viewModel.speedRanges.isNotEmpty()) "slow-mo · " else "") +
                     "${formatSeconds(viewModel.outputDurationMs)} / ${formatSeconds(MaxTotalDurationMs)}",
                 color = AdGagColors.OnSurfaceMuted,
                 style = MaterialTheme.typography.labelMedium,
@@ -139,6 +141,31 @@ fun EditorTimeline(
             TrimRow(viewModel, selected, clip, density, positionMs)
         }
 
+        if (viewModel.speedRanges.isNotEmpty()) {
+            val selRange = viewModel.speedRanges.firstOrNull { it.id == viewModel.selectedSpeedRangeId }
+            Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    text = if (selRange != null) "Slow motion · ${formatSpeed(selRange.speed)}" else "Slow motion · tap one to select",
+                    color = AdGagColors.OnSurfaceMuted,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                if (selRange != null) {
+                    Text(
+                        text = "${formatPreciseSeconds(selRange.startMs)} – ${formatPreciseSeconds(selRange.endMs)}",
+                        color = AdGagColors.OnSurfaceMuted,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
+            // Same layout (and SOURCE time scale) as the clip strip, so a
+            // range sits right under the footage it slows down.
+            AlignedRow(trailing = { AddRowItemButton(contentDescription = "Add slow motion", onClick = onAddSpeedRange) }) {
+                SpeedRow(viewModel, density, positionMs, onEditSpeedRange)
+            }
+        }
+
         if (viewModel.textLayers.isNotEmpty() || viewModel.stickerLayers.isNotEmpty()) {
             val sel = overlayBars(viewModel).firstOrNull { it.id == viewModel.selectedTextId }
             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
@@ -158,7 +185,9 @@ fun EditorTimeline(
                 }
             }
             Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
-            AlignedRow(trailing = { AddTextButton(onClick = onAddText) }) { TextRow(viewModel, density, onEditText) }
+            AlignedRow(trailing = { AddRowItemButton(contentDescription = "Add text", onClick = onAddText) }) {
+                TextRow(viewModel, density, onEditText)
+            }
         }
 
         if (viewModel.musicPath != null && viewModel.musicDurationMs != null) {
@@ -298,7 +327,7 @@ private fun SongRow(viewModel: EditorViewModel, density: Density, globalPosition
         )
 
         // Where in the SONG the preview is right now (only while the music plays).
-        val outMs = (globalPositionMs / viewModel.videoSpeed).toLong() - viewModel.musicStartOffsetMs
+        val outMs = viewModel.toOutputMs(globalPositionMs) - viewModel.musicStartOffsetMs
         if (viewModel.musicPlayDurationMs > 0 && outMs in 0 until viewModel.musicCoveredMs) {
             val songPos = viewModel.musicSourceStartMs + outMs % viewModel.musicPlayDurationMs
             Box(
@@ -512,7 +541,7 @@ private fun TrimRow(viewModel: EditorViewModel, index: Int, clip: EditorClip, de
         var localStart by remember(index, clip.trimStartMs) { mutableLongStateOf(clip.trimStartMs) }
         var localEnd by remember(index, clip.trimEndMs) { mutableLongStateOf(clip.trimEndMs) }
         // How long this clip may be, given the other clips and the 30s cap.
-        val maxKeptMs = (viewModel.sourceBudgetMs - (viewModel.totalDurationMs - clip.keptDurationMs)).coerceAtLeast(MinTrimGapMs)
+        val maxKeptMs = viewModel.maxKeptMsFor(index).coerceAtLeast(MinTrimGapMs)
 
         ThumbnailFill(viewModel.thumbnails[clip.path].orEmpty().map { it.second })
 
@@ -763,7 +792,7 @@ private fun formatSeconds(ms: Long): String {
 private const val TextRowHeightDp = 30
 
 @Composable
-private fun AddTextButton(onClick: () -> Unit) {
+private fun AddRowItemButton(contentDescription: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(width = AddButtonSizeDp.dp, height = TextRowHeightDp.dp)
@@ -772,7 +801,7 @@ private fun AddTextButton(onClick: () -> Unit) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(imageVector = Icons.Filled.Add, contentDescription = "Add text", tint = AdGagColors.OnBackground, modifier = Modifier.size(18.dp))
+        Icon(imageVector = Icons.Filled.Add, contentDescription = contentDescription, tint = AdGagColors.OnBackground, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -825,7 +854,7 @@ private fun RowScope.TextRow(viewModel: EditorViewModel, density: Density, onEdi
                     .border(BorderStroke(1.dp, AdGagColors.Border), RoundedCornerShape(AdGagRadius.sm.dp))
                     .clickable {
                         viewModel.selectedTextId = layer.id
-                        viewModel.seekToGlobal((layer.startMs * viewModel.videoSpeed).toLong())
+                        viewModel.seekToGlobal(viewModel.toSourceMs(layer.startMs))
                     },
             )
         }
@@ -890,6 +919,129 @@ private fun RowScope.TextRow(viewModel: EditorViewModel, density: Density, onEdi
                 localEnd = (localEnd + pxDeltaToMsDelta(deltaPx)).coerceIn(localStart + 300L, total)
             },
             onDragEnd = { commit() },
+        )
+    }
+}
+
+private const val SpeedRowHeightDp = 30
+
+/**
+ * Slow-motion ranges on the SOURCE timeline (the clip strip's scale). Tap
+ * a range to select it (and jump there), tap the selected one for its
+ * settings. The selected range has two handles (start / end) and can be
+ * dragged by its body. Drags only move local state, clamped live to the
+ * neighbouring ranges and the 30s cap; the range is committed once, on
+ * release (that rebuilds the preview).
+ */
+@UnstableApi
+@Composable
+private fun RowScope.SpeedRow(
+    viewModel: EditorViewModel,
+    density: Density,
+    globalPositionMs: Long,
+    onEditSpeedRange: (String) -> Unit,
+) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .weight(1f)
+            .height(SpeedRowHeightDp.dp)
+            .clip(RoundedCornerShape(AdGagRadius.sm.dp))
+            .background(AdGagColors.Surface),
+    ) {
+        val widthPx = with(density) { maxWidth.toPx() }
+        val total = viewModel.totalDurationMs.coerceAtLeast(1L)
+        fun msToPx(ms: Long): Float = ms.toFloat() / total * widthPx
+        fun pxDeltaToMsDelta(deltaPx: Float): Long = (deltaPx / widthPx * total).toLong()
+        val selectedId = viewModel.selectedSpeedRangeId
+
+        viewModel.speedRanges.filter { it.id != selectedId }.forEach { range ->
+            val left = msToPx(range.startMs)
+            val right = msToPx(range.endMs).coerceAtLeast(left + 4f)
+            Box(
+                modifier = Modifier
+                    .offset(x = with(density) { left.toDp() })
+                    .width(with(density) { (right - left).toDp() })
+                    .fillMaxHeight()
+                    .padding(vertical = 5.dp)
+                    .clip(RoundedCornerShape(AdGagRadius.sm.dp))
+                    .background(AdGagColors.GradientPurple.copy(alpha = 0.45f))
+                    .clickable {
+                        viewModel.selectedSpeedRangeId = range.id
+                        viewModel.seekToGlobal(range.startMs)
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = formatSpeed(range.speed), color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            }
+        }
+
+        // Playhead (read-only), on the same SOURCE scale as the clip strip.
+        Box(
+            modifier = Modifier
+                .offset(x = with(density) { msToPx(globalPositionMs.coerceIn(0L, total)).toDp() } - 1.dp)
+                .width(2.dp)
+                .fillMaxHeight()
+                .background(Color.White.copy(alpha = 0.6f)),
+        )
+
+        val sel = viewModel.speedRanges.firstOrNull { it.id == selectedId } ?: return@BoxWithConstraints
+        var localStart by remember(sel.id, sel.startMs) { mutableLongStateOf(sel.startMs) }
+        var localEnd by remember(sel.id, sel.endMs) { mutableLongStateOf(sel.endMs) }
+        val limits = viewModel.speedRangeLimits(sel.id)
+        val lower = limits.first
+        val upper = limits.second
+        val maxLen = viewModel.maxRangeLengthMs(sel.id, sel.speed)
+        val commitStart by rememberUpdatedState({ viewModel.setSpeedRangeBounds(sel.id, localStart, localEnd, movedStart = true) })
+        val commitEnd by rememberUpdatedState({ viewModel.setSpeedRangeBounds(sel.id, localStart, localEnd, movedStart = false) })
+        val startPx = msToPx(localStart)
+        val endPx = msToPx(localEnd).coerceAtLeast(startPx + 4f)
+        Box(
+            modifier = Modifier
+                .offset(x = with(density) { startPx.toDp() })
+                .width(with(density) { (endPx - startPx).toDp() })
+                .fillMaxHeight()
+                .padding(vertical = 3.dp)
+                .clip(RoundedCornerShape(AdGagRadius.sm.dp))
+                .background(AdGagColors.GradientPurple.copy(alpha = 0.7f))
+                .border(BorderStroke(2.dp, AdGagColors.GradientPink), RoundedCornerShape(AdGagRadius.sm.dp))
+                .pointerInput(sel.id) { detectTapGestures { onEditSpeedRange(sel.id) } }
+                // Keyed on the committed range too: localStart/localEnd are
+                // NEW state objects after every commit (the TextRow lesson).
+                .pointerInput(sel.id, sel.startMs, sel.endMs, total, lower, upper) {
+                    detectDragGestures(
+                        onDragEnd = { commitStart() },
+                        onDrag = { change, drag ->
+                            change.consume()
+                            val len = localEnd - localStart
+                            val newStart = (localStart + pxDeltaToMsDelta(drag.x)).coerceIn(lower, (upper - len).coerceAtLeast(lower))
+                            localStart = newStart
+                            localEnd = newStart + len
+                        },
+                    )
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = formatSpeed(sel.speed), color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        }
+        TrimHandle(
+            xPx = startPx,
+            rowWidthPx = widthPx,
+            density = density,
+            onDrag = { deltaPx ->
+                val min = maxOf(lower, localEnd - maxLen)
+                localStart = (localStart + pxDeltaToMsDelta(deltaPx)).coerceIn(min, (localEnd - MinSpeedRangeMs).coerceAtLeast(min))
+            },
+            onDragEnd = { commitStart() },
+        )
+        TrimHandle(
+            xPx = endPx,
+            rowWidthPx = widthPx,
+            density = density,
+            onDrag = { deltaPx ->
+                val max = minOf(upper, localStart + maxLen)
+                localEnd = (localEnd + pxDeltaToMsDelta(deltaPx)).coerceIn((localStart + MinSpeedRangeMs).coerceAtMost(max), max)
+            },
+            onDragEnd = { commitEnd() },
         )
     }
 }

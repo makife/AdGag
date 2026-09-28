@@ -13,7 +13,12 @@ enum EditorLimits {
   static let maxTransitionMs: Int64 = 2_000
   static let maxMusicFadeMs: Int64 = 5_000
   static let minTrimGapMs: Int64 = 500
-  static let videoSpeedOptions: [Double] = [0.25, 0.5, 0.75, 1]
+  /// Slow-motion choices for a speed range (the rest of the Ad plays at 1x).
+  static let speedRangeOptions: [Double] = [0.25, 0.5, 0.75]
+  /// Shortest speed range kept after an edit (shorter ones are dropped).
+  static let minSpeedRangeMs: Int64 = 300
+  /// Length of a newly added range (before its edges are dragged).
+  static let defaultSpeedRangeMs: Int64 = 2_000
   static let musicSpeedOptions: [Double] = [0.5, 0.75, 1, 1.25, 1.5, 2]
 }
 
@@ -107,7 +112,8 @@ struct EditorSessionState: Codable {
   var musicPlayDurationMs: Int64
   var rotationDegrees: Int
   var isMuted: Bool
-  var videoSpeed: Double
+  /// Slow-motion ranges, GLOBAL SOURCE time (see SpeedRange).
+  var speedRanges: [SpeedRange] = []
   var videoFilter: VideoFilter
   /// Captions over the whole Ad (EditorText.swift), timed in OUTPUT time.
   var textLayers: [TextLayer] = []
@@ -120,7 +126,7 @@ struct EditorSessionState: Codable {
                          trimEndMs: min(sourceDurationMs, EditorLimits.maxTotalMs))],
       transitions: [], musicPath: nil, musicOriginalPath: nil, musicSpeed: 1, musicFadeInMs: 0,
       musicFadeOutMs: 0, musicLoop: false, musicStartOffsetMs: 0, musicSourceStartMs: 0,
-      musicPlayDurationMs: 0, rotationDegrees: 0, isMuted: false, videoSpeed: 1, videoFilter: .NONE)
+      musicPlayDurationMs: 0, rotationDegrees: 0, isMuted: false, videoFilter: .NONE)
   }
 
   func toJSON() -> String {
@@ -147,6 +153,15 @@ struct EditorSessionState: Codable {
       return TransitionSpec(type: ClipTransition(rawValue: entry as? String ?? "") ?? .NONE)
     }
     let musicPath = obj["musicPath"] as? String
+    let speedRanges: [SpeedRange]
+    if let raw = obj["speedRanges"] as? [[String: Any]] {
+      speedRanges = raw.compactMap(SpeedRange.from)
+    } else {
+      // Sessions from before ranges: one whole-video speed.
+      let legacy = (obj["videoSpeed"] as? NSNumber)?.doubleValue ?? 1
+      let total = clips.reduce(Int64(0)) { $0 + $1.keptDurationMs }
+      speedRanges = legacy != 1 && legacy > 0 && total > 0 ? [SpeedRange(startMs: 0, endMs: total, speed: legacy)] : []
+    }
     return EditorSessionState(
       clips: clips, transitions: transitions, musicPath: musicPath,
       musicOriginalPath: obj["musicOriginalPath"] as? String ?? musicPath,
@@ -158,7 +173,7 @@ struct EditorSessionState: Codable {
       musicPlayDurationMs: int64(obj["musicPlayDurationMs"]),
       rotationDegrees: (obj["rotationDegrees"] as? NSNumber)?.intValue ?? 0,
       isMuted: obj["isMuted"] as? Bool ?? false,
-      videoSpeed: (obj["videoSpeed"] as? NSNumber)?.doubleValue ?? 1,
+      speedRanges: speedRanges,
       videoFilter: VideoFilter(rawValue: obj["videoFilter"] as? String ?? "") ?? .NONE,
       textLayers: (obj["textLayers"] as? [[String: Any]] ?? []).map(TextLayer.from),
       stickerLayers: (obj["stickerLayers"] as? [[String: Any]] ?? []).map(StickerLayer.from))
@@ -248,7 +263,104 @@ func formatSpeed(_ s: Double) -> String {
   s == s.rounded() ? "\(Int(s))x" : "\(s)x"
 }
 
+/// "2.4s" — speed-range edges need tenths of a second.
+func formatPreciseSeconds(_ ms: Int64) -> String { String(format: "%.1fs", Double(ms) / 1000) }
+
 func formatClock(_ ms: Int64) -> String {
   let total = ms / 1000
   return String(format: "%d:%02d", total / 60, total % 60)
+}
+
+/// Slow motion on part of the Ad — mirror of SpeedRanges.kt. startMs/endMs
+/// are GLOBAL SOURCE time (the clip strip's time base), so a range stays on
+/// the same footage while the rest is edited (the view model remaps ranges
+/// when a trim or a removed clip moves content). Ranges never overlap.
+struct SpeedRange: Codable, Equatable, Identifiable {
+  var id: String = UUID().uuidString
+  var startMs: Int64
+  var endMs: Int64
+  var speed: Double
+
+  init(id: String = UUID().uuidString, startMs: Int64, endMs: Int64, speed: Double) {
+    self.id = id
+    self.startMs = startMs
+    self.endMs = endMs
+    self.speed = speed
+  }
+
+  var lengthMs: Int64 { max(0, endMs - startMs) }
+
+  static func from(_ o: [String: Any]) -> SpeedRange? {
+    let r = SpeedRange(
+      id: (o["id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? UUID().uuidString,
+      startMs: (o["startMs"] as? NSNumber)?.int64Value ?? 0,
+      endMs: (o["endMs"] as? NSNumber)?.int64Value ?? 0,
+      speed: (o["speed"] as? NSNumber)?.doubleValue ?? 1)
+    return r.lengthMs > 0 && r.speed > 0 ? r : nil
+  }
+}
+
+/// The time map between SOURCE time (clip strip, trims) and OUTPUT time
+/// (what the finished Ad plays: the 30s cap, captions, music, transitions).
+/// Piecewise linear: 1x outside every range, 1/speed slower inside one.
+/// The only place that conversion is defined — mirror of the Kotlin SpeedMap.
+struct SpeedMap {
+  let ranges: [SpeedRange]
+
+  init(_ ranges: [SpeedRange]) {
+    self.ranges = ranges.filter { $0.lengthMs > 0 }.sorted { $0.startMs < $1.startMs }
+  }
+
+  func speedAt(_ sourceMs: Int64) -> Double {
+    ranges.first { sourceMs >= $0.startMs && sourceMs < $0.endMs }?.speed ?? 1
+  }
+
+  func toOutput(_ sourceMs: Int64) -> Int64 {
+    var out = 0.0
+    var cursor: Int64 = 0
+    for r in ranges {
+      if sourceMs <= r.startMs { break }
+      out += Double(r.startMs - cursor)
+      out += Double(min(sourceMs, r.endMs) - r.startMs) / r.speed
+      cursor = r.endMs
+      if sourceMs <= r.endMs { return Int64(out.rounded()) }
+    }
+    return Int64((out + Double(max(sourceMs - cursor, 0))).rounded())
+  }
+
+  func toSource(_ outputMs: Int64) -> Int64 {
+    var out = 0.0
+    var cursor: Int64 = 0
+    let o = Double(outputMs)
+    for r in ranges {
+      let plain = Double(r.startMs - cursor)
+      if o <= out + plain { return Int64((Double(cursor) + (o - out)).rounded()) }
+      out += plain
+      let slow = Double(r.lengthMs) / r.speed
+      if o <= out + slow { return Int64((Double(r.startMs) + (o - out) * r.speed).rounded()) }
+      out += slow
+      cursor = r.endMs
+    }
+    return Int64((Double(cursor) + (o - out)).rounded())
+  }
+
+  /// Lowest speed anywhere in [from, to) — 1 if no range overlaps.
+  func minSpeed(from: Int64, to: Int64) -> Double {
+    min(ranges.filter { $0.startMs < to && $0.endMs > from }.map(\.speed).min() ?? 1, 1)
+  }
+}
+
+extension Array where Element == SpeedRange {
+  /// Moves every edge through `map` (old SOURCE position -> new) and drops ranges that became too short.
+  func remapped(totalMs: Int64, _ map: (Int64) -> Int64) -> [SpeedRange] {
+    compactMap { r in
+      let s = Swift.min(Swift.max(map(r.startMs), 0), totalMs)
+      let e = Swift.min(Swift.max(map(r.endMs), 0), totalMs)
+      guard e - s >= EditorLimits.minSpeedRangeMs else { return nil }
+      var copy = r
+      copy.startMs = s
+      copy.endMs = e
+      return copy
+    }
+  }
 }

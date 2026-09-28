@@ -118,6 +118,15 @@ final class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<void> changePassword(String newPassword) async {
+    try {
+      await _client.auth.updateUser(supa.UserAttributes(password: newPassword));
+    } on supa.AuthException catch (e) {
+      throw app_error.ValidationException(e.message, e);
+    }
+  }
+
+  @override
   Future<bool> isUsernameAvailable(String username) async {
     final List<dynamic> rows = await _client
         .from("profiles")

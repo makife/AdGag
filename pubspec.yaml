@@ -79,6 +79,11 @@ dependencies:
   # older static Share.share it also long ago deprecated).
   share_plus: ^13.3.0
 
+  # Per-device app preferences (theme, language — Settings). Already in
+  # the build transitively via supabase_flutter; listed directly because
+  # the app now imports it itself.
+  shared_preferences: ^2.5.5
+
   # Filesystem paths for local drafts/cache (section 39/40)
   path_provider: ^2.1.5
 
@@ -116,6 +121,12 @@ flutter:
 
   assets:
     - assets/branding/
+    # Licences of what the NATIVE editors bundle (fonts, animated emoji,
+    # Media3/Compose) — Flutter's LicenseRegistry only knows Dart packages.
+    # Copies of android/app/src/main/assets/{fonts/licenses,stickers}; keep
+    # in sync when a font/sticker set changes. See core/licenses/.
+    - assets/licenses/
+    - assets/licenses/fonts/
 
 # flutter_launcher_icons config (CLAUDE.md section 65: brand assets stay
 # swappable — this is the one place the launcher icon source is named).

@@ -14,9 +14,6 @@ const val DefaultTransitionDurationMs = 800L
 const val MinTransitionDurationMs = 200L
 const val MaxTransitionDurationMs = 2_000L
 
-/** Whole-video speed choices (slow motion down to 0.25x). The 30s cap applies to the OUTPUT, so slower speeds need shorter clips. */
-val VideoSpeedOptions = listOf(0.25f, 0.5f, 0.75f, 1f)
-
 /** Music speed choices (pitch kept). */
 val MusicSpeedOptions = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
 
@@ -82,14 +79,15 @@ data class EditorSessionState(
     val musicFadeOutMs: Long,
     /** Repeat the selected part of the song until the video ends. */
     val musicLoop: Boolean,
-    /** GLOBAL placement of the music, in OUTPUT time (after [videoSpeed]). */
+    /** GLOBAL placement of the music, in OUTPUT time (after [speedRanges]). */
     val musicStartOffsetMs: Long,
     /** Where in the SONG the used part begins (the music row's left trim). */
     val musicSourceStartMs: Long,
     val musicPlayDurationMs: Long,
     val rotationDegrees: Int,
     val isMuted: Boolean,
-    val videoSpeed: Float,
+    /** Slow-motion ranges (SpeedRanges.kt), in GLOBAL SOURCE time. */
+    val speedRanges: List<SpeedRange> = emptyList(),
     val videoFilter: VideoFilter,
     /** Captions over the whole Ad (TextLayers.kt), timed in OUTPUT time. */
     val textLayers: List<TextLayer> = emptyList(),
@@ -121,7 +119,7 @@ data class EditorSessionState(
         put("musicFadeInMs", musicFadeInMs)
         put("musicFadeOutMs", musicFadeOutMs)
         put("musicLoop", musicLoop)
-        put("videoSpeed", videoSpeed.toDouble())
+        put("speedRanges", SpeedRange.listToJson(speedRanges))
         put("videoFilter", videoFilter.name)
         put("musicStartOffsetMs", musicStartOffsetMs)
         put("musicSourceStartMs", musicSourceStartMs)
@@ -174,7 +172,14 @@ data class EditorSessionState(
                 musicPlayDurationMs = o.optLong("musicPlayDurationMs", 0L),
                 rotationDegrees = o.optInt("rotationDegrees", 0),
                 isMuted = o.optBoolean("isMuted", false),
-                videoSpeed = o.optDouble("videoSpeed", 1.0).toFloat(),
+                speedRanges = if (o.has("speedRanges")) {
+                    SpeedRange.listFromJson(o.optJSONArray("speedRanges"))
+                } else {
+                    // Sessions from before ranges: one whole-video speed.
+                    val legacy = o.optDouble("videoSpeed", 1.0).toFloat()
+                    val total = clips.sumOf { it.keptDurationMs }
+                    if (legacy != 1f && legacy > 0f && total > 0) listOf(SpeedRange(0L, total, legacy)) else emptyList()
+                },
                 videoFilter = runCatching { VideoFilter.valueOf(o.optString("videoFilter", "NONE")) }
                     .getOrDefault(VideoFilter.NONE),
                 textLayers = TextLayer.listFromJson(o.optJSONArray("textLayers")),

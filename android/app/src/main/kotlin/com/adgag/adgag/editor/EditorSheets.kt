@@ -123,37 +123,75 @@ fun MusicSheet(viewModel: EditorViewModel, onReplace: () -> Unit, onDismiss: () 
     }
 }
 
-/** Whole-video speed (slow motion). Speeds that would push the Ad past 30s are disabled, with the reason shown. */
+/**
+ * Slow motion for ONE range of the Ad (selected on the timeline's Speed
+ * row): its speed, stretch it over the whole video, or delete it. The
+ * range's edges are dragged on the Speed row itself. Speeds that would
+ * push the Ad past 30s are disabled, with the reason shown.
+ */
 @UnstableApi
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VideoSpeedSheet(viewModel: EditorViewModel, onDismiss: () -> Unit) {
+fun SpeedRangeSheet(viewModel: EditorViewModel, rangeId: String, onDismiss: () -> Unit) {
+    val range = viewModel.speedRanges.firstOrNull { it.id == rangeId }
+    if (range == null) {
+        LaunchedEffect(Unit) { onDismiss() }
+        return
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = AdGagColors.SurfaceElevated,
     ) {
         Column(modifier = Modifier.padding(bottom = AdGagSpacing.xl.dp)) {
-            SheetHeader(title = "Video speed", onDone = onDismiss)
+            SheetHeader(title = "Slow motion", onDone = onDismiss)
+            Text(
+                text = "${formatPreciseSeconds(range.startMs)} – ${formatPreciseSeconds(range.endMs)} of your clips " +
+                    "plays at ${formatSpeed(range.speed)}. Drag the pink edges on the Speed row to change which part.",
+                color = AdGagColors.OnSurfaceMuted,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = AdGagSpacing.lg.dp),
+            )
+            Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
             ChoiceRow(
-                options = VideoSpeedOptions,
-                selected = viewModel.videoSpeed,
-                enabled = { viewModel.canUseVideoSpeed(it) },
+                options = SpeedRangeOptions,
+                selected = range.speed,
+                enabled = { viewModel.canUseRangeSpeed(range.id, it) },
                 label = { formatSpeed(it) },
-                onSelect = { viewModel.changeVideoSpeed(it) },
+                onSelect = { viewModel.setSpeedRangeSpeed(range.id, it) },
             )
             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
-            val blocked = VideoSpeedOptions.filterNot { viewModel.canUseVideoSpeed(it) }
+            val blocked = SpeedRangeOptions.filterNot { viewModel.canUseRangeSpeed(range.id, it) }
             Text(
                 text = if (blocked.isEmpty()) {
-                    "Slow motion stretches the whole Ad. Your Ad: ${formatClock(viewModel.outputDurationMs)}."
+                    "Your Ad: ${formatClock(viewModel.outputDurationMs)} of 0:30."
                 } else {
-                    "${blocked.joinToString { formatSpeed(it) }} would make the Ad longer than 30s — trim it first."
+                    "${blocked.joinToString { formatSpeed(it) }} would make the Ad longer than 30s — shorten the range first."
                 },
                 color = AdGagColors.OnSurfaceMuted,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(horizontal = AdGagSpacing.lg.dp),
             )
+            Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = AdGagSpacing.lg.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                val wholeOk = viewModel.canApplySpeedToWholeVideo(range.id)
+                TextButton(onClick = { viewModel.applySpeedToWholeVideo(range.id) }, enabled = wholeOk) {
+                    Text(
+                        text = "Whole video",
+                        color = if (wholeOk) AdGagColors.OnBackground else AdGagColors.OnSurfaceMuted,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+                TextButton(onClick = {
+                    viewModel.removeSpeedRange(range.id)
+                    onDismiss()
+                }) {
+                    Text(text = "Remove slow motion", color = AdGagColors.Danger, style = MaterialTheme.typography.labelLarge)
+                }
+            }
         }
     }
 }
@@ -340,6 +378,9 @@ private fun FadeSlider(label: String, valueMs: Long, maxMs: Long, onChange: (Lon
 /** 1f -> "1x", 0.25f -> "0.25x". */
 fun formatSpeed(speed: Float): String =
     if (speed == speed.toInt().toFloat()) "${speed.toInt()}x" else "${speed}x"
+
+/** "2.4s" — speed-range edges need tenths of a second. */
+fun formatPreciseSeconds(ms: Long): String = "%.1fs".format(ms / 1000f)
 
 fun formatClock(ms: Long): String {
     val totalSeconds = ms / 1000

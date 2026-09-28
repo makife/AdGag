@@ -109,7 +109,8 @@ fun EditorScreen(
         // -1 = picker closed; otherwise the clip boundary being edited.
         var pickingTransitionFor by remember { mutableIntStateOf(-1) }
         var showMusicSheet by remember { mutableStateOf(false) }
-        var showSpeedSheet by remember { mutableStateOf(false) }
+        // The speed range whose settings sheet is open (null = closed).
+        var speedSheetFor by remember { mutableStateOf<String?>(null) }
         var showEffectsSheet by remember { mutableStateOf(false) }
         var editingTextId by remember { mutableStateOf<String?>(null) }
         // The bottom panel dragged down out of the way (the video gets the space).
@@ -125,6 +126,16 @@ fun EditorScreen(
             viewModel.player.pause()
             editingTextId = null
             stickerPanelFor = ""
+        }
+        // Speed tool / the Speed row's "+": a slow-motion range at the
+        // playhead (or the one the playhead is in), then its settings.
+        val openSpeed = {
+            val range = viewModel.addSpeedRangeAtPlayhead()
+            if (range != null) {
+                speedSheetFor = range.id
+            } else {
+                viewModel.showNotice("No room for slow motion — the Ad is already 30s. Trim it first.")
+            }
         }
         // Tapping a selected overlay (or its timeline bar) opens the matching editor.
         val editOverlay = { id: String ->
@@ -332,18 +343,24 @@ fun EditorScreen(
                             onOpenMusic = { showMusicSheet = true },
                             onAddText = addText,
                             onEditText = editOverlay,
+                            onAddSpeedRange = openSpeed,
+                            onEditSpeedRange = { speedSheetFor = it },
                         )
                         Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
 
                         ToolRow(
                             viewModel = viewModel,
                             onMusic = { if (viewModel.musicPath != null) showMusicSheet = true else pickMusic.launch("audio/*") },
-                            onSpeed = { showSpeedSheet = true },
+                            onSpeed = openSpeed,
                             onEffects = { showEffectsSheet = true },
                             onText = addText,
                             onStickers = openStickers,
                         )
 
+                        viewModel.notice?.let { notice ->
+                            Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
+                            Text(text = notice, color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.bodySmall)
+                        }
                         if (viewModel.isExporting) {
                             Spacer(modifier = Modifier.height(AdGagSpacing.md.dp))
                             ExportProgress(viewModel.exportProgress)
@@ -401,8 +418,8 @@ fun EditorScreen(
                 onDismiss = { showMusicSheet = false },
             )
         }
-        if (showSpeedSheet) {
-            VideoSpeedSheet(viewModel = viewModel, onDismiss = { showSpeedSheet = false })
+        speedSheetFor?.let { id ->
+            SpeedRangeSheet(viewModel = viewModel, rangeId = id, onDismiss = { speedSheetFor = null })
         }
         if (showEffectsSheet) {
             EffectsSheet(viewModel = viewModel, onDismiss = { showEffectsSheet = false })
@@ -427,8 +444,8 @@ private fun transitionPoseAt(viewModel: EditorViewModel, globalMs: Long): Transi
                 entry = viewModel.transitions.getOrNull(i - 1),
                 exit = viewModel.transitions.getOrNull(i),
                 // Transition timing is OUTPUT time (matches the export).
-                keptMs = (clips[i].keptDurationMs / viewModel.videoSpeed).toLong(),
-                localMs = ((globalMs - start) / viewModel.videoSpeed).toLong(),
+                keptMs = viewModel.toOutputMs(end) - viewModel.toOutputMs(start),
+                localMs = viewModel.toOutputMs(globalMs) - viewModel.toOutputMs(start),
             )
         }
         start = end
@@ -476,8 +493,8 @@ private fun ToolRow(
         )
         EditorToolButton(
             icon = Icons.Filled.SlowMotionVideo,
-            label = if (viewModel.videoSpeed == 1f) "Speed" else formatSpeed(viewModel.videoSpeed),
-            active = viewModel.videoSpeed != 1f,
+            label = if (viewModel.speedRanges.isEmpty()) "Slow-mo" else "Slow-mo (${viewModel.speedRanges.size})",
+            active = viewModel.speedRanges.isNotEmpty(),
             onClick = onSpeed,
         )
         EditorToolButton(

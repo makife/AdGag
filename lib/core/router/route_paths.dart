@@ -28,6 +28,11 @@ abstract final class RoutePaths {
 
   static const String editProfile = "/profile/edit";
 
+  static const String settings = "/settings";
+  static const String settingsAccount = "/settings/account";
+  static const String settingsBlocked = "/settings/blocked";
+  static const String settingsAbout = "/settings/about";
+
   /// Matches the share link shape ShareButton builds
   /// (`https://<host>/ad/<id>` — see share_button.dart). Universal/App
   /// Links hand the OS-resolved path straight to go_router; see README.md

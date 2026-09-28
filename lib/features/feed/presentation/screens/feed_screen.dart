@@ -100,6 +100,30 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
     }
   }
 
+  /// Pull-to-refresh (only reachable from the first card — the pull is an
+  /// overscroll past the top of the pager). The new first page replaces the
+  /// list; players for Ads no longer in it are dropped.
+  Future<void> _refresh() async {
+    try {
+      await ref.read(feedControllerProvider.notifier).refresh();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't refresh the feed.")));
+      }
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    final List<Ad> ads = ref.read(feedControllerProvider).valueOrNull?.ads ?? const <Ad>[];
+    _pendingIndex = null;
+    setState(() => _activeIndex = 0);
+    if (_pageController.hasClients) {
+      _pageController.jumpToPage(0);
+    }
+    _pool.evictAllExcept(<String>{for (final Ad ad in ads.take(2)) ad.id});
+  }
+
   @override
   Widget build(BuildContext context) {
     final AsyncValue<FeedState> feedAsync = ref.watch(feedControllerProvider);
@@ -134,18 +158,36 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
           ),
         ),
         data: (FeedState feedState) {
+          final double topInset = MediaQuery.paddingOf(context).top;
           if (feedState.ads.isEmpty) {
-            return const ComingSoonView(
-              title: "No one's sold anything yet.",
-              phaseNote: "Be the first to advertise something — creation lands in Phase D.",
+            return RefreshIndicator(
+              onRefresh: _refresh,
+              edgeOffset: topInset,
+              child: LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints constraints) => SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: SizedBox(
+                    height: constraints.maxHeight,
+                    child: const ComingSoonView(
+                      title: "No one's sold anything yet.",
+                      phaseNote: "Be the first to advertise something — creation lands in Phase D.",
+                    ),
+                  ),
+                ),
+              ),
             );
           }
 
-          // No RefreshIndicator: its own vertical drag-to-refresh gesture
-          // would fight the feed's vertical page-swipe. The initial page
-          // already loads fresh on cold start; a dedicated manual-refresh
-          // affordance can be added later if needed.
-          return NotificationListener<ScrollEndNotification>(
+          // Pull down on the first card to refresh. The indicator only
+          // reacts to an overscroll past the pager's top, so it never
+          // competes with an ordinary page swipe; it's disabled while a
+          // reviews panel is open (the pager is locked then anyway).
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            edgeOffset: topInset,
+            notificationPredicate: (ScrollNotification notification) =>
+                notification.depth == 0 && ref.read(openReviewsAdIdProvider) == null,
+            child: NotificationListener<ScrollEndNotification>(
             onNotification: (ScrollEndNotification notification) {
               final int? pending = _pendingIndex;
               if (pending != null && notification.depth == 0) {
@@ -178,6 +220,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
                   isActive: index == _activeIndex,
                 );
               },
+            ),
             ),
           );
         },

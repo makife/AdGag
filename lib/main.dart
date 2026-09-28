@@ -1,8 +1,11 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:supabase_flutter/supabase_flutter.dart";
 
 import "app.dart";
+import "core/licenses/native_licenses.dart";
+import "core/preferences/app_preferences.dart";
 import "core/config/env_config.dart";
 import "core/utils/app_logger.dart";
 
@@ -25,5 +28,13 @@ Future<void> main() async {
     ),
   );
 
-  runApp(const ProviderScope(child: AdGagApp()));
+  registerNativeLicenses();
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
+
+  runApp(
+    ProviderScope(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      child: const AdGagApp(),
+    ),
+  );
 }

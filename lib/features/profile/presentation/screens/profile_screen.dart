@@ -4,6 +4,7 @@ import "package:cached_network_image/cached_network_image.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../../../core/localization/generated/app_localizations.dart";
 import "../../../../core/router/route_paths.dart";
 import "../../../../core/theme/app_spacing.dart";
 import "../../../auth/domain/app_user.dart";
@@ -13,9 +14,9 @@ import "../../../subjects/presentation/screens/subject_ads_viewer_screen.dart";
 import "../../domain/public_profile.dart";
 import "../providers/profile_providers.dart";
 
-/// PROFILE (CLAUDE.md section 13): own Ads grid, SOLD/views stats, account
-/// settings, sign-out. The signed-out-vs-signed-in distinction from
-/// [PublicProfileScreen] (that one has FOLLOW instead of Settings/sign-out)
+/// PROFILE (CLAUDE.md section 13): own Ads grid, SOLD/views stats, Edit
+/// profile, and the menu icon into Settings (where sign-out lives). The
+/// distinction from [PublicProfileScreen] (that one has FOLLOW instead)
 /// is intentional, not duplicated logic — different actions apply to your
 /// own profile than to someone else's.
 class ProfileScreen extends ConsumerWidget {
@@ -30,9 +31,9 @@ class ProfileScreen extends ConsumerWidget {
         title: const Text("Profile"),
         actions: <Widget>[
           IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: "Settings",
-            onPressed: () => unawaited(context.pushTo(RoutePaths.editProfile)),
+            icon: const Icon(Icons.menu),
+            tooltip: AppLocalizations.of(context).profileMenuTooltip,
+            onPressed: () => unawaited(context.pushTo(RoutePaths.settings)),
           ),
         ],
       ),
@@ -95,9 +96,11 @@ class _ProfileBody extends ConsumerWidget {
                   Text(profile.bio!),
                 ],
                 const SizedBox(height: AppSpacing.lg),
-                OutlinedButton(
-                  onPressed: () => unawaited(ref.read(authControllerProvider.notifier).signOut()),
-                  child: const Text("Sign out"),
+                // Sign out lives at the bottom of Settings (menu icon, top
+                // right) — like Instagram, not on the profile itself.
+                FilledButton.tonal(
+                  onPressed: () => unawaited(context.pushTo(RoutePaths.editProfile)),
+                  child: Text(AppLocalizations.of(context).profileEditProfile),
                 ),
               ],
             ),

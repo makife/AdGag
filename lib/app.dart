@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
 import "core/localization/generated/app_localizations.dart";
+import "core/preferences/app_preferences.dart";
 import "core/router/app_router.dart";
 import "core/theme/app_theme.dart";
 import "core/widgets/splash_screen.dart";
@@ -34,7 +35,8 @@ class AdGagApp extends ConsumerWidget {
     return MaterialApp.router(
       title: "AdGag",
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.system,
+      themeMode: ref.watch(themeModeProvider),
+      locale: ref.watch(localeProvider),
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       routerConfig: router,

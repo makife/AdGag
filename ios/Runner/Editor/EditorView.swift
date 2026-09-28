@@ -15,7 +15,7 @@ struct EditorView: View {
   let onAddClip: (String, Int64) -> Void
 
   private enum Panel: Equatable {
-    case transition(Int), music, speed, effects, text(String)
+    case transition(Int), music, speed(String), effects, text(String)
     /// Sticker picker: nil = adding, else the sticker being changed.
     case stickers(String?)
   }
@@ -104,6 +104,16 @@ struct EditorView: View {
     panel = viewModel.stickerLayers.contains { $0.id == id } ? .stickers(id) : .text(id)
   }
 
+  /// Slow-mo tool / the Speed row's "+": a range at the playhead (or the one
+  /// the playhead is in), then its settings.
+  private func openSpeed() {
+    if let range = viewModel.addSpeedRangeAtPlayhead() {
+      panel = .speed(range.id)
+    } else {
+      viewModel.showNotice("No room for slow motion — the Ad is already 30s. Trim it first.")
+    }
+  }
+
   private func addText() {
     let layer = viewModel.addText()
     panel = .text(layer.id)
@@ -157,8 +167,13 @@ struct EditorView: View {
         onPickTransition: { panel = .transition($0) },
         onOpenMusic: { panel = .music },
         onAddText: addText,
-        onEditText: { id in editOverlay(id) })
+        onEditText: { id in editOverlay(id) },
+        onAddSpeedRange: openSpeed,
+        onEditSpeedRange: { panel = .speed($0) })
       toolRow
+      if let notice = viewModel.notice {
+        Text(notice).font(.footnote).foregroundColor(EditorPalette.muted)
+      }
       if viewModel.isExporting {
         VStack(alignment: .leading, spacing: 4) {
           Text("Exporting your Ad…").font(.footnote).foregroundColor(EditorPalette.muted)
@@ -195,8 +210,9 @@ struct EditorView: View {
         ToolButton(icon: "rotate.right", label: "Rotate", active: false) { viewModel.rotateNinety() }
         ToolButton(icon: viewModel.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
                    label: viewModel.isMuted ? "Muted" : "Mute", active: viewModel.isMuted) { viewModel.toggleMute() }
-        ToolButton(icon: "slowmo", label: viewModel.videoSpeed == 1 ? "Speed" : formatSpeed(viewModel.videoSpeed),
-                   active: viewModel.videoSpeed != 1) { panel = .speed }
+        ToolButton(icon: "slowmo",
+                   label: viewModel.speedRanges.isEmpty ? "Slow-mo" : "Slow-mo (\(viewModel.speedRanges.count))",
+                   active: !viewModel.speedRanges.isEmpty) { openSpeed() }
         ToolButton(icon: "wand.and.stars",
                    label: viewModel.videoFilter == .NONE ? "Effects" : viewModel.videoFilter.label,
                    active: viewModel.videoFilter != .NONE) { panel = .effects }
@@ -223,7 +239,7 @@ struct EditorView: View {
         case .transition(let boundary): TransitionPanel(viewModel: viewModel, boundary: boundary)
         case .music: MusicPanel(viewModel: viewModel, onReplace: { self.panel = nil; pickingMusic = true },
                                 onRemoved: { self.panel = nil })
-        case .speed: SpeedPanel(viewModel: viewModel)
+        case .speed(let id): SpeedPanel(viewModel: viewModel, rangeId: id, onRemoved: { self.panel = nil })
         case .effects: EffectsPanel(viewModel: viewModel)
         case .text, .stickers: EmptyView()
         }
@@ -247,7 +263,7 @@ struct EditorView: View {
     switch panel {
     case .transition(let b): return "Clip \(b + 1) → Clip \(b + 2)"
     case .music: return "Music"
-    case .speed: return "Video speed"
+    case .speed: return "Slow motion"
     case .effects: return "Effects"
     case .text: return "Text"
     case .stickers: return "Stickers"
@@ -441,18 +457,40 @@ private struct MusicPanel: View {
   }
 }
 
+/// Slow motion for ONE range (selected on the timeline's Speed row): its
+/// speed, stretch it over the whole video, or remove it. The range's edges
+/// are dragged on the Speed row itself.
 private struct SpeedPanel: View {
   @ObservedObject var viewModel: EditorViewModel
+  let rangeId: String
+  let onRemoved: () -> Void
 
   var body: some View {
-    let blocked = EditorLimits.videoSpeedOptions.filter { !viewModel.canUseVideoSpeed($0) }
-    VStack(alignment: .leading, spacing: 10) {
-      ChoiceRow(options: EditorLimits.videoSpeedOptions, selected: viewModel.videoSpeed,
-                enabled: { viewModel.canUseVideoSpeed($0) }) { viewModel.changeVideoSpeed($0) }
-      Text(blocked.isEmpty
-        ? "Slow motion stretches the whole Ad. Your Ad: \(formatClock(viewModel.outputDurationMs))."
-        : "\(blocked.map(formatSpeed).joined(separator: ", ")) would make the Ad longer than 30s — trim it first.")
-        .font(.caption).foregroundColor(EditorPalette.muted)
+    if let range = viewModel.speedRanges.first(where: { $0.id == rangeId }) {
+      let blocked = EditorLimits.speedRangeOptions.filter { !viewModel.canUseRangeSpeed(range.id, $0) }
+      let wholeOk = viewModel.canApplySpeedToWholeVideo(range.id)
+      VStack(alignment: .leading, spacing: 10) {
+        Text("\(formatPreciseSeconds(range.startMs)) – \(formatPreciseSeconds(range.endMs)) of your clips plays at "
+          + "\(formatSpeed(range.speed)). Drag the pink edges on the Speed row to change which part.")
+          .font(.caption).foregroundColor(EditorPalette.muted)
+        ChoiceRow(options: EditorLimits.speedRangeOptions, selected: range.speed,
+                  enabled: { viewModel.canUseRangeSpeed(range.id, $0) }) { viewModel.setSpeedRangeSpeed(range.id, $0) }
+        Text(blocked.isEmpty
+          ? "Your Ad: \(formatClock(viewModel.outputDurationMs)) of 0:30."
+          : "\(blocked.map(formatSpeed).joined(separator: ", ")) would make the Ad longer than 30s — shorten the range first.")
+          .font(.caption).foregroundColor(EditorPalette.muted)
+        HStack {
+          Button("Whole video") { viewModel.applySpeedToWholeVideo(range.id) }
+            .foregroundColor(wholeOk ? .white : EditorPalette.muted)
+            .disabled(!wholeOk)
+          Spacer()
+          Button("Remove slow motion") {
+            viewModel.removeSpeedRange(range.id)
+            onRemoved()
+          }
+          .foregroundColor(EditorPalette.danger)
+        }
+      }
     }
   }
 }

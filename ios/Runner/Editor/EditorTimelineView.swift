@@ -40,13 +40,15 @@ struct EditorTimelineView: View {
   let onOpenMusic: () -> Void
   var onAddText: () -> Void = {}
   var onEditText: (String) -> Void = { _ in }
+  var onAddSpeedRange: () -> Void = {}
+  var onEditSpeedRange: (String) -> Void = { _ in }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
         label("Clips")
         Spacer()
-        label((viewModel.videoSpeed != 1 ? "\(formatSpeed(viewModel.videoSpeed)) · " : "")
+        label((viewModel.speedRanges.isEmpty ? "" : "slow-mo · ")
           + "\(formatClock(viewModel.outputDurationMs)) / \(formatClock(EditorLimits.maxTotalMs))")
       }
       aligned(trailing: AnyView(addButton)) { ClipStripView(viewModel: viewModel, onPickTransition: onPickTransition) }
@@ -67,6 +69,25 @@ struct EditorTimelineView: View {
           .id(index) // reset the row's drag state when another clip is selected
       }
 
+      if !viewModel.speedRanges.isEmpty {
+        let selRange = viewModel.speedRanges.first { $0.id == viewModel.selectedSpeedRangeId }
+        HStack {
+          if let selRange {
+            label("Slow motion · \(formatSpeed(selRange.speed))")
+            Spacer()
+            label("\(formatPreciseSeconds(selRange.startMs)) – \(formatPreciseSeconds(selRange.endMs))")
+          } else {
+            label("Slow motion · tap one to select")
+            Spacer()
+          }
+        }
+        // Same layout (and SOURCE time scale) as the clip strip, so a range
+        // sits right under the footage it slows down.
+        aligned(trailing: AnyView(rowAddButton(label: "Add slow motion", action: onAddSpeedRange))) {
+          SpeedRowView(viewModel: viewModel, onEditSpeedRange: onEditSpeedRange)
+        }
+      }
+
       if !viewModel.textLayers.isEmpty || !viewModel.stickerLayers.isEmpty {
         let selected = overlayBars(viewModel).first { $0.id == viewModel.selectedTextId }
         HStack {
@@ -80,7 +101,7 @@ struct EditorTimelineView: View {
             Spacer()
           }
         }
-        aligned(trailing: AnyView(addTextButton)) { TextRowView(viewModel: viewModel, onEditText: onEditText) }
+        aligned(trailing: AnyView(rowAddButton(label: "Add text", action: onAddText))) { TextRowView(viewModel: viewModel, onEditText: onEditText) }
       }
 
       if viewModel.hasMusic {
@@ -129,15 +150,15 @@ struct EditorTimelineView: View {
     .accessibilityLabel("Record another clip")
   }
 
-  private var addTextButton: some View {
-    Button(action: onAddText) {
+  private func rowAddButton(label: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
       Image(systemName: "plus")
         .foregroundColor(.white)
         .frame(width: addButtonSize, height: textRowHeight)
         .background(EditorPalette.surface)
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
-    .accessibilityLabel("Add text")
+    .accessibilityLabel(label)
   }
 
   private var musicSettingsButton: some View {
@@ -253,7 +274,7 @@ private struct TrimRowView: View {
       let dxToMs = { (dx: CGFloat) -> Int64 in Int64(dx / width * CGFloat(sourceMs)) }
       let start = liveStart ?? clip.trimStartMs
       let end = liveEnd ?? clip.trimEndMs
-      let maxKept = max(viewModel.sourceBudgetMs - (viewModel.totalDurationMs - clip.keptDurationMs), EditorLimits.minTrimGapMs)
+      let maxKept = max(viewModel.maxKeptMs(for: index), EditorLimits.minTrimGapMs)
 
       ZStack(alignment: .topLeading) {
         ThumbnailStrip(images: (viewModel.thumbnails[clip.path] ?? []).map(\.image))
@@ -617,5 +638,113 @@ private struct SongRowView: View {
     .frame(height: songRowHeight)
     .background(EditorPalette.surface)
     .clipShape(RoundedRectangle(cornerRadius: 8))
+  }
+}
+
+// MARK: - Speed row (SOURCE time)
+
+/// Slow-motion ranges on the clip strip's scale. Tap a range to select it
+/// (and jump there), tap the selected one for its settings. The selected
+/// range has start/end handles and can be dragged by its body; drags only
+/// change local state (clamped live to neighbours and the 30s cap) and are
+/// committed on release — same as Android's SpeedRow.
+private struct SpeedRowView: View {
+  @ObservedObject var viewModel: EditorViewModel
+  let onEditSpeedRange: (String) -> Void
+  @State private var liveStart: Int64?
+  @State private var liveEnd: Int64?
+  @State private var origin: (String, Int64, Int64)?
+
+  private static let purple = Color(red: 0.61, green: 0.18, blue: 1.0)
+
+  var body: some View {
+    GeometryReader { geo in
+      let width = geo.size.width
+      let total = max(viewModel.totalDurationMs, 1)
+      let msToX = { (ms: Int64) -> CGFloat in CGFloat(min(max(ms, 0), total)) / CGFloat(total) * width }
+      let dxToMs = { (dx: CGFloat) -> Int64 in Int64(dx / width * CGFloat(total)) }
+      let selectedId = viewModel.selectedSpeedRangeId
+
+      ZStack(alignment: .topLeading) {
+        ForEach(viewModel.speedRanges.filter { $0.id != selectedId }) { range in
+          let left = msToX(range.startMs)
+          let right = max(msToX(range.endMs), left + 4)
+          RoundedRectangle(cornerRadius: 6).fill(Self.purple.opacity(0.45))
+            .overlay(Text(formatSpeed(range.speed)).font(.caption2).foregroundColor(.white).lineLimit(1))
+            .frame(width: right - left, height: textRowHeight - 10)
+            .offset(x: left, y: 5)
+            .onTapGesture {
+              viewModel.selectedSpeedRangeId = range.id
+              viewModel.seekToGlobal(range.startMs)
+            }
+        }
+
+        Rectangle().fill(Color.white.opacity(0.6))
+          .frame(width: 2, height: textRowHeight)
+          .offset(x: msToX(viewModel.globalPositionMs) - 1)
+          .allowsHitTesting(false)
+
+        if let sel = viewModel.speedRanges.first(where: { $0.id == selectedId }) {
+          let live = origin?.0 == sel.id
+          let start = live ? (liveStart ?? sel.startMs) : sel.startMs
+          let end = live ? (liveEnd ?? sel.endMs) : sel.endMs
+          let limits = viewModel.speedRangeLimits(sel.id)
+          let maxLen = viewModel.maxRangeLengthMs(except: sel.id, speed: sel.speed)
+          let startX = msToX(start)
+          let endX = max(msToX(end), startX + 4)
+
+          RoundedRectangle(cornerRadius: 6).fill(Self.purple.opacity(0.7))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(EditorPalette.pink, lineWidth: 2))
+            .overlay(Text(formatSpeed(sel.speed)).font(.caption2).foregroundColor(.white).lineLimit(1))
+            .frame(width: endX - startX, height: textRowHeight - 6)
+            .offset(x: startX, y: 3)
+            .onTapGesture { onEditSpeedRange(sel.id) }
+            .gesture(DragGesture(minimumDistance: 4)
+              .onChanged { value in
+                let o = origin ?? (sel.id, sel.startMs, sel.endMs)
+                if origin == nil { origin = o }
+                let len = o.2 - o.1
+                let s = min(max(o.1 + dxToMs(value.translation.width), limits.0), max(limits.1 - len, limits.0))
+                liveStart = s
+                liveEnd = s + len
+              }
+              .onEnded { _ in commit(movedStart: true) })
+
+          TrimHandle(x: startX, rowWidth: width, height: textRowHeight)
+            .gesture(DragGesture(minimumDistance: 2)
+              .onChanged { value in
+                let o = origin ?? (sel.id, sel.startMs, sel.endMs)
+                if origin == nil { origin = o }
+                let lower = max(limits.0, o.2 - maxLen)
+                liveStart = min(max(o.1 + dxToMs(value.translation.width), lower),
+                                max(o.2 - EditorLimits.minSpeedRangeMs, lower))
+                liveEnd = o.2
+              }
+              .onEnded { _ in commit(movedStart: true) })
+          TrimHandle(x: endX, rowWidth: width, height: textRowHeight)
+            .gesture(DragGesture(minimumDistance: 2)
+              .onChanged { value in
+                let o = origin ?? (sel.id, sel.startMs, sel.endMs)
+                if origin == nil { origin = o }
+                let upper = min(limits.1, o.1 + maxLen)
+                liveStart = o.1
+                liveEnd = min(max(o.2 + dxToMs(value.translation.width), min(o.1 + EditorLimits.minSpeedRangeMs, upper)), upper)
+              }
+              .onEnded { _ in commit(movedStart: false) })
+        }
+      }
+    }
+    .frame(height: textRowHeight)
+    .background(EditorPalette.surface)
+    .clipShape(RoundedRectangle(cornerRadius: 8))
+  }
+
+  private func commit(movedStart: Bool) {
+    if let o = origin {
+      viewModel.setSpeedRangeBounds(o.0, startMs: liveStart ?? o.1, endMs: liveEnd ?? o.2, movedStart: movedStart)
+    }
+    origin = nil
+    liveStart = nil
+    liveEnd = nil
   }
 }

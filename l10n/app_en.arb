@@ -87,5 +87,55 @@
   "genericCancel": "Cancel",
   "captureCancelExtraClip": "Cancel",
   "@captureCancelExtraClip": {"description": "Top-left button on the camera opened from the editor timeline's + button; goes back to the editor without adding a clip."},
-  "genericOffline": "You're offline. Some content may be unavailable."
+  "genericOffline": "You're offline. Some content may be unavailable.",
+  "genericSave": "Save",
+
+  "profileEditProfile": "Edit profile",
+  "profileMenuTooltip": "Settings",
+
+  "settingsTitle": "Settings",
+  "settingsSectionAccount": "Your account",
+  "settingsEditProfile": "Edit profile",
+  "settingsAccount": "Account",
+  "settingsAccountSubtitle": "Email, password",
+  "settingsSectionPrivacy": "Who can see your content",
+  "settingsBlocked": "Blocked",
+  "settingsSectionApp": "Your app and media",
+  "settingsLanguage": "Language",
+  "settingsLanguageSystem": "Device language",
+  "settingsAppearance": "Appearance",
+  "settingsThemeSystem": "Use device setting",
+  "settingsThemeLight": "Light",
+  "settingsThemeDark": "Dark",
+  "settingsSectionMore": "More info and support",
+  "settingsAbout": "About",
+  "settingsSectionLogin": "Login",
+  "settingsLogOut": "Log out {username}",
+  "@settingsLogOut": {
+    "placeholders": { "username": { "type": "String" } }
+  },
+  "settingsLogOutConfirmTitle": "Log out of your account?",
+  "settingsLogOutConfirm": "Log out",
+
+  "accountEmail": "Email",
+  "accountEmailNote": "Only you can see this.",
+  "accountChangePassword": "Change password",
+  "accountNewPassword": "New password",
+  "accountConfirmPassword": "Confirm new password",
+  "accountPasswordTooShort": "At least 8 characters",
+  "accountPasswordMismatch": "Passwords don't match",
+  "accountPasswordChanged": "Password changed.",
+
+  "blockedEmpty": "You haven't blocked anyone",
+  "blockedEmptyNote": "When you block someone, they show up here. They can't see your Ads or follow you.",
+  "blockedUnblock": "Unblock",
+  "blockedUnblockConfirmTitle": "Unblock @{username}?",
+  "@blockedUnblockConfirmTitle": {
+    "placeholders": { "username": { "type": "String" } }
+  },
+  "blockedUnblockConfirmNote": "They'll be able to see your Ads and follow you again. They won't be notified.",
+  "blockedLoadError": "Couldn't load your blocked accounts.",
+
+  "aboutOpenSourceLibraries": "Open source libraries",
+  "aboutOpenSourceLibrariesSubtitle": "Licenses of the software AdGag uses"
 }

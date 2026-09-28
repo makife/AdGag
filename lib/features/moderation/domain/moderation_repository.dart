@@ -1,3 +1,4 @@
+import "../../profile/domain/public_profile.dart";
 import "report_reason.dart";
 import "report_target_type.dart";
 
@@ -14,4 +15,9 @@ abstract interface class ModerationRepository {
 
   Future<void> blockUser(String userId);
   Future<void> unblockUser(String userId);
+
+  /// The signed-in user's own block list, newest first (Settings >
+  /// Blocked accounts). RLS `blocks_select_own` only ever returns the
+  /// caller's own rows — never who has blocked them.
+  Future<List<PublicProfile>> fetchBlockedUsers();
 }

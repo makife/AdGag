@@ -9,9 +9,10 @@ import UIKit
 // the preview is exactly what gets exported (transitions, effects, slow
 // motion, music mixed with the clips' own audio).
 //
-// Time model (same as Android): clip trims are SOURCE time; the composition
-// is scaled by 1/videoSpeed, so everything the viewer sees — transitions,
-// music placement, the 30s cap — is OUTPUT time.
+// Time model (same as Android): clip trims and speed ranges are SOURCE time;
+// each slow-motion range of the composition is stretched by 1/speed, so
+// everything the viewer sees — transitions, music placement, the 30s cap —
+// is OUTPUT time (SpeedMap converts).
 
 // MARK: - Kernels
 
@@ -246,7 +247,6 @@ enum EditorCompositionBuilder {
                                                            preferredTrackID: kCMPersistentTrackID_Invalid)
     else { throw NSError(domain: "AdGag", code: 10, userInfo: [NSLocalizedDescriptionKey: "Couldn't create tracks"]) }
 
-    let speed = state.videoSpeed
     var cursor = CMTime.zero
     var clipStarts: [CMTime] = []
     var transforms: [CGAffineTransform] = []
@@ -278,14 +278,23 @@ enum EditorCompositionBuilder {
       throw NSError(domain: "AdGag", code: 11, userInfo: [NSLocalizedDescriptionKey: "No playable clips"])
     }
 
-    // Slow motion: stretch the whole clip timeline (video + the clips' own audio).
-    let outputTotal = speed == 1 ? sourceTotal : CMTimeMultiplyByFloat64(sourceTotal, multiplier: 1 / speed)
-    if speed != 1 {
-      let full = CMTimeRange(start: .zero, duration: sourceTotal)
-      videoTrack.scaleTimeRange(full, toDuration: outputTotal)
-      if hasClipAudio { clipAudioTrack.scaleTimeRange(full, toDuration: outputTotal) }
+    // Slow motion: stretch each speed range (video + the clips' own audio).
+    // Last range first, so stretching one never moves the ones still to do.
+    let sourceTotalMs = Int64((CMTimeGetSeconds(sourceTotal) * 1000).rounded())
+    let ranges = state.speedRanges
+      .filter { $0.lengthMs > 0 && $0.startMs < sourceTotalMs }
+      .sorted { $0.startMs > $1.startMs }
+    for r in ranges {
+      let length = min(r.endMs, sourceTotalMs) - r.startMs
+      guard length > 0 else { continue }
+      let span = CMTimeRange(start: ms(r.startMs), duration: ms(length))
+      let stretched = CMTimeMultiplyByFloat64(ms(length), multiplier: 1 / r.speed)
+      videoTrack.scaleTimeRange(span, toDuration: stretched)
+      if hasClipAudio { clipAudioTrack.scaleTimeRange(span, toDuration: stretched) }
     }
+    let outputTotal = videoTrack.timeRange.end
     let outputDurationMs = Int64((CMTimeGetSeconds(outputTotal) * 1000).rounded())
+    let map = SpeedMap(state.speedRanges)
 
     let textOverlay: TextOverlayRenderer? = includeText
       ? { let r = TextOverlayRenderer(layers: state.textLayers, stickers: state.stickerLayers); return r.isEmpty ? nil : r }()
@@ -293,14 +302,10 @@ enum EditorCompositionBuilder {
 
     // One instruction per clip, tiling the whole output timeline exactly.
     var instructions: [AdGagInstruction] = []
+    let outStarts = clipStarts.map { ms(map.toOutput(Int64((CMTimeGetSeconds($0) * 1000).rounded()))) }
     for i in clipStarts.indices {
-      let start = speed == 1 ? clipStarts[i] : CMTimeMultiplyByFloat64(clipStarts[i], multiplier: 1 / speed)
-      let end: CMTime
-      if i == clipStarts.count - 1 {
-        end = outputTotal
-      } else {
-        end = speed == 1 ? clipStarts[i + 1] : CMTimeMultiplyByFloat64(clipStarts[i + 1], multiplier: 1 / speed)
-      }
+      let start = i == 0 ? CMTime.zero : outStarts[i]
+      let end = i == clipStarts.count - 1 ? outputTotal : outStarts[i + 1]
       let keptOut = Int64((CMTimeGetSeconds(CMTimeSubtract(end, start)) * 1000).rounded())
       instructions.append(AdGagInstruction(
         timeRange: CMTimeRange(start: start, end: end),

@@ -6,8 +6,8 @@ import UIKit
 /// Native iOS editor state — the counterpart of the Android EditorViewModel,
 /// with the same operations and the same time model:
 /// - clip SOURCE time: trims (and the clip strip);
-/// - OUTPUT time (source / videoSpeed): the 30s cap, music placement,
-///   transitions. The player's own time is OUTPUT time.
+/// - OUTPUT time (speed ranges applied — SpeedMap): the 30s cap, music
+///   placement, captions, transitions. The player's own time is OUTPUT time.
 ///
 /// Preview and export share one composition (EditorCompositionBuilder), so
 /// every edit is just "update state, rebuild the player item".
@@ -36,7 +36,12 @@ final class EditorViewModel: ObservableObject {
 
   @Published private(set) var rotationDegrees: Int
   @Published private(set) var isMuted: Bool
-  @Published private(set) var videoSpeed: Double
+  /// Slow-motion ranges (SpeedRange), SOURCE time — part of the Ad, not the whole video.
+  @Published private(set) var speedRanges: [SpeedRange]
+  /// The range being edited on the timeline's Speed row.
+  @Published var selectedSpeedRangeId: String?
+  /// A short, non-error message under the tools; clears itself.
+  @Published private(set) var notice: String?
   @Published private(set) var videoFilter: VideoFilter
   /// Captions (EditorText.swift). Pure overlay state: changing them never
   /// rebuilds the player — the preview draws them over the video, the
@@ -84,7 +89,7 @@ final class EditorViewModel: ObservableObject {
     musicPlayDurationMs = state.musicPlayDurationMs
     rotationDegrees = state.rotationDegrees
     isMuted = state.isMuted
-    videoSpeed = state.videoSpeed
+    speedRanges = state.speedRanges.sorted { $0.startMs < $1.startMs }
     videoFilter = state.videoFilter
     textLayers = state.textLayers
     stickerLayers = state.stickerLayers
@@ -109,11 +114,23 @@ final class EditorViewModel: ObservableObject {
   // MARK: Derived values
 
   var totalDurationMs: Int64 { clips.reduce(0) { $0 + $1.keptDurationMs } }
-  var outputDurationMs: Int64 { Int64(Double(totalDurationMs) / videoSpeed) }
-  var sourceBudgetMs: Int64 { Int64(Double(EditorLimits.maxTotalMs) * videoSpeed) }
-  var remainingMs: Int64 { max(0, sourceBudgetMs - totalDurationMs) }
+  var speedMap: SpeedMap { SpeedMap(speedRanges) }
+  func toOutputMs(_ sourceMs: Int64) -> Int64 { speedMap.toOutput(sourceMs) }
+  func toSourceMs(_ outputMs: Int64) -> Int64 { speedMap.toSource(outputMs) }
+  var outputDurationMs: Int64 { toOutputMs(totalDurationMs) }
+  private var outputRemainingMs: Int64 { max(0, EditorLimits.maxTotalMs - outputDurationMs) }
+  /// SOURCE time still free — the camera's limit for an extra take (it lands after every range, at 1x).
+  var remainingMs: Int64 { outputRemainingMs }
   var canAddClip: Bool { remainingMs >= EditorLimits.minClipMs }
-  func canUseVideoSpeed(_ speed: Double) -> Bool { Int64(Double(totalDurationMs) / speed) <= EditorLimits.maxTotalMs }
+
+  /// The longest clip `index` may become. Conservative: extra footage could
+  /// fall inside the slowest range overlapping this clip.
+  func maxKeptMs(for index: Int) -> Int64 {
+    guard clips.indices.contains(index) else { return 0 }
+    let start = clipStartMs(index)
+    let slowest = speedMap.minSpeed(from: start, to: start + clips[index].keptDurationMs)
+    return clips[index].keptDurationMs + Int64(Double(outputRemainingMs) * slowest)
+  }
   var hasMusic: Bool { musicOriginalPath != nil && musicDurationMs != nil }
   var musicCoveredMs: Int64 {
     musicLoop && musicPlayDurationMs > 0
@@ -121,7 +138,7 @@ final class EditorViewModel: ObservableObject {
       : musicPlayDurationMs
   }
   /// Playhead on the clip strip, SOURCE time.
-  var globalPositionMs: Int64 { Int64(Double(positionOutMs) * videoSpeed) }
+  var globalPositionMs: Int64 { toSourceMs(positionOutMs) }
 
   func clipStartMs(_ index: Int) -> Int64 { clips.prefix(index).reduce(0) { $0 + $1.keptDurationMs } }
 
@@ -131,7 +148,7 @@ final class EditorViewModel: ObservableObject {
       musicSpeed: musicSpeed, musicFadeInMs: musicFadeInMs, musicFadeOutMs: musicFadeOutMs, musicLoop: musicLoop,
       musicStartOffsetMs: musicStartOffsetMs, musicSourceStartMs: musicSourceStartMs,
       musicPlayDurationMs: musicPlayDurationMs, rotationDegrees: rotationDegrees, isMuted: isMuted,
-      videoSpeed: videoSpeed, videoFilter: videoFilter, textLayers: textLayers,
+      speedRanges: speedRanges, videoFilter: videoFilter, textLayers: textLayers,
       stickerLayers: stickerLayers)
   }
 
@@ -146,7 +163,7 @@ final class EditorViewModel: ObservableObject {
   /// Seeks to a SOURCE-time position on the clip strip.
   func seekToGlobal(_ sourceMs: Int64) {
     let clamped = min(max(sourceMs, 0), max(totalDurationMs - 1, 0))
-    let outMs = Int64(Double(clamped) / videoSpeed)
+    let outMs = toOutputMs(clamped)
     positionOutMs = outMs
     player.seek(to: EditorCompositionBuilder.ms(outMs), toleranceBefore: .zero, toleranceAfter: .zero)
   }
@@ -206,12 +223,23 @@ final class EditorViewModel: ObservableObject {
   func setClipTrim(index: Int, startMs: Int64, endMs: Int64) {
     guard clips.indices.contains(index) else { return }
     let clip = clips[index]
-    let others = totalDurationMs - clip.keptDurationMs
-    let maxKept = max(sourceBudgetMs - others, EditorLimits.minClipMs)
+    let maxKept = max(maxKeptMs(for: index), EditorLimits.minClipMs)
     let start = min(max(startMs, 0), clip.sourceDurationMs)
     let end = min(max(endMs, start), min(clip.sourceDurationMs, start + maxKept))
+    // Keep every speed range on the same FOOTAGE: positions inside this clip
+    // follow its content, positions after it shift by the change.
+    let clipStart = clipStartMs(index)
+    let oldKept = clip.keptDurationMs
     clips[index].trimStartMs = start
     clips[index].trimEndMs = end
+    speedRanges = speedRanges.remapped(totalMs: totalDurationMs) { g in
+      if g < clipStart { return g }
+      if g <= clipStart + oldKept {
+        return clipStart + (min(max(clip.trimStartMs + (g - clipStart), start), end) - start)
+      }
+      return g + (end - start) - oldKept
+    }
+    dropStaleSpeedSelection()
     clampMusicToTimeline()
     rebuild(resumeAtSourceMs: clipStartMs(index), play: isPlaying)
   }
@@ -229,7 +257,14 @@ final class EditorViewModel: ObservableObject {
 
   func removeClip(_ index: Int) {
     guard clips.count > 1, clips.indices.contains(index) else { return }
+    let clipStart = clipStartMs(index)
+    let kept = clips[index].keptDurationMs
     clips.remove(at: index)
+    // Ranges on the removed footage collapse (and are dropped); later ones move left.
+    speedRanges = speedRanges.remapped(totalMs: totalDurationMs) { g in
+      g < clipStart ? g : (g <= clipStart + kept ? clipStart : g - kept)
+    }
+    dropStaleSpeedSelection()
     if !transitions.isEmpty { transitions.remove(at: max(index - 1, 0)) }
     selectedClipIndex = min(selectedClipIndex, clips.count - 1)
     clampMusicToTimeline()
@@ -262,8 +297,8 @@ final class EditorViewModel: ObservableObject {
   /// A bit before the boundary — far enough back to show a fade-out too (lead is OUTPUT time).
   private func replayStart(_ boundary: Int) -> Int64 {
     guard transitions.indices.contains(boundary) else { return 0 }
-    let lead = Int64(Double(max(1000, transitions[boundary].durationMs + 500)) * videoSpeed)
-    return max(0, clipStartMs(boundary + 1) - lead)
+    let lead = max(1000, transitions[boundary].durationMs + 500)
+    return toSourceMs(max(0, toOutputMs(clipStartMs(boundary + 1)) - lead))
   }
 
   // MARK: Music
@@ -370,11 +405,139 @@ final class EditorViewModel: ObservableObject {
     rebuild(resumeAtSourceMs: currentSourcePosition(), play: isPlaying)
   }
 
-  func changeVideoSpeed(_ speed: Double) {
-    guard speed != videoSpeed, canUseVideoSpeed(speed) else { return }
-    videoSpeed = speed
+  // MARK: Speed ranges (slow motion on part of the Ad) — same rules as Android
+
+  /// A 0.5x range at the playhead (fitted between neighbours and under the
+  /// 30s cap), or the range the playhead is already in. Nil if there's no room.
+  @discardableResult
+  func addSpeedRangeAtPlayhead() -> SpeedRange? {
+    pause()
+    let g = min(max(globalPositionMs, 0), totalDurationMs)
+    if let existing = speedRanges.first(where: { g >= $0.startMs && g < $0.endMs }) {
+      selectedSpeedRangeId = existing.id
+      return existing
+    }
+    guard let speed = [0.5, 0.75].first(where: { maxRangeLengthMs(except: nil, speed: $0) >= EditorLimits.minSpeedRangeMs })
+    else { return nil }
+    let gapStart = speedRanges.filter { $0.endMs <= g }.map(\.endMs).max() ?? 0
+    let gapEnd = speedRanges.filter { $0.startMs > g }.map(\.startMs).min() ?? totalDurationMs
+    let length = min(EditorLimits.defaultSpeedRangeMs, gapEnd - gapStart, maxRangeLengthMs(except: nil, speed: speed))
+    guard length >= EditorLimits.minSpeedRangeMs else { return nil }
+    let start = max(min(g, gapEnd - length), gapStart)
+    let range = SpeedRange(startMs: start, endMs: start + length, speed: speed)
+    commitSpeedRanges(speedRanges + [range], startAt: start)
+    selectedSpeedRangeId = range.id
+    return range
+  }
+
+  /// How long a range at `speed` may be without pushing the Ad past 30s
+  /// (ignoring range `except`). A range at `speed` adds length × (1/speed − 1).
+  func maxRangeLengthMs(except id: String?, speed: Double) -> Int64 {
+    let without = SpeedMap(speedRanges.filter { $0.id != id }).toOutput(totalDurationMs)
+    return lengthFitting(room: EditorLimits.maxTotalMs - without, speed: speed)
+  }
+
+  private func lengthFitting(room: Int64, speed: Double) -> Int64 {
+    let extraPerMs = 1 / speed - 1
+    guard extraPerMs > 0 else { return totalDurationMs }
+    return min(Int64(Double(max(room, 0)) / extraPerMs), totalDurationMs)
+  }
+
+  func canUseRangeSpeed(_ id: String, _ speed: Double) -> Bool {
+    guard let r = speedRanges.first(where: { $0.id == id }) else { return false }
+    return r.lengthMs <= maxRangeLengthMs(except: id, speed: speed)
+  }
+
+  func setSpeedRangeSpeed(_ id: String, _ speed: Double) {
+    guard let r = speedRanges.first(where: { $0.id == id }), r.speed != speed, canUseRangeSpeed(id, speed) else { return }
+    commitSpeedRanges(speedRanges.map { $0.id == id ? SpeedRange(id: id, startMs: $0.startMs, endMs: $0.endMs, speed: speed) : $0 },
+                      startAt: r.startMs)
+  }
+
+  /// Where range `id` may extend to: the end of the range before it, the start of the one after it.
+  func speedRangeLimits(_ id: String) -> (Int64, Int64) {
+    guard let r = speedRanges.first(where: { $0.id == id }) else { return (0, totalDurationMs) }
+    let lower = speedRanges.filter { $0.id != id && $0.endMs <= r.startMs }.map(\.endMs).max() ?? 0
+    let upper = speedRanges.filter { $0.id != id && $0.startMs >= r.endMs }.map(\.startMs).min() ?? totalDurationMs
+    return (lower, upper)
+  }
+
+  /// Timeline drag of a range's edges (SOURCE time), clamped to neighbours,
+  /// a minimum length and the 30s cap — shortened from the edge that moved.
+  func setSpeedRangeBounds(_ id: String, startMs: Int64, endMs: Int64, movedStart: Bool) {
+    guard let r = speedRanges.first(where: { $0.id == id }) else { return }
+    let (lower, upper) = speedRangeLimits(id)
+    var s = min(max(startMs, lower), upper)
+    var e = min(max(endMs, lower), upper)
+    let maxLen = maxRangeLengthMs(except: id, speed: r.speed)
+    if e - s > maxLen { if movedStart { s = e - maxLen } else { e = s + maxLen } }
+    if e - s < EditorLimits.minSpeedRangeMs {
+      if movedStart { s = max(e - EditorLimits.minSpeedRangeMs, lower) } else { e = min(s + EditorLimits.minSpeedRangeMs, upper) }
+      if e - s < EditorLimits.minSpeedRangeMs { return }
+    }
+    guard s != r.startMs || e != r.endMs else { return }
+    commitSpeedRanges(speedRanges.map { $0.id == id ? SpeedRange(id: id, startMs: s, endMs: e, speed: r.speed) : $0 }, startAt: s)
+  }
+
+  func canApplySpeedToWholeVideo(_ id: String) -> Bool {
+    guard let r = speedRanges.first(where: { $0.id == id }) else { return false }
+    return totalDurationMs <= lengthFitting(room: EditorLimits.maxTotalMs - totalDurationMs, speed: r.speed)
+  }
+
+  /// Stretches range `id` over the whole Ad — the old whole-video slow motion.
+  func applySpeedToWholeVideo(_ id: String) {
+    guard canApplySpeedToWholeVideo(id), let r = speedRanges.first(where: { $0.id == id }) else { return }
+    commitSpeedRanges([SpeedRange(id: id, startMs: 0, endMs: totalDurationMs, speed: r.speed)], startAt: 0)
+    selectedSpeedRangeId = id
+  }
+
+  func removeSpeedRange(_ id: String) {
+    guard let r = speedRanges.first(where: { $0.id == id }) else { return }
+    if selectedSpeedRangeId == id { selectedSpeedRangeId = nil }
+    commitSpeedRanges(speedRanges.filter { $0.id != id }, startAt: r.startMs)
+  }
+
+  private func commitSpeedRanges(_ ranges: [SpeedRange], startAt: Int64) {
+    speedRanges = ranges.sorted { $0.startMs < $1.startMs }
+    dropStaleSpeedSelection()
     clampMusicToTimeline()
-    rebuild(resumeAtSourceMs: 0, play: true)
+    clampOverlaysToTimeline()
+    rebuild(resumeAtSourceMs: max(0, startAt - 500), play: isPlaying)
+  }
+
+  private func dropStaleSpeedSelection() {
+    if let id = selectedSpeedRangeId, !speedRanges.contains(where: { $0.id == id }) { selectedSpeedRangeId = nil }
+  }
+
+  /// Captions/stickers are OUTPUT time: keep them inside a shorter Ad.
+  private func clampOverlaysToTimeline() {
+    let total = outputDurationMs
+    func clamp(_ s: Int64, _ e: Int64) -> (Int64, Int64) {
+      let start = min(max(s, 0), max(total - 300, 0))
+      return (start, min(max(e, start + 300), max(total, start + 300)))
+    }
+    for i in textLayers.indices {
+      let (s, e) = clamp(textLayers[i].startMs, textLayers[i].endMs)
+      if s != textLayers[i].startMs || e != textLayers[i].endMs {
+        textLayers[i].startMs = s
+        textLayers[i].endMs = e
+      }
+    }
+    for i in stickerLayers.indices {
+      let (s, e) = clamp(stickerLayers[i].startMs, stickerLayers[i].endMs)
+      if s != stickerLayers[i].startMs || e != stickerLayers[i].endMs {
+        stickerLayers[i].startMs = s
+        stickerLayers[i].endMs = e
+      }
+    }
+  }
+
+  func showNotice(_ text: String) {
+    notice = text
+    Task { @MainActor [weak self] in
+      try? await Task.sleep(nanoseconds: 4_000_000_000)
+      if self?.notice == text { self?.notice = nil }
+    }
   }
 
   func changeFilter(_ filter: VideoFilter) {
@@ -392,7 +555,7 @@ final class EditorViewModel: ObservableObject {
   }
 
   func seekToOutput(_ outMs: Int64) {
-    seekToGlobal(Int64(Double(outMs) * videoSpeed))
+    seekToGlobal(toSourceMs(outMs))
   }
 
   @discardableResult

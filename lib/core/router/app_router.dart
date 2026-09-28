@@ -15,6 +15,10 @@ import "../../features/notifications/presentation/activity_screen.dart";
 import "../../features/profile/presentation/screens/edit_profile_screen.dart";
 import "../../features/profile/presentation/screens/profile_screen.dart";
 import "../../features/profile/presentation/screens/public_profile_screen.dart";
+import "../../features/settings/presentation/screens/about_screen.dart";
+import "../../features/settings/presentation/screens/account_settings_screen.dart";
+import "../../features/settings/presentation/screens/blocked_accounts_screen.dart";
+import "../../features/settings/presentation/screens/settings_screen.dart";
 import "../../features/subjects/presentation/screens/subject_screen.dart";
 import "app_shell.dart";
 import "route_paths.dart";
@@ -87,6 +91,22 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: RoutePaths.editProfile,
         builder: (BuildContext context, GoRouterState state) => const EditProfileScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.settings,
+        builder: (BuildContext context, GoRouterState state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.settingsAccount,
+        builder: (BuildContext context, GoRouterState state) => const AccountSettingsScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.settingsBlocked,
+        builder: (BuildContext context, GoRouterState state) => const BlockedAccountsScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.settingsAbout,
+        builder: (BuildContext context, GoRouterState state) => const AboutScreen(),
       ),
       GoRoute(
         path: RoutePaths.adDetail,
