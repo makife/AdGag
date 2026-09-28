@@ -1485,6 +1485,11 @@ Everything is committed and pushed to `master` (github.com/makife/AdGag). Androi
 - **Sound FX**: 39 CC0 sounds (30 Freesound — each page checked for CC0 — + Kenney jingles/voice) built by `android/tools/build_sfx.py` into `android/app/src/main/assets/sfx` and `ios/Runner/Editor/AdGagSfx` (~900KB, MP3). Android preview: SoundPool fired per frame as the playhead passes (`updatePreviewSounds`); export: extra audio-only sequences (non-overlapping effects share one). iOS: extra audio tracks in the shared composition. Timeline: sounds are green bars on the text/sticker row (move only). **Not device-tested.**
 - **Disk**: C: dropped to 1.9GB this session; freed ~2GB by deleting debug build intermediates (`build/app/intermediates/*/debug`) and the old debug APK — safe, regenerable.
 
+## Play upload key + Android CI (2026-09-28)
+
+- Release builds are signed with the Play UPLOAD key when `android/key.properties` exists (points at `android/adgag-upload.jks`, alias `upload`, SHA-256 06:D3:F0:7F:…:F5:7E:D5). BOTH files are gitignored and exist only on the owner's machine (+ GitHub secrets) — losing them means asking Google to reset the upload key (possible with Play App Signing). Without the file, release falls back to the debug key.
+- `.github/workflows/android-build.yml` builds the AAB + APK (artifacts) on manual run / `v*` tags / app pushes to master; needs secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ENV_DEV_JSON` (fails fast without the last). CI uses `--build-number=${{ github.run_number }}` so every upload's versionCode grows; local builds use pubspec's `+N`.
+
 ## Status: all 8 development-order phases (section 52) implemented
 
 Phases A through H are done — auth, social graph, video pipeline, creation flow, engagement (SOLD/REVIEWS/AD THIS/share/subject pages), discovery/ranking, safety (reports/blocks/rate-limiting), and polish (notifications/deep-link target/analytics/onboarding hint). See the per-phase git commits and README's "Implementation Milestones" section for what shipped in each.
