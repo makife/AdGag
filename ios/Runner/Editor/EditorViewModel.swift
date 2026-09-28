@@ -49,6 +49,8 @@ final class EditorViewModel: ObservableObject {
   @Published private(set) var textLayers: [TextLayer]
   /// Animated stickers — overlay state like the captions.
   @Published private(set) var stickerLayers: [StickerLayer]
+  /// Sound effects — part of the composition (preview and export mix them).
+  @Published private(set) var soundLayers: [SoundLayer]
   /// The caption being edited/dragged in the preview.
   @Published var selectedTextId: String?
   /// Width / height of the rendered frame (the rectangle captions live in).
@@ -93,6 +95,7 @@ final class EditorViewModel: ObservableObject {
     videoFilter = state.videoFilter
     textLayers = state.textLayers
     stickerLayers = state.stickerLayers
+    soundLayers = state.soundLayers
 
     if let path = musicOriginalPath, let songMs = Self.durationMs(path: path) {
       musicDurationMs = Int64(Double(songMs) / musicSpeed)
@@ -149,7 +152,7 @@ final class EditorViewModel: ObservableObject {
       musicStartOffsetMs: musicStartOffsetMs, musicSourceStartMs: musicSourceStartMs,
       musicPlayDurationMs: musicPlayDurationMs, rotationDegrees: rotationDegrees, isMuted: isMuted,
       speedRanges: speedRanges, videoFilter: videoFilter, textLayers: textLayers,
-      stickerLayers: stickerLayers)
+      stickerLayers: stickerLayers, soundLayers: soundLayers)
   }
 
   // MARK: Playback
@@ -627,6 +630,42 @@ final class EditorViewModel: ObservableObject {
       stickerLayers[i].startMs = s
       stickerLayers[i].endMs = e
     }
+    // A sound plays its whole length: only its start moves. It's part of the
+    // composition, so the preview is rebuilt.
+    if let i = soundLayers.firstIndex(where: { $0.id == id }) {
+      let len = SfxStore.shared.byId(soundLayers[i].sfxId)?.durationMs ?? 0
+      soundLayers[i].startMs = min(s, max(total - len, 0))
+      rebuild(resumeAtSourceMs: currentSourcePosition(), play: false)
+    }
+  }
+
+  // MARK: Sound effects
+
+  @discardableResult
+  func addSound(_ def: SfxDef) -> SoundLayer {
+    pause()
+    let total = outputDurationMs
+    let now = min(max(currentOutputMs(), 0), total)
+    let layer = SoundLayer(sfxId: def.id, startMs: min(now, max(total - def.durationMs, 0)))
+    soundLayers.append(layer)
+    selectedTextId = layer.id
+    rebuild(resumeAtSourceMs: currentSourcePosition(), play: false)
+    return layer
+  }
+
+  func updateSound(_ layer: SoundLayer) {
+    guard let i = soundLayers.firstIndex(where: { $0.id == layer.id }) else { return }
+    var l = layer
+    let len = SfxStore.shared.byId(l.sfxId)?.durationMs ?? 0
+    l.startMs = min(l.startMs, max(outputDurationMs - len, 0))
+    soundLayers[i] = l
+    rebuild(resumeAtSourceMs: currentSourcePosition(), play: false)
+  }
+
+  func removeSound(_ id: String) {
+    soundLayers.removeAll { $0.id == id }
+    if selectedTextId == id { selectedTextId = nil }
+    rebuild(resumeAtSourceMs: currentSourcePosition(), play: false)
   }
 
   @discardableResult

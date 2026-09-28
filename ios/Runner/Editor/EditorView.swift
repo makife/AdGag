@@ -18,6 +18,8 @@ struct EditorView: View {
     case transition(Int), music, speed(String), effects, text(String)
     /// Sticker picker: nil = adding, else the sticker being changed.
     case stickers(String?)
+    /// Sound FX picker: same convention.
+    case sounds(String?)
   }
 
   @State private var panel: Panel?
@@ -25,12 +27,13 @@ struct EditorView: View {
   /// The bottom panel dragged down out of the way (the video gets the space).
   @State private var panelCollapsed = false
 
-  private enum BottomKind: Hashable { case editor, text, stickers }
+  private enum BottomKind: Hashable { case editor, text, stickers, sounds }
 
   private var bottomKind: BottomKind {
     switch panel {
     case .text: return .text
     case .stickers: return .stickers
+    case .sounds: return .sounds
     default: return .editor
     }
   }
@@ -101,7 +104,13 @@ struct EditorView: View {
   /// Tapping a selected caption/sticker (or its timeline bar) opens the matching editor.
   private func editOverlay(_ id: String) {
     viewModel.pause()
-    panel = viewModel.stickerLayers.contains { $0.id == id } ? .stickers(id) : .text(id)
+    if viewModel.stickerLayers.contains(where: { $0.id == id }) {
+      panel = .stickers(id)
+    } else if viewModel.soundLayers.contains(where: { $0.id == id }) {
+      panel = .sounds(id)
+    } else {
+      panel = .text(id)
+    }
   }
 
   /// Slow-mo tool / the Speed row's "+": a range at the playhead (or the one
@@ -128,7 +137,8 @@ struct EditorView: View {
   private var bottomPanel: some View {
     VStack(spacing: 0) {
       PanelHandle(collapsed: $panelCollapsed,
-                  label: bottomKind == .text ? "Text" : bottomKind == .stickers ? "Stickers" : "Editor",
+                  label: bottomKind == .text ? "Text" : bottomKind == .stickers ? "Stickers"
+                    : bottomKind == .sounds ? "Sound FX" : "Editor",
                   onDone: bottomKind == .editor ? nil : { panel = nil })
       if !panelCollapsed {
         Group {
@@ -137,6 +147,8 @@ struct EditorView: View {
             TextEditorPanel(viewModel: viewModel, layerId: id, onClose: { panel = nil })
           case .stickers(let id):
             StickerPanel(viewModel: viewModel, editingId: id, onClose: { panel = nil })
+          case .sounds(let id):
+            SoundPanel(viewModel: viewModel, editingId: id, onClose: { panel = nil })
           default:
             editingPanel
           }
@@ -207,6 +219,12 @@ struct EditorView: View {
           viewModel.pause()
           panel = .stickers(nil)
         }
+        ToolButton(icon: "waveform",
+                   label: viewModel.soundLayers.isEmpty ? "Sound FX" : "Sound FX (\(viewModel.soundLayers.count))",
+                   active: !viewModel.soundLayers.isEmpty) {
+          viewModel.pause()
+          panel = .sounds(nil)
+        }
         ToolButton(icon: "rotate.right", label: "Rotate", active: false) { viewModel.rotateNinety() }
         ToolButton(icon: viewModel.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
                    label: viewModel.isMuted ? "Muted" : "Mute", active: viewModel.isMuted) { viewModel.toggleMute() }
@@ -241,7 +259,7 @@ struct EditorView: View {
                                 onRemoved: { self.panel = nil })
         case .speed(let id): SpeedPanel(viewModel: viewModel, rangeId: id, onRemoved: { self.panel = nil })
         case .effects: EffectsPanel(viewModel: viewModel)
-        case .text, .stickers: EmptyView()
+        case .text, .stickers, .sounds: EmptyView()
         }
       }
       .padding(16)
@@ -254,7 +272,7 @@ struct EditorView: View {
 
   private func isTextPanel(_ panel: Panel) -> Bool {
     switch panel {
-    case .text, .stickers: return true
+    case .text, .stickers, .sounds: return true
     default: return false
     }
   }
@@ -267,6 +285,7 @@ struct EditorView: View {
     case .effects: return "Effects"
     case .text: return "Text"
     case .stickers: return "Stickers"
+    case .sounds: return "Sound FX"
     }
   }
 }

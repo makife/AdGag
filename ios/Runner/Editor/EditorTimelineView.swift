@@ -88,7 +88,7 @@ struct EditorTimelineView: View {
         }
       }
 
-      if !viewModel.textLayers.isEmpty || !viewModel.stickerLayers.isEmpty {
+      if !viewModel.textLayers.isEmpty || !viewModel.stickerLayers.isEmpty || !viewModel.soundLayers.isEmpty {
         let selected = overlayBars(viewModel).first { $0.id == viewModel.selectedTextId }
         HStack {
           if let selected {
@@ -97,7 +97,7 @@ struct EditorTimelineView: View {
             Spacer()
             label("\(formatClock(selected.startMs)) – \(formatClock(selected.endMs))")
           } else {
-            label("Text & stickers · tap one to select")
+            label("Text, stickers & sounds · tap one to select")
             Spacer()
           }
         }
@@ -503,6 +503,10 @@ private func overlayBars(_ viewModel: EditorViewModel) -> [OverlayBar] {
   viewModel.stickerLayers.map { s in
     OverlayBar(id: s.id, kind: "Sticker", label: StickerStore.shared.byId(s.stickerId)?.label ?? "Sticker",
                startMs: s.startMs, endMs: s.endMs, color: Color(red: 1, green: 0.7, blue: 0))
+  } + viewModel.soundLayers.compactMap { l -> OverlayBar? in
+    guard let def = SfxStore.shared.byId(l.sfxId) else { return nil }
+    return OverlayBar(id: l.id, kind: "Sound", label: def.label, startMs: l.startMs,
+                      endMs: l.startMs + def.durationMs, color: Color(red: 0.18, green: 0.82, blue: 0.54))
   } + viewModel.textLayers.map { t in
     let c = argbComponents(t.color)
     return OverlayBar(id: t.id, kind: "Text", label: t.text.components(separatedBy: "\n").first ?? "",

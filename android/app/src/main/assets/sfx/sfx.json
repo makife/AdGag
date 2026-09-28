@@ -1,0 +1,314 @@
+[
+ {
+  "id": "applause",
+  "label": "Applause",
+  "category": "Reactions",
+  "file": "applause.mp3",
+  "durationMs": 6000,
+  "credit": "moxobna — freesound.org/s/32260 (CC0)"
+ },
+ {
+  "id": "cheer",
+  "label": "Cheer",
+  "category": "Reactions",
+  "file": "cheer.mp3",
+  "durationMs": 4133,
+  "credit": "jayfrosting — freesound.org/s/333404 (CC0)"
+ },
+ {
+  "id": "yay",
+  "label": "Yay",
+  "category": "Reactions",
+  "file": "yay.mp3",
+  "durationMs": 3391,
+  "credit": "dr_skitz — freesound.org/s/353923 (CC0)"
+ },
+ {
+  "id": "laugh",
+  "label": "Laugh",
+  "category": "Reactions",
+  "file": "laugh.mp3",
+  "durationMs": 3445,
+  "credit": "cognito perceptu — freesound.org/s/17121 (CC0)"
+ },
+ {
+  "id": "aww",
+  "label": "Aww",
+  "category": "Reactions",
+  "file": "aww.mp3",
+  "durationMs": 1997,
+  "credit": "phmiller42 — freesound.org/s/124996 (CC0)"
+ },
+ {
+  "id": "boo",
+  "label": "Boo",
+  "category": "Reactions",
+  "file": "boo.mp3",
+  "durationMs": 3841,
+  "credit": "dr_skitz — freesound.org/s/353925 (CC0)"
+ },
+ {
+  "id": "gasp",
+  "label": "Gasp",
+  "category": "Reactions",
+  "file": "gasp.mp3",
+  "durationMs": 2754,
+  "credit": "deleted_user_2104797 — freesound.org/s/324898 (CC0)"
+ },
+ {
+  "id": "wow",
+  "label": "Wow",
+  "category": "Reactions",
+  "file": "wow.mp3",
+  "durationMs": 1428,
+  "credit": "ahab2000 — freesound.org/s/398933 (CC0)"
+ },
+ {
+  "id": "rimshot",
+  "label": "Ba dum tss",
+  "category": "Comedy",
+  "file": "rimshot.mp3",
+  "durationMs": 932,
+  "credit": "Sajmund — freesound.org/s/132418 (CC0)"
+ },
+ {
+  "id": "sad_trombone",
+  "label": "Sad trombone",
+  "category": "Comedy",
+  "file": "sad_trombone.mp3",
+  "durationMs": 4704,
+  "credit": "kirbydx — freesound.org/s/175409 (CC0)"
+ },
+ {
+  "id": "record_scratch",
+  "label": "Record scratch",
+  "category": "Comedy",
+  "file": "record_scratch.mp3",
+  "durationMs": 1277,
+  "credit": "simkiott — freesound.org/s/43404 (CC0)"
+ },
+ {
+  "id": "slide_whistle",
+  "label": "Slide whistle",
+  "category": "Comedy",
+  "file": "slide_whistle.mp3",
+  "durationMs": 842,
+  "credit": "martian — freesound.org/s/403002 (CC0)"
+ },
+ {
+  "id": "cartoon_fall",
+  "label": "Cartoon fall",
+  "category": "Comedy",
+  "file": "cartoon_fall.mp3",
+  "durationMs": 2014,
+  "credit": "plasterbrain — freesound.org/s/395443 (CC0)"
+ },
+ {
+  "id": "boing",
+  "label": "Boing",
+  "category": "Comedy",
+  "file": "boing.mp3",
+  "durationMs": 921,
+  "credit": "magnuswaker — freesound.org/s/540790 (CC0)"
+ },
+ {
+  "id": "pop",
+  "label": "Pop",
+  "category": "Comedy",
+  "file": "pop.mp3",
+  "durationMs": 228,
+  "credit": "Breviceps — freesound.org/s/447910 (CC0)"
+ },
+ {
+  "id": "kiss",
+  "label": "Kiss",
+  "category": "Comedy",
+  "file": "kiss.mp3",
+  "durationMs": 548,
+  "credit": "trijohnstone — freesound.org/s/536335 (CC0)"
+ },
+ {
+  "id": "crickets",
+  "label": "Crickets",
+  "category": "Comedy",
+  "file": "crickets.mp3",
+  "durationMs": 709,
+  "credit": "Sojan — freesound.org/s/400663 (CC0)"
+ },
+ {
+  "id": "cha_ching",
+  "label": "Cha-ching",
+  "category": "Sale",
+  "file": "cha_ching.mp3",
+  "durationMs": 1551,
+  "credit": "Zott820 — freesound.org/s/209578 (CC0)"
+ },
+ {
+  "id": "air_horn",
+  "label": "Air horn",
+  "category": "Sale",
+  "file": "air_horn.mp3",
+  "durationMs": 1611,
+  "credit": "jacksonacademyashmore — freesound.org/s/414208 (CC0)"
+ },
+ {
+  "id": "drum_roll",
+  "label": "Drum roll",
+  "category": "Sale",
+  "file": "drum_roll.mp3",
+  "durationMs": 5971,
+  "credit": "adriann — freesound.org/s/191718 (CC0)"
+ },
+ {
+  "id": "ding",
+  "label": "Ding",
+  "category": "Sale",
+  "file": "ding.mp3",
+  "durationMs": 2636,
+  "credit": "tonmayster — freesound.org/s/685111 (CC0)"
+ },
+ {
+  "id": "tada",
+  "label": "Ta-da",
+  "category": "Sale",
+  "file": "tada.mp3",
+  "durationMs": 1541,
+  "credit": "plasterbrain — freesound.org/s/397355 (CC0)"
+ },
+ {
+  "id": "sparkle",
+  "label": "Sparkle",
+  "category": "Sale",
+  "file": "sparkle.mp3",
+  "durationMs": 813,
+  "credit": "MLaudio — freesound.org/s/511485 (CC0)"
+ },
+ {
+  "id": "whoosh",
+  "label": "Whoosh",
+  "category": "Transitions",
+  "file": "whoosh.mp3",
+  "durationMs": 426,
+  "credit": "qubodup — freesound.org/s/60013 (CC0)"
+ },
+ {
+  "id": "swoosh",
+  "label": "Swoosh",
+  "category": "Transitions",
+  "file": "swoosh.mp3",
+  "durationMs": 2137,
+  "credit": "Halgrimm — freesound.org/s/169867 (CC0)"
+ },
+ {
+  "id": "dramatic",
+  "label": "Dramatic",
+  "category": "Drama",
+  "file": "dramatic.mp3",
+  "durationMs": 1749,
+  "credit": "ecfike — freesound.org/s/183500 (CC0)"
+ },
+ {
+  "id": "surprise",
+  "label": "Surprise",
+  "category": "Drama",
+  "file": "surprise.mp3",
+  "durationMs": 6000,
+  "credit": "qubodup — freesound.org/s/814055 (CC0)"
+ },
+ {
+  "id": "explosion",
+  "label": "Explosion",
+  "category": "Drama",
+  "file": "explosion.mp3",
+  "durationMs": 1404,
+  "credit": "deleted_user_364925 — freesound.org/s/47252 (CC0)"
+ },
+ {
+  "id": "ticking",
+  "label": "Ticking",
+  "category": "Drama",
+  "file": "ticking.mp3",
+  "durationMs": 3127,
+  "credit": "AntumDeluge — freesound.org/s/188033 (CC0)"
+ },
+ {
+  "id": "heartbeat",
+  "label": "Heartbeat",
+  "category": "Drama",
+  "file": "heartbeat.mp3",
+  "durationMs": 3582,
+  "credit": "Lunardrive — freesound.org/s/22416 (CC0)"
+ },
+ {
+  "id": "jingle_sax",
+  "label": "Sax jingle",
+  "category": "Jingles",
+  "file": "jingle_sax.mp3",
+  "durationMs": 846,
+  "credit": "Kenney — kenney.nl (CC0)"
+ },
+ {
+  "id": "jingle_pizzi",
+  "label": "Pizzicato",
+  "category": "Jingles",
+  "file": "jingle_pizzi.mp3",
+  "durationMs": 1142,
+  "credit": "Kenney — kenney.nl (CC0)"
+ },
+ {
+  "id": "jingle_steel",
+  "label": "Steel drums",
+  "category": "Jingles",
+  "file": "jingle_steel.mp3",
+  "durationMs": 1387,
+  "credit": "Kenney — kenney.nl (CC0)"
+ },
+ {
+  "id": "jingle_hit",
+  "label": "Big finish",
+  "category": "Jingles",
+  "file": "jingle_hit.mp3",
+  "durationMs": 607,
+  "credit": "Kenney — kenney.nl (CC0)"
+ },
+ {
+  "id": "jingle_8bit",
+  "label": "8-bit win",
+  "category": "Jingles",
+  "file": "jingle_8bit.mp3",
+  "durationMs": 572,
+  "credit": "Kenney — kenney.nl (CC0)"
+ },
+ {
+  "id": "vo_congrats",
+  "label": "\"Congratulations!\"",
+  "category": "Voice",
+  "file": "vo_congrats.mp3",
+  "durationMs": 1503,
+  "credit": "Kenney — kenney.nl (CC0)"
+ },
+ {
+  "id": "vo_highscore",
+  "label": "\"New high score!\"",
+  "category": "Voice",
+  "file": "vo_highscore.mp3",
+  "durationMs": 1200,
+  "credit": "Kenney — kenney.nl (CC0)"
+ },
+ {
+  "id": "vo_go",
+  "label": "\"Go!\"",
+  "category": "Voice",
+  "file": "vo_go.mp3",
+  "durationMs": 619,
+  "credit": "Kenney — kenney.nl (CC0)"
+ },
+ {
+  "id": "vo_level_up",
+  "label": "\"Level up!\"",
+  "category": "Voice",
+  "file": "vo_level_up.mp3",
+  "durationMs": 794,
+  "credit": "Kenney — kenney.nl (CC0)"
+ }
+]

@@ -367,6 +367,34 @@ enum EditorCompositionBuilder {
       mixParameters.append(musicParams)
     }
 
+    // Sound effects: effects that don't overlap share a track; overlapping
+    // ones get another. Each is cut at the Ad's end.
+    var lanes: [[(SoundLayer, SfxDef)]] = []
+    let placed = state.soundLayers
+      .compactMap { l in SfxStore.shared.byId(l.sfxId).map { (l, $0) } }
+      .filter { $0.0.startMs < outputDurationMs }
+      .sorted { $0.0.startMs < $1.0.startMs }
+    for p in placed {
+      if let i = lanes.firstIndex(where: { lane in lane.last.map { $0.0.startMs + $0.1.durationMs <= p.0.startMs } ?? true }) {
+        lanes[i].append(p)
+      } else {
+        lanes.append([p])
+      }
+    }
+    for lane in lanes {
+      guard let track = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+      else { continue }
+      for (layer, def) in lane {
+        guard let url = SfxStore.shared.url(def),
+              let source = AVURLAsset(url: url).tracks(withMediaType: .audio).first else { continue }
+        let len = min(def.durationMs, outputDurationMs - layer.startMs)
+        try? track.insertTimeRange(CMTimeRange(start: .zero, duration: ms(len)), of: source, at: ms(layer.startMs))
+      }
+      let params = AVMutableAudioMixInputParameters(track: track)
+      params.setVolume(1, at: .zero)
+      mixParameters.append(params)
+    }
+
     let audioMix = AVMutableAudioMix()
     audioMix.inputParameters = mixParameters
 

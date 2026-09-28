@@ -35,6 +35,11 @@ Stream<LicenseEntry> _collect() async* {
     await rootBundle.loadString("assets/licenses/noto-animated-emoji.txt"),
   );
 
+  yield LicenseEntryWithLineBreaks(
+    <String>["Sound effects (Freesound, Kenney)"],
+    await rootBundle.loadString("assets/licenses/sound-effects.txt"),
+  );
+
   if (apacheText != null) {
     yield LicenseEntryWithLineBreaks(
       <String>["AndroidX Media3", "Jetpack Compose"],

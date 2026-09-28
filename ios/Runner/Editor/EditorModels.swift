@@ -119,6 +119,8 @@ struct EditorSessionState: Codable {
   var textLayers: [TextLayer] = []
   /// Animated stickers (EditorStickers.swift), timed in OUTPUT time.
   var stickerLayers: [StickerLayer] = []
+  /// Sound effects (EditorSounds.swift), placed in OUTPUT time.
+  var soundLayers: [SoundLayer] = []
 
   static func initial(clipPath: String, sourceDurationMs: Int64) -> EditorSessionState {
     EditorSessionState(
@@ -176,7 +178,8 @@ struct EditorSessionState: Codable {
       speedRanges: speedRanges,
       videoFilter: VideoFilter(rawValue: obj["videoFilter"] as? String ?? "") ?? .NONE,
       textLayers: (obj["textLayers"] as? [[String: Any]] ?? []).map(TextLayer.from),
-      stickerLayers: (obj["stickerLayers"] as? [[String: Any]] ?? []).map(StickerLayer.from))
+      stickerLayers: (obj["stickerLayers"] as? [[String: Any]] ?? []).map(StickerLayer.from),
+      soundLayers: (obj["soundLayers"] as? [[String: Any]] ?? []).map(SoundLayer.from))
   }
 }
 

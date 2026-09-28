@@ -240,11 +240,65 @@ class EditorViewModel(
     var stickerLayers by mutableStateOf(initialState.stickerLayers)
         private set
 
-    /** The caption OR sticker being edited/dragged in the preview (null = none; ids are unique across both). */
+    /** Sound effects (SoundEffects.kt) — like captions, never rebuild the player. */
+    var soundLayers by mutableStateOf(initialState.soundLayers)
+        private set
+
+    /** The caption, sticker OR sound being edited/dragged (null = none; ids are unique across all three). */
     var selectedTextId by mutableStateOf<String?>(null)
 
     val fonts = TypefaceCache(context)
     val stickers = StickerStore(context)
+    val sfx = SfxStore(context)
+    val sfxPlayer = SfxPlayer(context)
+
+    /** Adds [def] at the playhead (OUTPUT time), pulled back so it ends inside the Ad. */
+    fun addSound(def: SfxDef): SoundLayer {
+        player.pause()
+        val total = outputDurationMs
+        val now = toOutputMs(globalPositionMs()).coerceIn(0L, total)
+        val start = now.coerceAtMost((total - def.durationMs).coerceAtLeast(0L))
+        val layer = SoundLayer(sfxId = def.id, startMs = start)
+        soundLayers = soundLayers + layer
+        selectedTextId = layer.id
+        return layer
+    }
+
+    fun updateSound(layer: SoundLayer) {
+        soundLayers = soundLayers.map { if (it.id == layer.id) layer else it }
+    }
+
+    fun removeSound(id: String) {
+        soundLayers = soundLayers.filterNot { it.id == id }
+        if (selectedTextId == id) selectedTextId = null
+    }
+
+    /** Where the last [updatePreviewSounds] left off (OUTPUT ms), or -1 after a pause/seek. */
+    private var lastSoundCheckMs = -1L
+
+    /**
+     * Fires the sound effects whose start the preview just passed — called
+     * once per frame (EditorScreen). Only while playing forward: a jump
+     * back (loop, seek) or a pause silences them and starts over.
+     */
+    fun updatePreviewSounds(globalMs: Long) {
+        if (soundLayers.isEmpty()) return
+        val now = toOutputMs(globalMs)
+        val last = lastSoundCheckMs
+        if (!player.isPlaying) {
+            if (last >= 0) sfxPlayer.stopAll()
+            lastSoundCheckMs = -1L
+            return
+        }
+        if (last < 0 || now < last) {
+            if (now < last) sfxPlayer.stopAll()
+            // (Re)starting: a sound starting within the first frame still plays.
+            soundLayers.filter { it.startMs in (now - 40)..now }.forEach { l -> sfx.byId(l.sfxId)?.let(sfxPlayer::play) }
+        } else {
+            soundLayers.filter { it.startMs in (last + 1)..now }.forEach { l -> sfx.byId(l.sfxId)?.let(sfxPlayer::play) }
+        }
+        lastSoundCheckMs = now
+    }
 
     fun addSticker(def: StickerDef): StickerLayer {
         player.pause()
@@ -300,6 +354,15 @@ class EditorViewModel(
         val e = endMs.coerceIn(s + 300L, total.coerceAtLeast(s + 300L))
         textLayers = textLayers.map { if (it.id == id) it.copy(startMs = s, endMs = e) else it }
         stickerLayers = stickerLayers.map { if (it.id == id) it.copy(startMs = s, endMs = e) else it }
+        // A sound plays its whole length: only where it starts can change.
+        soundLayers = soundLayers.map { l ->
+            if (l.id != id) {
+                l
+            } else {
+                val len = sfx.byId(l.sfxId)?.durationMs ?: 0L
+                l.copy(startMs = s.coerceAtMost((total - len).coerceAtLeast(0L)))
+            }
+        }
     }
 
     /** Picker thumbnails: each effect applied (on the CPU) to a frame of the first clip. */
@@ -481,6 +544,7 @@ class EditorViewModel(
         videoFilter = videoFilter,
         textLayers = textLayers,
         stickerLayers = stickerLayers,
+        soundLayers = soundLayers,
     )
 
     fun clipStartMs(index: Int): Long = clips.take(index).sumOf { it.keptDurationMs }
@@ -1305,9 +1369,10 @@ class EditorViewModel(
             EditedMediaItemSequence.withVideoFrom(items)
         }
 
+        val soundSequences = soundEffectSequences()
         val music = musicPath
         if (music == null || musicPlayDurationMs <= 0) {
-            return Composition.Builder(ImmutableList.of(videoSequence)).withTextOverlay().build()
+            return Composition.Builder(ImmutableList.copyOf(listOf(videoSequence) + soundSequences)).withTextOverlay().build()
         }
         val musicUri = Uri.fromFile(File(music))
         val songDurationUs = probeDurationUs(context, musicUri)
@@ -1346,7 +1411,48 @@ class EditorViewModel(
             .apply { if (musicStartOffsetMs > 0) addGap(musicStartOffsetMs * 1000) }
             .addItems(musicItems)
             .build()
-        return Composition.Builder(ImmutableList.of(videoSequence, musicSequence)).withTextOverlay().build()
+        return Composition.Builder(ImmutableList.copyOf(listOf(videoSequence, musicSequence) + soundSequences))
+            .withTextOverlay()
+            .build()
+    }
+
+    /**
+     * The sound effects as audio-only sequences, mixed by Transformer with
+     * the clips' sound and the music. Effects that don't overlap share a
+     * sequence (gap, effect, gap, effect…); overlapping ones get another —
+     * so a handful of sequences, not one per effect. Each is cut at the
+     * Ad's end.
+     */
+    private fun soundEffectSequences(): List<EditedMediaItemSequence> {
+        val total = outputDurationMs
+        val placed = soundLayers.mapNotNull { l -> sfx.byId(l.sfxId)?.let { l to it } }
+            .filter { (l, _) -> l.startMs < total }
+            .sortedBy { it.first.startMs }
+        val lanes = mutableListOf<MutableList<Pair<SoundLayer, SfxDef>>>()
+        for (p in placed) {
+            val lane = lanes.firstOrNull { lane -> lane.last().let { (l, d) -> l.startMs + d.durationMs } <= p.first.startMs }
+            if (lane != null) lane += p else lanes += mutableListOf(p)
+        }
+        return lanes.map { lane ->
+            val builder = EditedMediaItemSequence.Builder(ImmutableSet.of(C.TRACK_TYPE_AUDIO))
+            var cursor = 0L
+            for ((layer, def) in lane) {
+                if (layer.startMs > cursor) builder.addGap((layer.startMs - cursor) * 1000)
+                val len = minOf(def.durationMs, total - layer.startMs)
+                builder.addItem(
+                    EditedMediaItem.Builder(
+                        MediaItem.Builder()
+                            .setUri(def.assetUri)
+                            .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setEndPositionMs(len).build())
+                            .build(),
+                    )
+                        .setDurationUs(def.durationMs * 1000)
+                        .build(),
+                )
+                cursor = layer.startMs + len
+            }
+            builder.build()
+        }
     }
 
     /**
@@ -1475,6 +1581,7 @@ class EditorViewModel(
     }
 
     override fun onCleared() {
+        sfxPlayer.release()
         editorScope.cancel()
         player.release()
     }

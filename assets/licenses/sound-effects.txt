@@ -1,0 +1,5 @@
+AdGag sound effects. Every sound is CC0 1.0 (public domain dedication,
+https://creativecommons.org/publicdomain/zero/1.0/) — no attribution
+required; credited anyway in sfx.json. Sources: freesound.org (each
+sound's license checked on its page) and Kenney (kenney.nl) audio packs.
+Processed (trimmed, normalized, faded, MP3) for AdGag.

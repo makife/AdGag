@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.SlowMotionVideo
 import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
@@ -119,15 +120,25 @@ fun EditorScreen(
         var panelCollapsed by remember { mutableStateOf(false) }
         // Sticker picker: null = closed; "" = adding; otherwise the sticker being changed.
         var stickerPanelFor by remember { mutableStateOf<String?>(null) }
+        // Sound FX picker: same convention.
+        var soundPanelFor by remember { mutableStateOf<String?>(null) }
         val addText = {
             viewModel.player.pause()
             stickerPanelFor = null
+            soundPanelFor = null
             editingTextId = viewModel.addText().id
         }
         val openStickers = {
             viewModel.player.pause()
             editingTextId = null
+            soundPanelFor = null
             stickerPanelFor = ""
+        }
+        val openSounds = {
+            viewModel.player.pause()
+            editingTextId = null
+            stickerPanelFor = null
+            soundPanelFor = ""
         }
         // Speed tool / the Speed row's "+": a slow-motion range at the
         // playhead (or the one the playhead is in), then its settings.
@@ -142,12 +153,13 @@ fun EditorScreen(
         // Tapping a selected overlay (or its timeline bar) opens the matching editor.
         val editOverlay = { id: String ->
             viewModel.player.pause()
-            if (viewModel.stickerLayers.any { it.id == id }) {
-                editingTextId = null
-                stickerPanelFor = id
-            } else {
-                stickerPanelFor = null
-                editingTextId = id
+            editingTextId = null
+            stickerPanelFor = null
+            soundPanelFor = null
+            when {
+                viewModel.stickerLayers.any { it.id == id } -> stickerPanelFor = id
+                viewModel.soundLayers.any { it.id == id } -> soundPanelFor = id
+                else -> editingTextId = id
             }
         }
 
@@ -161,6 +173,8 @@ fun EditorScreen(
                 frameGlobalMs.longValue = viewModel.globalPositionMs()
                 // Music fade-in/out in the preview is a per-frame volume envelope.
                 viewModel.updatePreviewVolume(frameGlobalMs.longValue)
+                // Sound effects fire as the playhead passes them.
+                viewModel.updatePreviewSounds(frameGlobalMs.longValue)
             }
         }
 
@@ -277,6 +291,7 @@ fun EditorScreen(
             // drag handle on top collapses it (the video grows into the
             // space) and expands it again; a newly opened panel slides up.
             val panelKind = when {
+                soundPanelFor != null -> PanelKind.SOUNDS
                 stickerPanelFor != null -> PanelKind.STICKERS
                 editingTextId != null -> PanelKind.TEXT
                 else -> PanelKind.EDITOR
@@ -286,6 +301,7 @@ fun EditorScreen(
             BackHandler(enabled = panelKind != PanelKind.EDITOR) {
                 editingTextId = null
                 stickerPanelFor = null
+                soundPanelFor = null
             }
             Column(
                 modifier = Modifier
@@ -306,6 +322,7 @@ fun EditorScreen(
                         PanelKind.EDITOR -> "Editor"
                         PanelKind.TEXT -> "Text"
                         PanelKind.STICKERS -> "Stickers"
+                        PanelKind.SOUNDS -> "Sound FX"
                     },
                     onCollapsedChange = { panelCollapsed = it },
                     onDone = if (panelKind == PanelKind.EDITOR) {
@@ -314,6 +331,7 @@ fun EditorScreen(
                         {
                             editingTextId = null
                             stickerPanelFor = null
+                            soundPanelFor = null
                         }
                     },
                 )
@@ -327,6 +345,11 @@ fun EditorScreen(
                         label = "editorPanel",
                     ) { kind ->
                         when (kind) {
+                            PanelKind.SOUNDS -> Column(modifier = Modifier.padding(bottom = AdGagSpacing.sm.dp)) {
+                                val editing = soundPanelFor?.ifEmpty { null }
+                                SoundPanelHeader(viewModel = viewModel, editingId = editing, onDismiss = { soundPanelFor = null })
+                                SoundPanel(viewModel = viewModel, editingId = editing, onDismiss = { soundPanelFor = null })
+                            }
                             PanelKind.STICKERS -> Column(modifier = Modifier.padding(bottom = AdGagSpacing.sm.dp)) {
                                 val editing = stickerPanelFor?.ifEmpty { null }
                                 StickerPanelHeader(viewModel = viewModel, editingId = editing, onDismiss = { stickerPanelFor = null })
@@ -366,6 +389,7 @@ fun EditorScreen(
                             onEffects = { showEffectsSheet = true },
                             onText = addText,
                             onStickers = openStickers,
+                            onSounds = openSounds,
                         )
 
                         viewModel.notice?.let { notice ->
@@ -486,6 +510,7 @@ private fun ToolRow(
     onEffects: () -> Unit,
     onText: () -> Unit,
     onStickers: () -> Unit,
+    onSounds: () -> Unit,
 ) {
     Row(
         // Scrolls sideways if the tools outgrow a narrow screen.
@@ -504,6 +529,12 @@ private fun ToolRow(
             label = if (viewModel.stickerLayers.isEmpty()) "Stickers" else "Stickers (${viewModel.stickerLayers.size})",
             active = viewModel.stickerLayers.isNotEmpty(),
             onClick = onStickers,
+        )
+        EditorToolButton(
+            icon = Icons.Filled.GraphicEq,
+            label = if (viewModel.soundLayers.isEmpty()) "Sound FX" else "Sound FX (${viewModel.soundLayers.size})",
+            active = viewModel.soundLayers.isNotEmpty(),
+            onClick = onSounds,
         )
         EditorToolButton(
             icon = Icons.Filled.RotateRight,
@@ -653,7 +684,7 @@ private fun ExportProgress(progress: Float) {
     }
 }
 
-private enum class PanelKind { EDITOR, TEXT, STICKERS }
+private enum class PanelKind { EDITOR, TEXT, STICKERS, SOUNDS }
 
 /**
  * Grab bar on top of the bottom panel: drag it down to collapse the panel

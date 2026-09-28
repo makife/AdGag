@@ -166,12 +166,12 @@ fun EditorTimeline(
             }
         }
 
-        if (viewModel.textLayers.isNotEmpty() || viewModel.stickerLayers.isNotEmpty()) {
+        if (viewModel.textLayers.isNotEmpty() || viewModel.stickerLayers.isNotEmpty() || viewModel.soundLayers.isNotEmpty()) {
             val sel = overlayBars(viewModel).firstOrNull { it.id == viewModel.selectedTextId }
             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    text = if (sel != null) "${sel.kind} · \"${sel.label.take(18)}\"" else "Text & stickers · tap one to select",
+                    text = if (sel != null) "${sel.kind} · \"${sel.label.take(18)}\"" else "Text, stickers & sounds · tap one to select",
                     color = AdGagColors.OnSurfaceMuted,
                     style = MaterialTheme.typography.labelMedium,
                     maxLines = 1,
@@ -876,6 +876,10 @@ private fun overlayBars(viewModel: EditorViewModel): List<OverlayBar> =
         OverlayBar(s.id, "Sticker", viewModel.stickers.byId(s.stickerId)?.label ?: "Sticker", s.startMs, s.endMs, Color(0xFFFFB300))
     } + viewModel.textLayers.map { t ->
         OverlayBar(t.id, "Text", t.text.lineSequence().first(), t.startMs, t.endMs, Color(t.color))
+    } + viewModel.soundLayers.mapNotNull { l ->
+        viewModel.sfx.byId(l.sfxId)?.let { def ->
+            OverlayBar(l.id, "Sound", def.label, l.startMs, l.startMs + def.durationMs, Color(0xFF2FD18A))
+        }
     }
 
 /**
