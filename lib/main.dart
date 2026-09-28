@@ -1,4 +1,5 @@
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:shared_preferences/shared_preferences.dart";
 import "package:supabase_flutter/supabase_flutter.dart";
@@ -11,6 +12,10 @@ import "core/utils/app_logger.dart";
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Portrait only, like every short-video app: turning the phone never
+  // rotates the UI. The camera still records a sideways phone as landscape
+  // (camera_record_view.dart reads the physical orientation).
+  await SystemChrome.setPreferredOrientations(<DeviceOrientation>[DeviceOrientation.portraitUp]);
 
   AppLogger.init(verbose: !EnvConfig.isProduction);
   EnvConfig.assertConfigured();

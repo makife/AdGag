@@ -67,7 +67,10 @@ class _CaptionPublishStepState extends ConsumerState<CaptionPublishStep> {
             children: <Widget>[
               Expanded(
                 child: previewReady
-                    ? AspectRatio(aspectRatio: preview.value.aspectRatio, child: VideoPlayer(preview))
+                    // Center loosens Expanded's tight constraints — without it
+                    // AspectRatio can't apply and the video was stretched to fill
+                    // the box (a landscape Ad showed squashed into a square).
+                    ? Center(child: AspectRatio(aspectRatio: preview.value.aspectRatio, child: VideoPlayer(preview)))
                     : const Center(child: CircularProgressIndicator()),
               ),
               const SizedBox(height: AppSpacing.lg),

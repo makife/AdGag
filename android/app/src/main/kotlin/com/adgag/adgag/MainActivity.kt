@@ -6,7 +6,9 @@ import com.adgag.adgag.editor.DebugLog
 import com.adgag.adgag.editor.NativeEditorActivity
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import android.view.OrientationEventListener
 
 /**
  * `FlutterActivity`, not `FlutterFragmentActivity` — deliberately kept as
@@ -28,6 +30,43 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // The PHYSICAL device orientation (accelerometer), for the camera: the
+        // app UI is locked to portrait, so the UI orientation never changes —
+        // but a phone held sideways must still record a landscape video (the
+        // camera plugin itself only follows the display rotation). Streams
+        // "portraitUp" / "landscapeLeft" / "portraitDown" / "landscapeRight"
+        // (Flutter's DeviceOrientation names) while someone listens.
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "com.adgag.adgag/device_orientation")
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                private var listener: OrientationEventListener? = null
+                private var last: String? = null
+
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+                    last = null
+                    listener = object : OrientationEventListener(this@MainActivity) {
+                        override fun onOrientationChanged(degrees: Int) {
+                            if (degrees == ORIENTATION_UNKNOWN) return
+                            // 90 = left side up (top points right), 270 = right side up.
+                            val name = when (degrees) {
+                                in 60..120 -> "landscapeRight"
+                                in 150..210 -> "portraitDown"
+                                in 240..300 -> "landscapeLeft"
+                                in 0..30, in 330..359 -> "portraitUp"
+                                else -> return // between sectors: keep the last one (hysteresis)
+                            }
+                            if (name != last) {
+                                last = name
+                                events.success(name)
+                            }
+                        }
+                    }.also { if (it.canDetectOrientation()) it.enable() }
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    listener?.disable()
+                    listener = null
+                }
+            })
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler { call, result ->
             when (call.method) {
                 "openEditor" -> {

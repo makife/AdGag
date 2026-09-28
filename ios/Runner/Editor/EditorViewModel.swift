@@ -417,17 +417,42 @@ final class EditorViewModel: ObservableObject {
       selectedSpeedRangeId = existing.id
       return existing
     }
+    // A full 30s Ad has no room for slow motion: shorten the end of the last
+    // clip just enough for a default 0.5x range (and say so) instead of
+    // "trim first" — same as Android.
+    let needed = EditorLimits.defaultSpeedRangeMs // at 0.5x a range adds its own length
+    let room = EditorLimits.maxTotalMs - outputDurationMs
+    let cut = room < needed ? shortenEnd(needed - room) : 0
+    if cut > 0 { showNotice("Shortened the end by \(formatPreciseSeconds(cut)) so slow motion fits in 30s.") }
     guard let speed = [0.5, 0.75].first(where: { maxRangeLengthMs(except: nil, speed: $0) >= EditorLimits.minSpeedRangeMs })
-    else { return nil }
+    else {
+      if cut > 0 { rebuild(resumeAtSourceMs: 0, play: false) }
+      return nil
+    }
     let gapStart = speedRanges.filter { $0.endMs <= g }.map(\.endMs).max() ?? 0
     let gapEnd = speedRanges.filter { $0.startMs > g }.map(\.startMs).min() ?? totalDurationMs
     let length = min(EditorLimits.defaultSpeedRangeMs, gapEnd - gapStart, maxRangeLengthMs(except: nil, speed: speed))
-    guard length >= EditorLimits.minSpeedRangeMs else { return nil }
+    guard length >= EditorLimits.minSpeedRangeMs else {
+      if cut > 0 { rebuild(resumeAtSourceMs: 0, play: false) }
+      return nil
+    }
     let start = max(min(g, gapEnd - length), gapStart)
     let range = SpeedRange(startMs: start, endMs: start + length, speed: speed)
     commitSpeedRanges(speedRanges + [range], startAt: start)
     selectedSpeedRangeId = range.id
     return range
+  }
+
+  /// Trims up to `outputMs` off the END of the last clip (keeping it at least
+  /// minClipMs) without rebuilding — the caller does. Returns what was cut.
+  private func shortenEnd(_ outputMs: Int64) -> Int64 {
+    guard let index = clips.indices.last else { return 0 }
+    let cut = max(min(outputMs, clips[index].keptDurationMs - EditorLimits.minClipMs), 0)
+    guard cut > 0 else { return 0 }
+    clips[index].trimEndMs -= cut
+    speedRanges = speedRanges.remapped(totalMs: totalDurationMs) { $0 }
+    dropStaleSpeedSelection()
+    return cut
   }
 
   /// How long a range at `speed` may be without pushing the Ad past 30s

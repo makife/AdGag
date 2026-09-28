@@ -179,49 +179,64 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
             );
           }
 
+          // The pager ends at the bottom-nav bar's top edge (the Scaffold
+          // extends the body behind the bar): pages as tall as the space above
+          // the bar, so one Ad's bottom touches the next one's top. When pages
+          // reached under the bar, the strip hidden behind it scrolled into view
+          // between two Ads as a thick black gap (user report).
+          final double barInset = MediaQuery.paddingOf(context).bottom;
+
           // Pull down on the first card to refresh. The indicator only
           // reacts to an overscroll past the pager's top, so it never
           // competes with an ordinary page swipe; it's disabled while a
           // reviews panel is open (the pager is locked then anyway).
-          return RefreshIndicator(
-            onRefresh: _refresh,
-            edgeOffset: topInset,
-            notificationPredicate: (ScrollNotification notification) =>
-                notification.depth == 0 && ref.read(openReviewsAdIdProvider) == null,
-            child: NotificationListener<ScrollEndNotification>(
-            onNotification: (ScrollEndNotification notification) {
-              final int? pending = _pendingIndex;
-              if (pending != null && notification.depth == 0) {
-                _pendingIndex = null;
-                _activate(pending, feedState.ads);
-              }
-              return false;
-            },
-            child: PageView.builder(
-              controller: _pageController,
-              // Keep the neighbours laid out, so revealing the next card
-              // mid-swipe doesn't build it on the spot.
-              allowImplicitScrolling: true,
-              scrollDirection: Axis.vertical,
-              // Paging stops while a card's reviews panel is open.
-              physics: ref.watch(openReviewsAdIdProvider) != null
-                  ? const NeverScrollableScrollPhysics()
-                  : const FeedPagePhysics(),
-              itemCount: feedState.ads.length,
-              onPageChanged: (int index) {
-                _pendingIndex = index;
-                ref.read(openReviewsAdIdProvider.notifier).state = null;
-              },
-              itemBuilder: (BuildContext context, int index) {
-                final Ad ad = feedState.ads[index];
-                return AdVideoCard(
-                  ad: ad,
-                  pool: _pool,
-                  videoService: ref.read(videoServiceProvider),
-                  isActive: index == _activeIndex,
-                );
-              },
-            ),
+          return Padding(
+            padding: EdgeInsets.only(bottom: barInset),
+            child: MediaQuery.removePadding(
+              context: context,
+              removeBottom: true,
+              child: RefreshIndicator(
+                onRefresh: _refresh,
+                edgeOffset: topInset,
+                notificationPredicate: (ScrollNotification notification) =>
+                    notification.depth == 0 && ref.read(openReviewsAdIdProvider) == null,
+                child: NotificationListener<ScrollEndNotification>(
+                  onNotification: (ScrollEndNotification notification) {
+                    final int? pending = _pendingIndex;
+                    if (pending != null && notification.depth == 0) {
+                      _pendingIndex = null;
+                      _activate(pending, feedState.ads);
+                    }
+                    return false;
+                  },
+                  child: PageView.builder(
+                    controller: _pageController,
+                    // Keep the neighbours laid out, so revealing the next card
+                    // mid-swipe doesn't build it on the spot.
+                    allowImplicitScrolling: true,
+                    scrollDirection: Axis.vertical,
+                    // Paging stops while a card's reviews panel is open.
+                    physics: ref.watch(openReviewsAdIdProvider) != null
+                        ? const NeverScrollableScrollPhysics()
+                        : const FeedPagePhysics(),
+                    itemCount: feedState.ads.length,
+                    onPageChanged: (int index) {
+                      _pendingIndex = index;
+                      ref.read(openReviewsAdIdProvider.notifier).state = null;
+                    },
+                    itemBuilder: (BuildContext context, int index) {
+                      final Ad ad = feedState.ads[index];
+                      return AdVideoCard(
+                        ad: ad,
+                        pool: _pool,
+                        videoService: ref.read(videoServiceProvider),
+                        isActive: index == _activeIndex,
+                        belowCardHeight: barInset,
+                      );
+                    },
+                  ),
+                ),
+              ),
             ),
           );
         },

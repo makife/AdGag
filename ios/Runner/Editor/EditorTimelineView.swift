@@ -264,7 +264,8 @@ private struct TrimRowView: View {
   let clip: EditorClip
   @State private var liveStart: Int64?
   @State private var liveEnd: Int64?
-  @State private var dragOrigin: Int64?
+  @State private var target: DragTarget?
+  @State private var origin: (Int64, Int64)?
 
   var body: some View {
     GeometryReader { geo in
@@ -275,22 +276,21 @@ private struct TrimRowView: View {
       let start = liveStart ?? clip.trimStartMs
       let end = liveEnd ?? clip.trimEndMs
       let maxKept = max(viewModel.maxKeptMs(for: index), EditorLimits.minTrimGapMs)
+      let scrub = { (x: CGFloat) in
+        let src = min(max(Int64(x / width * CGFloat(sourceMs)), clip.trimStartMs), clip.trimEndMs)
+        viewModel.seekToGlobal(viewModel.clipStartMs(index) + (src - clip.trimStartMs))
+      }
 
       ZStack(alignment: .topLeading) {
         ThumbnailStrip(images: (viewModel.thumbnails[clip.path] ?? []).map(\.image))
           .frame(width: width, height: rowHeight)
           .clipped()
-          .contentShape(Rectangle())
-          .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-            let src = min(max(Int64(value.location.x / width * CGFloat(sourceMs)), clip.trimStartMs), clip.trimEndMs)
-            viewModel.seekToGlobal(viewModel.clipStartMs(index) + (src - clip.trimStartMs))
-          })
 
         Rectangle().fill(Color.black.opacity(0.55))
-          .frame(width: max(msToX(start), 0), height: rowHeight).allowsHitTesting(false)
+          .frame(width: max(msToX(start), 0), height: rowHeight)
         Rectangle().fill(Color.black.opacity(0.55))
           .frame(width: max(width - msToX(end), 0), height: rowHeight)
-          .offset(x: msToX(end)).allowsHitTesting(false)
+          .offset(x: msToX(end))
 
         // Playhead while playback is inside this clip.
         let clipStart = viewModel.clipStartMs(index)
@@ -299,42 +299,77 @@ private struct TrimRowView: View {
           Rectangle().fill(EditorPalette.brand)
             .frame(width: 3, height: rowHeight)
             .offset(x: msToX(min(max(clip.trimStartMs + (g - clipStart), start), end)) - 1)
-            .allowsHitTesting(false)
         }
 
         TrimHandle(x: msToX(start), rowWidth: width, height: rowHeight)
-          .gesture(DragGesture(minimumDistance: 2)
-            .onChanged { value in
-              let origin = dragOrigin ?? start
-              if dragOrigin == nil { dragOrigin = start }
-              let lower = max(end - maxKept, 0)
-              let upper = max(end - EditorLimits.minTrimGapMs, lower)
-              liveStart = min(max(origin + dxToMs(value.translation.width), lower), upper)
-            }
-            .onEnded { _ in commit(start: liveStart ?? start, end: end) })
         TrimHandle(x: msToX(end), rowWidth: width, height: rowHeight)
-          .gesture(DragGesture(minimumDistance: 2)
-            .onChanged { value in
-              let origin = dragOrigin ?? end
-              if dragOrigin == nil { dragOrigin = end }
-              let lower = start + EditorLimits.minTrimGapMs
-              let upper = max(min(sourceMs, start + maxKept), lower)
-              liveEnd = min(max(origin + dxToMs(value.translation.width), lower), upper)
-            }
-            .onEnded { _ in commit(start: start, end: liveEnd ?? end) })
       }
+      .frame(width: width, height: rowHeight, alignment: .topLeading)
+      .contentShape(Rectangle())
+      // ONE gesture for the row: near an edge = that trim edge, else scrub.
+      // Separate handle hit boxes overlapped on a long source (the kept 30s
+      // is a few dozen points wide) and the trim couldn't be grabbed.
+      .gesture(DragGesture(minimumDistance: 0)
+        .onChanged { value in
+          if target == nil {
+            target = pickDragTarget(value.startLocation.x, start: msToX(start), end: msToX(end), bodyMoves: false)
+            origin = (start, end)
+          }
+          let o = origin ?? (start, end)
+          switch target {
+          case .start:
+            let lower = max(o.1 - maxKept, 0)
+            let upper = max(o.1 - EditorLimits.minTrimGapMs, lower)
+            liveStart = min(max(o.0 + dxToMs(value.translation.width), lower), upper)
+          case .end:
+            let lower = o.0 + EditorLimits.minTrimGapMs
+            let upper = max(min(sourceMs, o.0 + maxKept), lower)
+            liveEnd = min(max(o.1 + dxToMs(value.translation.width), lower), upper)
+          default:
+            scrub(value.location.x)
+          }
+        }
+        .onEnded { _ in
+          let t = target
+          target = nil
+          origin = nil
+          if t == .start || t == .end {
+            let s = liveStart ?? clip.trimStartMs
+            let e = liveEnd ?? clip.trimEndMs
+            liveStart = nil
+            liveEnd = nil
+            viewModel.setClipTrim(index: index, startMs: s, endMs: e)
+          }
+        })
     }
     .frame(height: rowHeight)
     .background(EditorPalette.surface)
     .clipShape(RoundedRectangle(cornerRadius: 8))
   }
+}
 
-  private func commit(start: Int64, end: Int64) {
-    dragOrigin = nil
-    liveStart = nil
-    liveEnd = nil
-    viewModel.setClipTrim(index: index, startMs: start, endMs: end)
+/// What a drag on a row with edges moves — decided where it starts.
+private enum DragTarget { case none, start, end, body }
+
+/// How close (pt) to an edge a drag must start to grab it.
+private let edgeZone: CGFloat = 28
+
+/// Mirror of Android's pickDragTarget: inside the selection the edge zones
+/// shrink to a third of its width each (so a narrow selection keeps a middle
+/// to grab when `bodyMoves`); outside it, the nearer edge within the zone wins.
+private func pickDragTarget(_ x: CGFloat, start: CGFloat, end: CGFloat, bodyMoves: Bool) -> DragTarget {
+  if x > start && x < end {
+    let inner = min(edgeZone, (end - start) / (bodyMoves ? 3 : 2))
+    if x - start <= inner { return .start }
+    if end - x <= inner { return .end }
+    return bodyMoves ? .body : .none
   }
+  let toStart = abs(x - start)
+  let toEnd = abs(x - end)
+  if min(toStart, toEnd) > edgeZone { return .none }
+  if x <= start { return .start }
+  if x >= end { return .end }
+  return toStart <= toEnd ? .start : .end
 }
 
 /// A trim handle: 32pt touch target kept inside the row (a half-outside one
@@ -653,6 +688,7 @@ private struct SpeedRowView: View {
   let onEditSpeedRange: (String) -> Void
   @State private var liveStart: Int64?
   @State private var liveEnd: Int64?
+  @State private var target: DragTarget?
   @State private var origin: (String, Int64, Int64)?
 
   private static let purple = Color(red: 0.61, green: 0.18, blue: 1.0)
@@ -664,6 +700,10 @@ private struct SpeedRowView: View {
       let msToX = { (ms: Int64) -> CGFloat in CGFloat(min(max(ms, 0), total)) / CGFloat(total) * width }
       let dxToMs = { (dx: CGFloat) -> Int64 in Int64(dx / width * CGFloat(total)) }
       let selectedId = viewModel.selectedSpeedRangeId
+      let sel = viewModel.speedRanges.first { $0.id == selectedId }
+      let live = sel != nil && origin?.0 == sel?.id
+      let start = sel.map { live ? (liveStart ?? $0.startMs) : $0.startMs } ?? 0
+      let end = sel.map { live ? (liveEnd ?? $0.endMs) : $0.endMs } ?? 0
 
       ZStack(alignment: .topLeading) {
         ForEach(viewModel.speedRanges.filter { $0.id != selectedId }) { range in
@@ -673,78 +713,88 @@ private struct SpeedRowView: View {
             .overlay(Text(formatSpeed(range.speed)).font(.caption2).foregroundColor(.white).lineLimit(1))
             .frame(width: right - left, height: textRowHeight - 10)
             .offset(x: left, y: 5)
-            .onTapGesture {
-              viewModel.selectedSpeedRangeId = range.id
-              viewModel.seekToGlobal(range.startMs)
-            }
         }
 
         Rectangle().fill(Color.white.opacity(0.6))
           .frame(width: 2, height: textRowHeight)
           .offset(x: msToX(viewModel.globalPositionMs) - 1)
-          .allowsHitTesting(false)
 
-        if let sel = viewModel.speedRanges.first(where: { $0.id == selectedId }) {
-          let live = origin?.0 == sel.id
-          let start = live ? (liveStart ?? sel.startMs) : sel.startMs
-          let end = live ? (liveEnd ?? sel.endMs) : sel.endMs
-          let limits = viewModel.speedRangeLimits(sel.id)
-          let maxLen = viewModel.maxRangeLengthMs(except: sel.id, speed: sel.speed)
+        if let sel {
           let startX = msToX(start)
           let endX = max(msToX(end), startX + 4)
-
           RoundedRectangle(cornerRadius: 6).fill(Self.purple.opacity(0.7))
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(EditorPalette.pink, lineWidth: 2))
             .overlay(Text(formatSpeed(sel.speed)).font(.caption2).foregroundColor(.white).lineLimit(1))
             .frame(width: endX - startX, height: textRowHeight - 6)
             .offset(x: startX, y: 3)
-            .onTapGesture { onEditSpeedRange(sel.id) }
-            .gesture(DragGesture(minimumDistance: 4)
-              .onChanged { value in
-                let o = origin ?? (sel.id, sel.startMs, sel.endMs)
-                if origin == nil { origin = o }
-                let len = o.2 - o.1
-                let s = min(max(o.1 + dxToMs(value.translation.width), limits.0), max(limits.1 - len, limits.0))
-                liveStart = s
-                liveEnd = s + len
-              }
-              .onEnded { _ in commit(movedStart: true) })
-
           TrimHandle(x: startX, rowWidth: width, height: textRowHeight)
-            .gesture(DragGesture(minimumDistance: 2)
-              .onChanged { value in
-                let o = origin ?? (sel.id, sel.startMs, sel.endMs)
-                if origin == nil { origin = o }
-                let lower = max(limits.0, o.2 - maxLen)
-                liveStart = min(max(o.1 + dxToMs(value.translation.width), lower),
-                                max(o.2 - EditorLimits.minSpeedRangeMs, lower))
-                liveEnd = o.2
-              }
-              .onEnded { _ in commit(movedStart: true) })
           TrimHandle(x: endX, rowWidth: width, height: textRowHeight)
-            .gesture(DragGesture(minimumDistance: 2)
-              .onChanged { value in
-                let o = origin ?? (sel.id, sel.startMs, sel.endMs)
-                if origin == nil { origin = o }
-                let upper = min(limits.1, o.1 + maxLen)
-                liveStart = o.1
-                liveEnd = min(max(o.2 + dxToMs(value.translation.width), min(o.1 + EditorLimits.minSpeedRangeMs, upper)), upper)
-              }
-              .onEnded { _ in commit(movedStart: false) })
         }
       }
+      .frame(width: width, height: textRowHeight, alignment: .topLeading)
+      .contentShape(Rectangle())
+      // ONE gesture for the row (like the trim row): with a range selected,
+      // a drag grabs its start edge, end edge or (in the middle) the whole
+      // range depending on where it starts; a tap opens the selected range's
+      // settings, or selects the range under the finger.
+      .gesture(DragGesture(minimumDistance: 0)
+        .onChanged { value in
+          guard let sel else { return }
+          if target == nil {
+            let moved = abs(value.translation.width) > 4
+            if !moved { return } // still a tap
+            target = pickDragTarget(value.startLocation.x, start: msToX(start), end: msToX(end), bodyMoves: true)
+            origin = (sel.id, sel.startMs, sel.endMs)
+          }
+          guard let o = origin else { return }
+          let (lower, upper) = viewModel.speedRangeLimits(sel.id)
+          let maxLen = viewModel.maxRangeLengthMs(except: sel.id, speed: sel.speed)
+          let d = dxToMs(value.translation.width)
+          switch target {
+          case .start:
+            let minS = max(lower, o.2 - maxLen)
+            liveStart = min(max(o.1 + d, minS), max(o.2 - EditorLimits.minSpeedRangeMs, minS))
+            liveEnd = o.2
+          case .end:
+            let maxE = min(upper, o.1 + maxLen)
+            liveStart = o.1
+            liveEnd = min(max(o.2 + d, min(o.1 + EditorLimits.minSpeedRangeMs, maxE)), maxE)
+          case .body:
+            let len = o.2 - o.1
+            let s = min(max(o.1 + d, lower), max(upper - len, lower))
+            liveStart = s
+            liveEnd = s + len
+          default:
+            break
+          }
+        }
+        .onEnded { value in
+          let t = target
+          target = nil
+          if let o = origin, let t, t != .none {
+            viewModel.setSpeedRangeBounds(o.0, startMs: liveStart ?? o.1, endMs: liveEnd ?? o.2, movedStart: t != .end)
+          } else if t == nil {
+            // A tap.
+            let x = value.location.x
+            if let sel, x >= msToX(start) - edgeZone / 2 && x <= msToX(end) + edgeZone / 2 {
+              onEditSpeedRange(sel.id)
+            } else {
+              let g = min(max(Int64(x / width * CGFloat(total)), 0), total)
+              if let other = viewModel.speedRanges.first(where: { g >= $0.startMs && g < $0.endMs }) {
+                viewModel.selectedSpeedRangeId = other.id
+                viewModel.seekToGlobal(other.startMs)
+              } else {
+                viewModel.seekToGlobal(g)
+              }
+            }
+          }
+          origin = nil
+          liveStart = nil
+          liveEnd = nil
+        })
     }
     .frame(height: textRowHeight)
     .background(EditorPalette.surface)
     .clipShape(RoundedRectangle(cornerRadius: 8))
-  }
-
-  private func commit(movedStart: Bool) {
-    if let o = origin {
-      viewModel.setSpeedRangeBounds(o.0, startMs: liveStart ?? o.1, endMs: liveEnd ?? o.2, movedStart: movedStart)
-    }
-    origin = nil
-    liveStart = nil
-    liveEnd = nil
   }
 }

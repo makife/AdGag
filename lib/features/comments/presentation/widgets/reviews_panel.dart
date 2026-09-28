@@ -13,10 +13,14 @@ import "../providers/comments_controller.dart";
 /// shrunken video (not a modal over it — user request: the video should
 /// stay visible, smaller, while reading reviews). See AdVideoCard.
 class ReviewsPanel extends ConsumerStatefulWidget {
-  const ReviewsPanel({required this.adId, required this.onClose, super.key});
+  const ReviewsPanel({required this.adId, required this.onClose, this.keyboardInset = 0, super.key});
 
   final String adId;
   final VoidCallback onClose;
+
+  /// How far the keyboard reaches into this panel from its bottom edge (the
+  /// host works it out — the panel doesn't always end at the screen bottom).
+  final double keyboardInset;
 
   @override
   ConsumerState<ReviewsPanel> createState() => _ReviewsPanelState();
@@ -71,9 +75,10 @@ class _ReviewsPanelState extends ConsumerState<ReviewsPanel> {
     final AsyncValue<CommentsState> commentsAsync = ref.watch(commentsControllerProvider(widget.adId));
     final String? currentUserId = ref.watch(currentUserIdProvider);
 
-    // While typing, the panel reaches the screen bottom (see AdVideoCard);
-    // this keeps the input row just above the keyboard.
-    final double keyboard = MediaQueryData.fromView(View.of(context)).viewInsets.bottom;
+    // Keeps the input row just above the keyboard (see AdVideoCard). Plain
+    // padding, not an animated resize — the panel itself doesn't move while
+    // typing (it used to hop on every key press).
+    final double keyboard = widget.keyboardInset;
 
     return Material(
       color: Theme.of(context).scaffoldBackgroundColor,

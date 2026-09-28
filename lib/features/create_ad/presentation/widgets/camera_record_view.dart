@@ -1,8 +1,12 @@
 import "dart:async";
+import "dart:io";
 
 import "package:camera/camera.dart";
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 import "package:permission_handler/permission_handler.dart";
+
+import "../../../../core/media/device_orientation_stream.dart";
 
 import "../../../../core/localization/generated/app_localizations.dart";
 import "../../../../core/theme/app_colors.dart";
@@ -59,11 +63,38 @@ class _CameraRecordViewState extends State<CameraRecordView> {
   bool _switchingCamera = false;
   String? _error;
 
+  /// How the phone is physically held. The UI stays portrait (like the
+  /// system camera); a sideways phone records a LANDSCAPE video and the
+  /// on-screen controls turn in place to stay upright.
+  DeviceOrientation _orientation = DeviceOrientation.portraitUp;
+  StreamSubscription<DeviceOrientation>? _orientationSub;
+
   @override
   void initState() {
     super.initState();
+    _orientationSub = physicalDeviceOrientation().listen((DeviceOrientation o) {
+      // Frozen while recording: a take keeps the orientation it started with.
+      if (mounted && !_isRecording && o != _orientation) {
+        setState(() => _orientation = o);
+      }
+    });
     unawaited(_setUp());
   }
+
+  /// Quarter turns that keep a control upright for the way the phone is held.
+  double get _iconTurns => switch (_orientation) {
+        DeviceOrientation.landscapeLeft => 0.25,
+        DeviceOrientation.landscapeRight => -0.25,
+        DeviceOrientation.portraitDown => 0.5,
+        DeviceOrientation.portraitUp => 0,
+      };
+
+  Widget _upright(Widget child) => AnimatedRotation(
+        turns: _iconTurns,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        child: child,
+      );
 
   Future<void> _setUp() async {
     final PermissionStatus cameraStatus = await Permission.camera.request();
@@ -162,6 +193,17 @@ class _CameraRecordViewState extends State<CameraRecordView> {
       return;
     }
 
+    // Record in the orientation the phone is physically held in (the camera
+    // plugin otherwise follows the UI, which is locked to portrait — a
+    // sideways phone then recorded a sideways portrait video). Android only:
+    // on iOS the plugin already follows the device.
+    if (Platform.isAndroid) {
+      try {
+        await controller.lockCaptureOrientation(_orientation);
+      } catch (_) {
+        // Recording in portrait is better than not recording at all.
+      }
+    }
     await controller.startVideoRecording();
     _recordingStartedAt = DateTime.now();
     setState(() {
@@ -239,6 +281,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
 
   @override
   void dispose() {
+    unawaited(_orientationSub?.cancel());
     _tick?.cancel();
     _controller?.dispose().ignore();
     super.dispose();
@@ -312,7 +355,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
                     foregroundColor: Colors.white,
                     shape: const StadiumBorder(),
                   ),
-                  icon: const Icon(Icons.arrow_back),
+                  icon: _upright(const Icon(Icons.arrow_back)),
                   label: Text(AppLocalizations.of(context).captureCancelExtraClip),
                 ),
               ),
@@ -327,7 +370,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
                   child: Container(
                     padding: const EdgeInsets.all(AppSpacing.sm),
                     decoration: const BoxDecoration(color: Colors.black38, shape: BoxShape.circle),
-                    child: const Icon(Icons.cameraswitch_outlined, color: Colors.white, size: 24),
+                    child: _upright(const Icon(Icons.cameraswitch_outlined, color: Colors.white, size: 24)),
                   ),
                 ),
               ),
@@ -339,10 +382,12 @@ class _CameraRecordViewState extends State<CameraRecordView> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Text(
-                  "${(_elapsed.inMilliseconds / 1000.0).toStringAsFixed(1)}s / "
-                  "${(widget.maxDuration.inMilliseconds / 1000.0).toStringAsFixed(1)}s",
-                  style: const TextStyle(color: Colors.white),
+                _upright(
+                  Text(
+                    "${(_elapsed.inMilliseconds / 1000.0).toStringAsFixed(1)}s / "
+                    "${(widget.maxDuration.inMilliseconds / 1000.0).toStringAsFixed(1)}s",
+                    style: const TextStyle(color: Colors.white),
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 Row(
@@ -392,7 +437,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: Colors.white70),
                               ),
-                              child: const Icon(Icons.photo_library_outlined, color: Colors.white),
+                              child: _upright(const Icon(Icons.photo_library_outlined, color: Colors.white)),
                             ),
                           ),
                         ),

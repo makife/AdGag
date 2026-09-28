@@ -720,17 +720,48 @@ class EditorViewModel(
             selectedSpeedRangeId = it.id
             return it
         }
-        val speed = listOf(0.5f, 0.75f).firstOrNull { maxRangeLengthMs(null, it) >= MinSpeedRangeMs } ?: return null
+        // A full 30s Ad has no room for slow motion (it makes the Ad longer):
+        // instead of "trim first" (user report: long gallery videos start at
+        // exactly 30s), shorten the end of the last clip just enough for a
+        // default 0.5x range, and say so.
+        val needed = (DefaultSpeedRangeMs * (1.0 / 0.5f - 1.0)).toLong()
+        val room = MaxTotalDurationMs - outputDurationMs
+        val cut = if (room < needed) shortenEnd(needed - room) else 0L
+        if (cut > 0) showNotice("Shortened the end by ${formatPreciseSeconds(cut)} so slow motion fits in 30s.")
+        val speed = listOf(0.5f, 0.75f).firstOrNull { maxRangeLengthMs(null, it) >= MinSpeedRangeMs }
+        if (speed == null) {
+            if (cut > 0) rebuildAndPrepare(startGlobalMs = 0L, playWhenReady = false)
+            return null
+        }
         val gapStart = speedRanges.filter { it.endMs <= g }.maxOfOrNull { it.endMs } ?: 0L
         val gapEnd = speedRanges.filter { it.startMs > g }.minOfOrNull { it.startMs } ?: totalDurationMs
         val length = minOf(DefaultSpeedRangeMs, gapEnd - gapStart, maxRangeLengthMs(null, speed))
-        if (length < MinSpeedRangeMs) return null
+        if (length < MinSpeedRangeMs) {
+            if (cut > 0) rebuildAndPrepare(startGlobalMs = 0L, playWhenReady = false)
+            return null
+        }
         // From the playhead on; slid back if it would run past the gap.
         val start = minOf(g, gapEnd - length).coerceAtLeast(gapStart)
         val range = SpeedRange(start, start + length, speed)
         commitSpeedRanges(speedRanges + range, startAt = start)
         selectedSpeedRangeId = range.id
         return range
+    }
+
+    /**
+     * Trims up to [outputMs] off the END of the last clip (keeping it at
+     * least [MinClipDurationMs]) without rebuilding — the caller does.
+     * Returns how much was actually cut.
+     */
+    private fun shortenEnd(outputMs: Long): Long {
+        val index = clips.lastIndex
+        val clip = clips.getOrNull(index) ?: return 0L
+        val cut = minOf(outputMs, clip.keptDurationMs - MinClipDurationMs).coerceAtLeast(0L)
+        if (cut <= 0L) return 0L
+        clips = clips.toMutableList().also { it[index] = clip.copy(trimEndMs = clip.trimEndMs - cut) }
+        speedRanges = speedRanges.remapped(totalDurationMs) { it }
+        if (speedRanges.none { it.id == selectedSpeedRangeId }) selectedSpeedRangeId = null
+        return cut
     }
 
     /**

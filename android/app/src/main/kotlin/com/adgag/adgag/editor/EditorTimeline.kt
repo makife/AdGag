@@ -565,14 +565,47 @@ private fun TrimRow(viewModel: EditorViewModel, index: Int, clip: EditorClip, de
             val sourcePos = (px / widthPx * sourceMs).toLong().coerceIn(clip.trimStartMs, clip.trimEndMs)
             viewModel.seekToGlobal(viewModel.clipStartMs(index) + (sourcePos - clip.trimStartMs))
         })
+        // ONE gesture layer for the whole row; what a drag moves is decided
+        // where it starts (pickDragTarget): near an edge = that trim edge,
+        // anywhere else = scrub. Separate handle hit boxes overlapped on a
+        // long source, where the kept 30s is a few dozen px wide — the trim
+        // "couldn't be done" (user report).
+        val zonePx = with(density) { EdgeZoneDp.dp.toPx() }
+        val startDrag by rememberUpdatedState({ x: Float ->
+            pickDragTarget(x, msToPx(localStart), msToPx(localEnd), zonePx, bodyMoves = false)
+        })
+        val drag by rememberUpdatedState({ target: DragTarget, x: Float, deltaPx: Float ->
+            when (target) {
+                DragTarget.START -> {
+                    val lower = (localEnd - maxKeptMs).coerceAtLeast(0L)
+                    val upper = (localEnd - MinTrimGapMs).coerceAtLeast(lower)
+                    localStart = (localStart + pxDeltaToMsDelta(deltaPx)).coerceIn(lower, upper)
+                }
+                DragTarget.END -> {
+                    val lower = localStart + MinTrimGapMs
+                    val upper = minOf(sourceMs, localStart + maxKeptMs).coerceAtLeast(lower)
+                    localEnd = (localEnd + pxDeltaToMsDelta(deltaPx)).coerceIn(lower, upper)
+                }
+                else -> scrub(x)
+            }
+        })
+        val endDrag by rememberUpdatedState({ target: DragTarget ->
+            if (target == DragTarget.START || target == DragTarget.END) viewModel.setClipTrim(index, localStart, localEnd)
+        })
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
-                    detectDragGestures { change, _ ->
-                        change.consume()
-                        scrub(change.position.x)
-                    }
+                    var target = DragTarget.NONE
+                    detectDragGestures(
+                        onDragStart = { offset -> target = startDrag(offset.x) },
+                        onDragEnd = { endDrag(target) },
+                        onDragCancel = { endDrag(target) },
+                        onDrag = { change, amount ->
+                            change.consume()
+                            drag(target, change.position.x, amount.x)
+                        },
+                    )
                 }
                 .pointerInput(Unit) { detectTapGestures { offset -> scrub(offset.x) } },
         )
@@ -590,29 +623,58 @@ private fun TrimRow(viewModel: EditorViewModel, index: Int, clip: EditorClip, de
             )
         }
 
-        TrimHandle(
-            xPx = startPx,
-            rowWidthPx = widthPx,
-            density = density,
-            onDrag = { deltaPx ->
-                val lower = (localEnd - maxKeptMs).coerceAtLeast(0L)
-                val upper = (localEnd - MinTrimGapMs).coerceAtLeast(lower)
-                localStart = (localStart + pxDeltaToMsDelta(deltaPx)).coerceIn(lower, upper)
-            },
-            onDragEnd = { viewModel.setClipTrim(index, localStart, localEnd) },
-        )
-        TrimHandle(
-            xPx = endPx,
-            rowWidthPx = widthPx,
-            density = density,
-            onDrag = { deltaPx ->
-                val lower = localStart + MinTrimGapMs
-                val upper = minOf(sourceMs, localStart + maxKeptMs).coerceAtLeast(lower)
-                localEnd = (localEnd + pxDeltaToMsDelta(deltaPx)).coerceIn(lower, upper)
-            },
-            onDragEnd = { viewModel.setClipTrim(index, localStart, localEnd) },
-        )
+        // The visible handles — drawing only; the layer above does the touching.
+        HandleBar(xPx = startPx, rowWidthPx = widthPx, density = density)
+        HandleBar(xPx = endPx, rowWidthPx = widthPx, density = density)
     }
+}
+
+/** What a drag on a row with edges moves — decided where it starts. */
+private enum class DragTarget { NONE, START, END, BODY }
+
+/** How close (dp) to an edge a drag must start to grab it. */
+private const val EdgeZoneDp = 28
+
+/**
+ * Picks what a drag starting at [x] moves on a row whose selection spans
+ * [startPx]..[endPx]. Inside the selection the edge zones shrink to a third
+ * of its width each, so a narrow selection still has a middle to grab
+ * ([bodyMoves]); outside it, the nearer edge within [zonePx] wins.
+ */
+private fun pickDragTarget(x: Float, startPx: Float, endPx: Float, zonePx: Float, bodyMoves: Boolean): DragTarget {
+    if (x > startPx && x < endPx) {
+        val inner = if (bodyMoves) minOf(zonePx, (endPx - startPx) / 3) else minOf(zonePx, (endPx - startPx) / 2)
+        return when {
+            x - startPx <= inner -> DragTarget.START
+            endPx - x <= inner -> DragTarget.END
+            bodyMoves -> DragTarget.BODY
+            else -> DragTarget.NONE
+        }
+    }
+    val toStart = kotlin.math.abs(x - startPx)
+    val toEnd = kotlin.math.abs(x - endPx)
+    return when {
+        minOf(toStart, toEnd) > zonePx -> DragTarget.NONE
+        x <= startPx -> DragTarget.START
+        x >= endPx -> DragTarget.END
+        toStart <= toEnd -> DragTarget.START
+        else -> DragTarget.END
+    }
+}
+
+/** A trim handle's look (pink bar at [xPx], kept inside the row) — no touch handling of its own. */
+@Composable
+private fun HandleBar(xPx: Float, rowWidthPx: Float, density: Density) {
+    val barWidthPx = with(density) { HandleWidthDp.dp.toPx() }
+    val leftPx = (xPx - barWidthPx / 2).coerceIn(0f, (rowWidthPx - barWidthPx).coerceAtLeast(0f))
+    Box(
+        modifier = Modifier
+            .offset(x = with(density) { leftPx.toDp() })
+            .width(HandleWidthDp.dp)
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(AdGagRadius.sm.dp))
+            .background(AdGagColors.GradientPink),
+    )
 }
 
 /**
@@ -991,8 +1053,6 @@ private fun RowScope.SpeedRow(
         val lower = limits.first
         val upper = limits.second
         val maxLen = viewModel.maxRangeLengthMs(sel.id, sel.speed)
-        val commitStart by rememberUpdatedState({ viewModel.setSpeedRangeBounds(sel.id, localStart, localEnd, movedStart = true) })
-        val commitEnd by rememberUpdatedState({ viewModel.setSpeedRangeBounds(sel.id, localStart, localEnd, movedStart = false) })
         val startPx = msToPx(localStart)
         val endPx = msToPx(localEnd).coerceAtLeast(startPx + 4f)
         Box(
@@ -1003,45 +1063,74 @@ private fun RowScope.SpeedRow(
                 .padding(vertical = 3.dp)
                 .clip(RoundedCornerShape(AdGagRadius.sm.dp))
                 .background(AdGagColors.GradientPurple.copy(alpha = 0.7f))
-                .border(BorderStroke(2.dp, AdGagColors.GradientPink), RoundedCornerShape(AdGagRadius.sm.dp))
-                .pointerInput(sel.id) { detectTapGestures { onEditSpeedRange(sel.id) } }
-                // Keyed on the committed range too: localStart/localEnd are
-                // NEW state objects after every commit (the TextRow lesson).
-                .pointerInput(sel.id, sel.startMs, sel.endMs, total, lower, upper) {
-                    detectDragGestures(
-                        onDragEnd = { commitStart() },
-                        onDrag = { change, drag ->
-                            change.consume()
-                            val len = localEnd - localStart
-                            val newStart = (localStart + pxDeltaToMsDelta(drag.x)).coerceIn(lower, (upper - len).coerceAtLeast(lower))
-                            localStart = newStart
-                            localEnd = newStart + len
-                        },
-                    )
-                },
+                .border(BorderStroke(2.dp, AdGagColors.GradientPink), RoundedCornerShape(AdGagRadius.sm.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Text(text = formatSpeed(sel.speed), color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1)
         }
-        TrimHandle(
-            xPx = startPx,
-            rowWidthPx = widthPx,
-            density = density,
-            onDrag = { deltaPx ->
-                val min = maxOf(lower, localEnd - maxLen)
-                localStart = (localStart + pxDeltaToMsDelta(deltaPx)).coerceIn(min, (localEnd - MinSpeedRangeMs).coerceAtLeast(min))
-            },
-            onDragEnd = { commitStart() },
-        )
-        TrimHandle(
-            xPx = endPx,
-            rowWidthPx = widthPx,
-            density = density,
-            onDrag = { deltaPx ->
-                val max = minOf(upper, localStart + maxLen)
-                localEnd = (localEnd + pxDeltaToMsDelta(deltaPx)).coerceIn((localStart + MinSpeedRangeMs).coerceAtMost(max), max)
-            },
-            onDragEnd = { commitEnd() },
+        HandleBar(xPx = startPx, rowWidthPx = widthPx, density = density)
+        HandleBar(xPx = endPx, rowWidthPx = widthPx, density = density)
+
+        // ONE gesture layer over the selected range, like the trim row: a drag
+        // grabs the start edge, the end edge or (in the middle) the whole
+        // range depending on where it starts — a narrow range's separate
+        // handle hit boxes used to cover each other and its middle.
+        val zonePx = with(density) { EdgeZoneDp.dp.toPx() }
+        val startDrag by rememberUpdatedState({ x: Float -> pickDragTarget(x, msToPx(localStart), msToPx(localEnd), zonePx, bodyMoves = true) })
+        val drag by rememberUpdatedState({ target: DragTarget, deltaPx: Float ->
+            val d = pxDeltaToMsDelta(deltaPx)
+            when (target) {
+                DragTarget.START -> {
+                    val min = maxOf(lower, localEnd - maxLen)
+                    localStart = (localStart + d).coerceIn(min, (localEnd - MinSpeedRangeMs).coerceAtLeast(min))
+                }
+                DragTarget.END -> {
+                    val max = minOf(upper, localStart + maxLen)
+                    localEnd = (localEnd + d).coerceIn((localStart + MinSpeedRangeMs).coerceAtMost(max), max)
+                }
+                DragTarget.BODY -> {
+                    val len = localEnd - localStart
+                    val newStart = (localStart + d).coerceIn(lower, (upper - len).coerceAtLeast(lower))
+                    localStart = newStart
+                    localEnd = newStart + len
+                }
+                DragTarget.NONE -> Unit
+            }
+        })
+        val endDrag by rememberUpdatedState({ target: DragTarget ->
+            if (target != DragTarget.NONE) {
+                viewModel.setSpeedRangeBounds(sel.id, localStart, localEnd, movedStart = target != DragTarget.END)
+            }
+        })
+        val tap by rememberUpdatedState({ x: Float ->
+            val sPx = msToPx(localStart)
+            val ePx = msToPx(localEnd)
+            if (x >= sPx - zonePx / 2 && x <= ePx + zonePx / 2) {
+                onEditSpeedRange(sel.id)
+            } else {
+                // Another range under the finger? Select it; else just seek.
+                val g = (x / widthPx * total).toLong()
+                val other = viewModel.speedRanges.firstOrNull { g >= it.startMs && g < it.endMs }
+                if (other != null) viewModel.selectedSpeedRangeId = other.id
+                viewModel.seekToGlobal(g.coerceIn(0L, total))
+            }
+        })
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    var target = DragTarget.NONE
+                    detectDragGestures(
+                        onDragStart = { offset -> target = startDrag(offset.x) },
+                        onDragEnd = { endDrag(target) },
+                        onDragCancel = { endDrag(target) },
+                        onDrag = { change, amount ->
+                            if (target != DragTarget.NONE) change.consume()
+                            drag(target, amount.x)
+                        },
+                    )
+                }
+                .pointerInput(Unit) { detectTapGestures { offset -> tap(offset.x) } },
         )
     }
 }

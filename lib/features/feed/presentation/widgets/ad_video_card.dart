@@ -31,6 +31,7 @@ class AdVideoCard extends ConsumerStatefulWidget {
     required this.pool,
     required this.videoService,
     required this.isActive,
+    this.belowCardHeight = 0,
     super.key,
   });
 
@@ -38,6 +39,11 @@ class AdVideoCard extends ConsumerStatefulWidget {
   final VideoControllerPool pool;
   final VideoService videoService;
   final bool isActive;
+
+  /// How much of the screen lies below this card (the bottom-nav bar — the
+  /// feed's pages end at its top edge). Lets the reviews panel work out how
+  /// far the keyboard reaches into the card.
+  final double belowCardHeight;
 
   @override
   ConsumerState<AdVideoCard> createState() => _AdVideoCardState();
@@ -233,29 +239,52 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
     void closeReviews() => ref.read(openReviewsAdIdProvider.notifier).state = null;
     final double statusBar = MediaQuery.paddingOf(context).top;
 
-    // contain, not cover: a 9:16 Ad on a taller (~9:20) phone would be
-    // cropped ~12% off each side, cutting off anything near the edges
-    // (the editor's border effects were reported as "overflowing the
-    // screen"). Anchored to the TOP (just under the status bar): centring
-    // left a big black band above the video.
-    final Widget videoLayer = showVideo
-        ? FittedBox(
-            fit: BoxFit.contain,
-            alignment: Alignment.topCenter,
-            child: SizedBox(
-              width: controller.value.size.width,
-              height: controller.value.size.height,
-              child: VideoPlayer(controller),
-            ),
-          )
-        : widget.ad.thumbnailUrl != null
-            ? CachedNetworkImage(
-                imageUrl: widget.ad.thumbnailUrl!,
-                fit: BoxFit.contain,
-                alignment: Alignment.topCenter,
-                errorWidget: (context, url, error) => const SizedBox.shrink(),
-              )
-            : const Center(child: CircularProgressIndicator());
+    // The Ad fills the whole card, status bar area included, so Ads sit
+    // edge to edge while swiping (a black band under each one showed up as
+    // a thick gap between them — user report). The card ends at the nav
+    // bar, which AppShell sizes so the card is ~9:16 plus the status bar:
+    // a 9:16 Ad loses only a sliver at the sides. A clearly different shape
+    // (landscape, square) is letterboxed instead — covering it would cut
+    // most of it away. While the reviews panel is open the small video is
+    // always shown whole.
+    BoxFit fitFor(Size card) {
+      if (reviewsOpen || !showVideo) {
+        return reviewsOpen ? BoxFit.contain : BoxFit.cover;
+      }
+      final Size v = controller.value.size;
+      if (v.width <= 0 || v.height <= 0 || card.width <= 0 || card.height <= 0) {
+        return BoxFit.contain;
+      }
+      final double a = v.width / v.height;
+      final double c = card.width / card.height;
+      final double cropped = 1 - (a < c ? a / c : c / a);
+      return cropped <= 0.2 ? BoxFit.cover : BoxFit.contain;
+    }
+
+    Widget videoLayerFor(Size card) {
+      final BoxFit fit = fitFor(card);
+      return showVideo
+          ? SizedBox.expand(
+              child: FittedBox(
+                fit: fit,
+                clipBehavior: Clip.hardEdge,
+                child: SizedBox(
+                  width: controller.value.size.width,
+                  height: controller.value.size.height,
+                  child: VideoPlayer(controller),
+                ),
+              ),
+            )
+          : widget.ad.thumbnailUrl != null
+              ? CachedNetworkImage(
+                  imageUrl: widget.ad.thumbnailUrl!,
+                  fit: fit,
+                  width: double.infinity,
+                  height: double.infinity,
+                  errorWidget: (context, url, error) => const SizedBox.shrink(),
+                )
+              : const Center(child: CircularProgressIndicator());
+    }
 
     return PopScope(
       // System back closes the reviews panel first.
@@ -270,18 +299,21 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
         child: LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final double height = constraints.maxHeight;
+            final Widget videoLayer = videoLayerFor(Size(constraints.maxWidth, height));
             // The home tab does NOT resize for the keyboard (AppShell /
             // FeedScreen): the card keeps its full height and the reviews
             // panel makes room itself. Resizing the whole pager under an open
             // panel is what made it jump up and vanish (user report). The
             // keyboard is read from the window insets (didChangeMetrics
-            // rebuilds this card while its panel is open).
-            final bool keyboardUp = MediaQueryData.fromView(View.of(context)).viewInsets.bottom > 0;
+            // rebuilds this card while its panel is open). It's measured from
+            // the SCREEN bottom; the card ends belowCardHeight above that.
+            final double keyboard = MediaQueryData.fromView(View.of(context)).viewInsets.bottom;
+            final bool keyboardUp = keyboard > 0;
+            final double keyboardInCard = (keyboard - widget.belowCardHeight).clamp(0, height);
             // Smaller video while typing, so the reviews stay readable.
             final double openVideoHeight = height * (keyboardUp ? 0.2 : 0.36);
-            // The bottom-nav bar sits over the bottom of this card (extendBody)
-            // — except while the keyboard is up, when it's behind the keyboard
-            // and the panel reaches the screen bottom (it pads for the keyboard).
+            // Anything of the card covered by the bottom bar (none in the feed,
+            // whose pages end at the bar; kept for other hosts of this card).
             final double navClearance = keyboardUp ? 0 : _navBarClearance(context);
             final double panelTop = statusBar + openVideoHeight;
             final double panelHeight = (height - panelTop - navClearance).clamp(0, height);
@@ -291,10 +323,12 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
                 AnimatedPositioned(
                   duration: _panelAnimation,
                   curve: Curves.easeOutCubic,
-                  top: statusBar,
+                  // Full card (status bar area included) while watching; the
+                  // small video under the status bar with reviews open.
+                  top: reviewsOpen ? statusBar : 0,
                   left: 0,
                   right: 0,
-                  height: reviewsOpen ? openVideoHeight : height - statusBar,
+                  height: reviewsOpen ? openVideoHeight : height,
                   child: GestureDetector(
                     // With the panel open, tapping the (small) video closes it.
                     onTap: reviewsOpen ? closeReviews : _togglePlayPause,
@@ -349,7 +383,7 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
                     left: 0,
                     right: 0,
                     height: panelHeight,
-                    child: ReviewsPanel(adId: widget.ad.id, onClose: closeReviews),
+                    child: ReviewsPanel(adId: widget.ad.id, onClose: closeReviews, keyboardInset: keyboardInCard),
                   ),
               ],
             );
