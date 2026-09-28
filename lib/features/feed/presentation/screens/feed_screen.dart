@@ -30,6 +30,15 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
   final VideoControllerPool _pool = VideoControllerPool();
   int _activeIndex = 0;
 
+  /// True while another bottom-nav tab is showing. The feed's players are
+  /// then DISPOSED, not just paused: a paused player keeps its hardware
+  /// decoder, and the native editor (AD tab) needs every decoder the phone
+  /// has — with the feed holding up to [VideoControllerPool.maxSize] of
+  /// them the editor's preview failed with DECODER_INIT_FAILED (device
+  /// report). The cards are unmounted first, then the pool is emptied;
+  /// coming back re-mounts them and the active card starts playing again.
+  bool _playersReleased = false;
+
   /// The page the swipe has crossed into but hasn't settled on yet.
   int? _pendingIndex;
 
@@ -136,12 +145,19 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
     // (creation) tab, and never resumes on returning to Home.
     ref.listen(activeShellBranchIndexProvider, (int? previous, int next) {
       if (next == 0) {
-        final List<Ad>? ads = ref.read(feedControllerProvider).valueOrNull?.ads;
-        if (ads != null && _activeIndex < ads.length) {
-          _pool.resume(ads[_activeIndex].id);
+        if (_playersReleased) {
+          setState(() => _playersReleased = false); // cards re-attach and play
         }
-      } else {
+      } else if (!_playersReleased) {
         _pool.pauseAll();
+        setState(() => _playersReleased = true);
+        // Dispose after the cards have unmounted, so none is still
+        // listening to (or painting) a disposed controller.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _playersReleased) {
+            _pool.disposeAll();
+          }
+        });
       }
     });
 
@@ -228,6 +244,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
                     },
                     itemBuilder: (BuildContext context, int index) {
                       final Ad ad = feedState.ads[index];
+                      if (_playersReleased) {
+                        return const ColoredBox(color: AppColors.darkBackground);
+                      }
                       return AdVideoCard(
                         ad: ad,
                         pool: _pool,
