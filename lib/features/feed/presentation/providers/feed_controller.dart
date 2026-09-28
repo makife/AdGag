@@ -59,6 +59,18 @@ final class FeedController extends AsyncNotifier<FeedState> {
   /// Pull-to-refresh: fetches the first page again and swaps it in. The
   /// current Ads stay on screen while it loads, and on a failure (the error
   /// is rethrown for the caller to show) — never a full-screen spinner.
+  /// Drops every loaded Ad by [userId] at once (after blocking them) — the
+  /// server already filters blocked creators out of later pages.
+  void hideCreator(String userId) {
+    final FeedState? current = state.valueOrNull;
+    if (current == null) {
+      return;
+    }
+    state = AsyncData<FeedState>(
+      current.copyWith(ads: current.ads.where((ad) => ad.userId != userId).toList(growable: false)),
+    );
+  }
+
   Future<void> refresh() async {
     final page = await ref.read(feedRepositoryProvider).fetchPage();
     // Fresh counts include the viewer's own SOLDs and shares: start the

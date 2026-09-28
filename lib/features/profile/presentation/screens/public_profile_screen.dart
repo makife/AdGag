@@ -9,6 +9,7 @@ import "../../../../core/supabase/supabase_providers.dart";
 import "../../../../core/theme/app_spacing.dart";
 import "../../../feed/domain/ad.dart";
 import "../../../moderation/domain/report_target_type.dart";
+import "../../../moderation/presentation/block_actions.dart";
 import "../../../moderation/presentation/providers/moderation_providers.dart";
 import "../../../moderation/presentation/widgets/report_sheet.dart";
 import "../../../social/presentation/providers/social_providers.dart";
@@ -32,10 +33,12 @@ class PublicProfileScreen extends ConsumerWidget {
       appBar: AppBar(),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (Object error, StackTrace stackTrace) => Center(child: Text("$error")),
+        error: (Object error, StackTrace stackTrace) =>
+            Center(child: Text("$error")),
         data: (PublicProfile? profile) {
           if (profile == null) {
-            return Center(child: Text(AppLocalizations.of(context).profileNotFound));
+            return Center(
+                child: Text(AppLocalizations.of(context).profileNotFound),);
           }
           return _ProfileBody(profile: profile);
         },
@@ -54,6 +57,9 @@ class _ProfileBody extends ConsumerWidget {
     final currentUserId = ref.watch(currentUserIdProvider);
     final bool isOwnProfile = currentUserId == profile.id;
     final adsAsync = ref.watch(adsByUserProvider(profile.id));
+    final bool blocked = !isOwnProfile &&
+        currentUserId != null &&
+        (ref.watch(isBlockedProvider(profile.id)).valueOrNull ?? false);
 
     return CustomScrollView(
       slivers: <Widget>[
@@ -67,7 +73,8 @@ class _ProfileBody extends ConsumerWidget {
                   profile.displayName ?? profile.username,
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
-                Text("@${profile.username}", style: Theme.of(context).textTheme.bodyMedium),
+                Text("@${profile.username}",
+                    style: Theme.of(context).textTheme.bodyMedium,),
                 if (profile.bio != null && profile.bio!.isNotEmpty) ...<Widget>[
                   const SizedBox(height: AppSpacing.sm),
                   Text(profile.bio!),
@@ -76,12 +83,30 @@ class _ProfileBody extends ConsumerWidget {
                 if (!isOwnProfile && currentUserId != null)
                   Row(
                     children: <Widget>[
-                      _FollowButton(userId: profile.id),
-                      const SizedBox(width: AppSpacing.sm),
-                      IconButton(
-                        icon: const Icon(Icons.block_outlined),
-                        tooltip: AppLocalizations.of(context).blockUser,
-                        onPressed: () => unawaited(_block(context, ref)),
+                      // Blocking removes follows both ways; following again
+                      // only makes sense after unblocking.
+                      if (!blocked) ...<Widget>[
+                        _FollowButton(userId: profile.id),
+                        const SizedBox(width: AppSpacing.sm),
+                      ],
+                      OutlinedButton.icon(
+                        icon: Icon(
+                            blocked
+                                ? Icons.lock_open_outlined
+                                : Icons.block_outlined,
+                            size: 18,),
+                        label: Text(
+                          blocked
+                              ? AppLocalizations.of(context).blockedUnblock
+                              : AppLocalizations.of(context).blockUser,
+                        ),
+                        onPressed: () => unawaited(
+                          blocked
+                              ? unblockUserFlow(context, userId: profile.id)
+                              : blockUserFlow(context,
+                                  userId: profile.id,
+                                  username: profile.username,),
+                        ),
                       ),
                       IconButton(
                         icon: const Icon(Icons.flag_outlined),
@@ -90,8 +115,9 @@ class _ProfileBody extends ConsumerWidget {
                           showModalBottomSheet<void>(
                             context: context,
                             isScrollControlled: true,
-                            builder: (BuildContext context) =>
-                                ReportSheet(targetType: ReportTargetType.user, targetId: profile.id),
+                            builder: (BuildContext context) => ReportSheet(
+                                targetType: ReportTargetType.user,
+                                targetId: profile.id,),
                           ),
                         ),
                       ),
@@ -101,68 +127,73 @@ class _ProfileBody extends ConsumerWidget {
             ),
           ),
         ),
-        adsAsync.when(
-          loading: () => const SliverToBoxAdapter(
+        if (blocked)
+          SliverToBoxAdapter(
             child: Padding(
-              padding: EdgeInsets.all(AppSpacing.xl),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          ),
-          error: (Object error, StackTrace stackTrace) => SliverToBoxAdapter(child: Center(child: Text("$error"))),
-          data: (List<Ad> ads) {
-            if (ads.isEmpty) {
-              return SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.xl),
-                  child: Text(AppLocalizations.of(context).emptyProfileAds),
-                ),
-              );
-            }
-            return SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                mainAxisSpacing: 2,
-                crossAxisSpacing: 2,
-                childAspectRatio: 9 / 16,
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+              child: Text(
+                AppLocalizations.of(context).profileBlockedNote,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: Theme.of(context).hintColor),
               ),
-              delegate: SliverChildBuilderDelegate(
-                (BuildContext context, int index) {
-                  final Ad ad = ads[index];
-                  return GestureDetector(
-                    onTap: () => unawaited(
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => SubjectAdsViewerScreen(ads: ads, initialIndex: index),
+            ),
+          )
+        else
+          adsAsync.when(
+            loading: () => const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.xl),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ),
+            error: (Object error, StackTrace stackTrace) =>
+                SliverToBoxAdapter(child: Center(child: Text("$error"))),
+            data: (List<Ad> ads) {
+              if (ads.isEmpty) {
+                return SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.xl),
+                    child: Text(AppLocalizations.of(context).emptyProfileAds),
+                  ),
+                );
+              }
+              return SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  mainAxisSpacing: 2,
+                  crossAxisSpacing: 2,
+                  childAspectRatio: 9 / 16,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (BuildContext context, int index) {
+                    final Ad ad = ads[index];
+                    return GestureDetector(
+                      onTap: () => unawaited(
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => SubjectAdsViewerScreen(
+                                ads: ads, initialIndex: index,),
+                          ),
                         ),
                       ),
-                    ),
-                    child: ad.thumbnailUrl != null
-                        ? CachedNetworkImage(imageUrl: ad.thumbnailUrl!, fit: BoxFit.cover)
-                        : Container(color: Colors.black12),
-                  );
-                },
-                childCount: ads.length,
-              ),
-            );
-          },
-        ),
-        SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).bottom + AppSpacing.md)),
+                      child: ad.thumbnailUrl != null
+                          ? CachedNetworkImage(
+                              imageUrl: ad.thumbnailUrl!, fit: BoxFit.cover,)
+                          : Container(color: Colors.black12),
+                    );
+                  },
+                  childCount: ads.length,
+                ),
+              );
+            },
+          ),
+        SliverToBoxAdapter(
+            child: SizedBox(
+                height: MediaQuery.paddingOf(context).bottom + AppSpacing.md,),),
       ],
     );
-  }
-
-  Future<void> _block(BuildContext context, WidgetRef ref) async {
-    try {
-      await ref.read(moderationRepositoryProvider).blockUser(profile.id);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).blockDone)));
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).blockFailed("$e"))));
-      }
-    }
   }
 }
 
@@ -177,9 +208,11 @@ class _FollowButton extends ConsumerWidget {
     final bool isFollowing = followingAsync.valueOrNull ?? false;
 
     return OutlinedButton(
-      onPressed: () => unawaited(ref.read(followControllerProvider(userId).notifier).toggle()),
-      child:
-          Text(isFollowing ? AppLocalizations.of(context).actionFollowing : AppLocalizations.of(context).actionFollow),
+      onPressed: () => unawaited(
+          ref.read(followControllerProvider(userId).notifier).toggle(),),
+      child: Text(isFollowing
+          ? AppLocalizations.of(context).actionFollowing
+          : AppLocalizations.of(context).actionFollow,),
     );
   }
 }

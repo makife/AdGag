@@ -36,7 +36,7 @@ class FeedActionRail extends StatelessWidget {
         const SizedBox(height: AppSpacing.sm),
         ShareButton(adId: ad.id, subjectDisplayName: ad.subjectDisplayName, shareCount: ad.shareCount),
         const SizedBox(height: AppSpacing.sm),
-        MoreMenuButton(adId: ad.id, adOwnerUserId: ad.userId),
+        MoreMenuButton(adId: ad.id, adOwnerUserId: ad.userId, adOwnerUsername: ad.creatorUsername),
       ],
     );
   }

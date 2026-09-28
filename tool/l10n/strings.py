@@ -26,6 +26,8 @@ PLACEHOLDERS = {
     "blockedUnblockConfirmTitle": {"username": "String"},
     "authCheckEmailBody": {"email": "String"},
     "blockFailed": {"error": "String"},
+    "blockConfirmTitle": {"username": "String"},
+    "blockDoneNamed": {"username": "String"},
     "deleteFailed": {"error": "String"},
     "reportFailed": {"error": "String"},
     "reviewsPostFailed": {"error": "String"},
@@ -307,6 +309,33 @@ K("reviewsPostFailed", "Couldn't post: {error}", "Gönderilemedi: {error}", "No 
 K("reportAd", "Report", "Şikayet et", "Denunciar", "Denunciar", "Melden", "Signaler", "Segnala", "Пожаловаться", "إبلاغ", "Laporkan", "報告", "신고")
 K("blockUser", "Block", "Engelle", "Bloquear", "Bloquear", "Blockieren", "Bloquer", "Blocca", "Заблокировать", "حظر", "Blokir", "ブロック", "차단")
 K("blockDone", "Blocked.", "Engellendi.", "Bloqueado.", "Bloqueado.", "Blockiert.", "Bloqué.", "Bloccato.", "Заблокировано.", "تم الحظر.", "Diblokir.", "ブロックしました。", "차단했어요.")
+K("blockConfirmTitle", "Block @{username}?", "@{username} engellensin mi?", "¿Bloquear a @{username}?", "Bloquear @{username}?",
+  "@{username} blockieren?", "Bloquer @{username} ?", "Bloccare @{username}?", "Заблокировать @{username}?", "حظر @{username}؟",
+  "Blokir @{username}?", "@{username}さんをブロックしますか？", "@{username}님을 차단할까요?")
+K("blockConfirmNote", "Their Ads and reviews will disappear for you, and they won't be able to see yours. They won't be notified. You can unblock them any time in Settings.",
+  "Reklamları ve yorumları sana görünmez, o da seninkileri göremez. Bundan haberi olmaz. Engeli istediğin zaman Ayarlar'dan kaldırabilirsin.",
+  "Sus anuncios y reseñas desaparecerán para ti, y no podrá ver los tuyos. No recibirá ningún aviso. Puedes desbloquearlo cuando quieras en Ajustes.",
+  "Os anúncios e avaliações dessa pessoa vão sumir para você, e ela não poderá ver os seus. Ela não será avisada. Você pode desbloquear quando quiser em Configurações.",
+  "Seine Werbungen und Bewertungen verschwinden für dich, und er kann deine nicht sehen. Er wird nicht benachrichtigt. Du kannst die Blockierung jederzeit in den Einstellungen aufheben.",
+  "Ses pubs et avis disparaîtront pour toi, et il ne pourra pas voir les tiens. Il ne sera pas prévenu. Tu peux le débloquer à tout moment dans les Réglages.",
+  "Le sue pubblicità e recensioni spariranno per te e non potrà vedere le tue. Non riceverà alcun avviso. Puoi sbloccarlo quando vuoi nelle Impostazioni.",
+  "Его реклама и отзывы исчезнут для вас, а он не увидит ваши. Он не получит уведомления. Разблокировать можно в любой момент в настройках.",
+  "ستختفي إعلاناته ومراجعاته عنك، ولن يتمكن من رؤية إعلاناتك. لن يتم إشعاره. يمكنك إلغاء الحظر في أي وقت من الإعدادات.",
+  "Iklan dan ulasannya akan hilang untukmu, dan dia tidak bisa melihat milikmu. Dia tidak akan diberi tahu. Kamu bisa membuka blokir kapan saja di Pengaturan.",
+  "相手の広告とレビューが表示されなくなり、相手もあなたの広告を見られなくなります。相手に通知はされません。ブロックは設定からいつでも解除できます。",
+  "그 사람의 광고와 리뷰가 보이지 않게 되고, 그 사람도 내 광고를 볼 수 없어요. 상대에게 알림은 가지 않아요. 차단은 설정에서 언제든 해제할 수 있어요.")
+K("blockDoneNamed", "@{username} blocked", "@{username} engellendi", "@{username} bloqueado", "@{username} bloqueado", "@{username} blockiert",
+  "@{username} bloqué", "@{username} bloccato", "@{username} заблокирован", "تم حظر @{username}", "@{username} diblokir",
+  "@{username}さんをブロックしました", "@{username}님을 차단했어요")
+K("blockUndo", "Undo", "Geri al", "Deshacer", "Desfazer", "Rückgängig", "Annuler", "Annulla", "Отменить", "تراجع", "Urungkan", "元に戻す", "실행 취소")
+K("unblockDone", "Unblocked", "Engel kaldırıldı", "Desbloqueado", "Desbloqueado", "Blockierung aufgehoben", "Débloqué", "Sbloccato",
+  "Разблокировано", "تم إلغاء الحظر", "Blokir dibuka", "ブロックを解除しました", "차단을 해제했어요")
+K("profileBlockedNote", "You blocked this account. You won't see their Ads.", "Bu hesabı engelledin. Reklamlarını görmezsin.",
+  "Bloqueaste esta cuenta. No verás sus anuncios.", "Você bloqueou esta conta. Não verá os anúncios dela.",
+  "Du hast dieses Konto blockiert. Du siehst seine Werbungen nicht.", "Tu as bloqué ce compte. Tu ne verras pas ses pubs.",
+  "Hai bloccato questo account. Non vedrai le sue pubblicità.", "Вы заблокировали этот аккаунт. Его реклама вам не показывается.",
+  "لقد حظرت هذا الحساب. لن ترى إعلاناته.", "Kamu memblokir akun ini. Kamu tidak akan melihat iklannya.",
+  "このアカウントをブロックしています。広告は表示されません。", "이 계정을 차단했어요. 광고가 보이지 않아요.")
 K("blockFailed", "Couldn't block: {error}", "Engellenemedi: {error}", "No se pudo bloquear: {error}", "Não foi possível bloquear: {error}",
   "Blockieren fehlgeschlagen: {error}", "Blocage impossible : {error}", "Impossibile bloccare: {error}", "Не удалось заблокировать: {error}",
   "تعذّر الحظر: {error}", "Gagal memblokir: {error}", "ブロックできませんでした: {error}", "차단하지 못했어요: {error}")

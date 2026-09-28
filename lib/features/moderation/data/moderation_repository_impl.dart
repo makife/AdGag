@@ -52,6 +52,18 @@ final class ModerationRepositoryImpl implements ModerationRepository {
   }
 
   @override
+  Future<bool> isBlocked(String userId) async {
+    try {
+      // RLS blocks_select_own: only the caller's own rows come back.
+      final Map<String, dynamic>? row =
+          await _client.from("blocks").select("blocked_id").eq("blocked_id", userId).maybeSingle();
+      return row != null;
+    } on supa.PostgrestException catch (e) {
+      throw app_error.ValidationException(e.message, e);
+    }
+  }
+
+  @override
   Future<List<PublicProfile>> fetchBlockedUsers() async {
     try {
       // `blocks` has two FKs to `profiles` — embed through the blocked side

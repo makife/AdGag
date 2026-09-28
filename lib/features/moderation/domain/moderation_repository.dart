@@ -16,6 +16,9 @@ abstract interface class ModerationRepository {
   Future<void> blockUser(String userId);
   Future<void> unblockUser(String userId);
 
+  /// Whether the signed-in user has blocked [userId].
+  Future<bool> isBlocked(String userId);
+
   /// The signed-in user's own block list, newest first (Settings >
   /// Blocked accounts). RLS `blocks_select_own` only ever returns the
   /// caller's own rows — never who has blocked them.

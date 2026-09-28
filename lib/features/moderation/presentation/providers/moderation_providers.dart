@@ -13,3 +13,10 @@ final AutoDisposeFutureProvider<List<PublicProfile>> blockedUsersProvider =
 final Provider<ModerationRepository> moderationRepositoryProvider = Provider<ModerationRepository>((ref) {
   return ModerationRepositoryImpl(ref.watch(supabaseClientProvider));
 });
+
+/// Whether the signed-in user has blocked this user (profile's
+/// Block / Unblock button). Invalidated by [blockUserFlow]/[unblockUserFlow].
+final AutoDisposeFutureProviderFamily<bool, String> isBlockedProvider =
+    FutureProvider.autoDispose.family<bool, String>((ref, String userId) {
+  return ref.watch(moderationRepositoryProvider).isBlocked(userId);
+});

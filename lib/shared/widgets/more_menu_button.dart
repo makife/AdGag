@@ -9,7 +9,7 @@ import "../../core/theme/app_spacing.dart";
 import "../../features/create_ad/presentation/providers/draft_ad_providers.dart";
 import "../../features/feed/presentation/providers/feed_controller.dart";
 import "../../features/moderation/domain/report_target_type.dart";
-import "../../features/moderation/presentation/providers/moderation_providers.dart";
+import "../../features/moderation/presentation/block_actions.dart";
 import "../../features/moderation/presentation/widgets/report_sheet.dart";
 import "../../features/profile/presentation/providers/profile_providers.dart";
 import "action_rail_icon.dart";
@@ -18,10 +18,11 @@ import "action_rail_icon.dart";
 /// Hides "Block" entirely for your own Ad — blocking yourself isn't a
 /// meaningful action to offer.
 class MoreMenuButton extends ConsumerWidget {
-  const MoreMenuButton({required this.adId, required this.adOwnerUserId, super.key});
+  const MoreMenuButton({required this.adId, required this.adOwnerUserId, this.adOwnerUsername, super.key});
 
   final String adId;
   final String adOwnerUserId;
+  final String? adOwnerUsername;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -77,22 +78,9 @@ class MoreMenuButton extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.block),
                   title: Text(AppLocalizations.of(context).blockUser),
-                  onTap: () async {
+                  onTap: () {
                     Navigator.of(sheetContext).pop();
-                    try {
-                      await ref.read(moderationRepositoryProvider).blockUser(adOwnerUserId);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(AppLocalizations.of(context).blockDone)),
-                        );
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(AppLocalizations.of(context).blockFailed("$e"))),
-                        );
-                      }
-                    }
+                    unawaited(blockUserFlow(context, userId: adOwnerUserId, username: adOwnerUsername));
                   },
                 ),
             ],

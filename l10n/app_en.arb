@@ -128,6 +128,26 @@
   "reportAd": "Report",
   "blockUser": "Block",
   "blockDone": "Blocked.",
+  "blockConfirmTitle": "Block @{username}?",
+  "@blockConfirmTitle": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "blockConfirmNote": "Their Ads and reviews will disappear for you, and they won't be able to see yours. They won't be notified. You can unblock them any time in Settings.",
+  "blockDoneNamed": "@{username} blocked",
+  "@blockDoneNamed": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "blockUndo": "Undo",
+  "unblockDone": "Unblocked",
+  "profileBlockedNote": "You blocked this account. You won't see their Ads.",
   "blockFailed": "Couldn't block: {error}",
   "@blockFailed": {
     "placeholders": {
