@@ -27,7 +27,7 @@
   "unknownUser": "غير معروف",
   "onboardingPickAnything": "اختر أي شيء.",
   "onboardingPickAnythingBody": "حجر. قهوتك. نفسك. يوم الاثنين.",
-  "onboardingSellIt": "بِعه في 10 ثوانٍ.",
+  "onboardingSellIt": "بِعه في 30 ثانية.",
   "onboardingSellItBody": "قصير، مؤثر، مضحك. هذا هو الأسلوب.",
   "onboardingSeeItAdIt": "شاهد. أعلن. انطلق.",
   "onboardingSeeItAdItBody": "شاهد إعلانًا. اصنع أفضل منه. انشره.",
@@ -189,5 +189,8 @@
   "blockedLoadError": "تعذّر تحميل الحسابات المحظورة.",
   "aboutOpenSourceLibraries": "مكتبات مفتوحة المصدر",
   "aboutOpenSourceLibrariesSubtitle": "تراخيص البرمجيات التي يستخدمها AdGag",
+  "authConfirmedTitle": "تم تأكيد حسابك!",
+  "authConfirmedBody": "مرحباً بك في AdGag. اختر أي شيء وبِعه.",
+  "authConfirmedStart": "هيا بنا",
   "authResend": "إعادة إرسال البريد"
 }

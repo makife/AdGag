@@ -146,6 +146,7 @@ class _ProfileBody extends ConsumerWidget {
             );
           },
         ),
+        SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).bottom + AppSpacing.md)),
       ],
     );
   }

@@ -27,7 +27,7 @@
   "unknownUser": "inconnu",
   "onboardingPickAnything": "Choisis n'importe quoi.",
   "onboardingPickAnythingBody": "Un caillou. Ton café. Toi. Le lundi.",
-  "onboardingSellIt": "Vends-le en 10 secondes.",
+  "onboardingSellIt": "Vends-le en 30 secondes.",
   "onboardingSellItBody": "Court, percutant, drôle. C'est le format.",
   "onboardingSeeItAdIt": "Vois. Pubbe. Go.",
   "onboardingSeeItAdItBody": "Regarde une pub. Fais mieux. Publie.",
@@ -189,5 +189,8 @@
   "blockedLoadError": "Impossible de charger les comptes bloqués.",
   "aboutOpenSourceLibraries": "Bibliothèques open source",
   "aboutOpenSourceLibrariesSubtitle": "Licences des logiciels utilisés par AdGag",
+  "authConfirmedTitle": "Ton compte est confirmé !",
+  "authConfirmedBody": "Bienvenue sur AdGag. Choisis quelque chose et vends-le.",
+  "authConfirmedStart": "C'est parti",
   "authResend": "Renvoyer l'e-mail"
 }

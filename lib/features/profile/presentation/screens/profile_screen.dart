@@ -151,6 +151,11 @@ class _ProfileBody extends ConsumerWidget {
             );
           },
         ),
+        // The shell's Scaffold uses extendBody, so the nav bar sits over
+        // the end of this list; unlike ListView, CustomScrollView doesn't
+        // add that inset by itself — without it the last row stayed
+        // half-hidden under the bar.
+        SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).bottom + AppSpacing.md)),
       ],
     );
   }

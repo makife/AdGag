@@ -34,7 +34,7 @@
   "unknownUser": "unknown",
   "onboardingPickAnything": "Pick anything.",
   "onboardingPickAnythingBody": "A rock. Your coffee. Yourself. Monday.",
-  "onboardingSellIt": "Sell it in 10 seconds.",
+  "onboardingSellIt": "Sell it in 30 seconds.",
   "onboardingSellItBody": "Short, punchy, funny. That's the format.",
   "onboardingSeeItAdIt": "See it. Ad it. Go.",
   "onboardingSeeItAdItBody": "Watch an ad. Make a better one. Publish.",
@@ -374,5 +374,8 @@
   "blockedLoadError": "Couldn't load your blocked accounts.",
   "aboutOpenSourceLibraries": "Open source libraries",
   "aboutOpenSourceLibrariesSubtitle": "Licenses of the software AdGag uses",
+  "authConfirmedTitle": "Your account is confirmed!",
+  "authConfirmedBody": "Welcome to AdGag. Pick something and sell it.",
+  "authConfirmedStart": "Let's go",
   "authResend": "Resend email"
 }

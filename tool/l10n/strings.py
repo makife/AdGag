@@ -129,9 +129,9 @@ K("onboardingPickAnythingBody", "A rock. Your coffee. Yourself. Monday.", "Bir t
   "Un caillou. Ton café. Toi. Le lundi.", "Un sasso. Il tuo caffè. Te stesso. Il lunedì.", "Камень. Твой кофе. Ты сам. Понедельник.",
   "حجر. قهوتك. نفسك. يوم الاثنين.", "Sebuah batu. Kopimu. Dirimu. Hari Senin.", "石ころ。コーヒー。自分自身。月曜日。",
   "돌멩이. 네 커피. 너 자신. 월요일.")
-K("onboardingSellIt", "Sell it in 10 seconds.", "10 saniyede sat.", "Véndelo en 10 segundos.", "Venda em 10 segundos.",
-  "Verkauf es in 10 Sekunden.", "Vends-le en 10 secondes.", "Vendilo in 10 secondi.", "Продай за 10 секунд.",
-  "بِعه في 10 ثوانٍ.", "Jual dalam 10 detik.", "10秒で売り込め。", "10초 만에 팔아 봐요.")
+K("onboardingSellIt", "Sell it in 30 seconds.", "30 saniyede sat.", "Véndelo en 30 segundos.", "Venda em 30 segundos.",
+  "Verkauf es in 30 Sekunden.", "Vends-le en 30 secondes.", "Vendilo in 30 secondi.", "Продай за 30 секунд.",
+  "بِعه في 30 ثانية.", "Jual dalam 30 detik.", "30秒で売り込め。", "30초 만에 팔아 봐요.")
 K("onboardingSellItBody", "Short, punchy, funny. That's the format.", "Kısa, vurucu, komik. Format bu.",
   "Corto, directo, divertido. Ese es el formato.", "Curto, marcante, engraçado. Esse é o formato.",
   "Kurz, knackig, lustig. Das ist das Format.", "Court, percutant, drôle. C'est le format.",
@@ -619,6 +619,17 @@ K("aboutOpenSourceLibrariesSubtitle", "Licenses of the software AdGag uses", "Ad
   "Licences des logiciels utilisés par AdGag", "Licenze del software usato da AdGag", "Лицензии ПО, которое использует AdGag",
   "تراخيص البرمجيات التي يستخدمها AdGag", "Lisensi perangkat lunak yang dipakai AdGag", "AdGagが使用しているソフトウェアのライセンス",
   "AdGag에서 사용하는 소프트웨어 라이선스")
+K("authConfirmedTitle", "Your account is confirmed!", "Hesabın onaylandı!", "¡Tu cuenta está confirmada!", "Sua conta foi confirmada!",
+  "Dein Konto ist bestätigt!", "Ton compte est confirmé !", "Il tuo account è confermato!", "Аккаунт подтверждён!",
+  "تم تأكيد حسابك!", "Akunmu sudah dikonfirmasi!", "アカウントが確認されました！", "계정이 확인됐어요!")
+K("authConfirmedBody", "Welcome to AdGag. Pick something and sell it.", "AdGag'e hoş geldin. Bir şey seç ve sat.",
+  "Bienvenido a AdGag. Elige algo y véndelo.", "Bem-vindo ao AdGag. Escolha algo e venda.",
+  "Willkommen bei AdGag. Such dir etwas aus und verkauf es.", "Bienvenue sur AdGag. Choisis quelque chose et vends-le.",
+  "Benvenuto su AdGag. Scegli qualcosa e vendilo.", "Добро пожаловать в AdGag. Выбери что угодно и продай это.",
+  "مرحباً بك في AdGag. اختر أي شيء وبِعه.", "Selamat datang di AdGag. Pilih sesuatu dan jual.",
+  "AdGagへようこそ。何かを選んで売り込もう。", "AdGag에 오신 걸 환영해요. 무엇이든 골라서 팔아 보세요.")
+K("authConfirmedStart", "Let's go", "Başlayalım", "¡Vamos!", "Vamos lá", "Los geht's", "C'est parti", "Iniziamo", "Поехали",
+  "هيا بنا", "Ayo mulai", "はじめる", "시작하기")
 K("authResend", "Resend email", "E-postayı tekrar gönder", "Reenviar email", "Reenviar e-mail", "E-Mail erneut senden",
   "Renvoyer l'e-mail", "Invia di nuovo l'email", "Отправить письмо ещё раз", "إعادة إرسال البريد", "Kirim ulang email",
   "メールを再送信", "이메일 다시 보내기")

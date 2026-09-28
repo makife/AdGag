@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../../core/localization/generated/app_localizations.dart";
+import "../../../../core/preferences/app_preferences.dart";
 import "../../../../core/router/route_paths.dart";
 import "../../../../core/theme/app_colors.dart";
 import "../../../../core/theme/app_spacing.dart";
@@ -60,6 +61,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       case SignUpOutcome.signedIn:
         break; // the router's auth redirect takes over
       case SignUpOutcome.confirmEmail:
+        unawaited(ref.read(pendingEmailConfirmationProvider.notifier).set(true));
         setState(() => _confirmationSentTo = email);
       case SignUpOutcome.emailTaken:
         ScaffoldMessenger.of(context).showSnackBar(

@@ -19,4 +19,9 @@ abstract interface class VideoService {
   String playbackUrl(String playbackId);
 
   String thumbnailUrl(String playbackId);
+
+  /// A short, silent, looping animated image of the clip's first seconds —
+  /// for small previews (Market) that should move without spending a
+  /// hardware video decoder (the native editor needs every one of them).
+  String animatedPreviewUrl(String playbackId);
 }

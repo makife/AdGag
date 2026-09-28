@@ -27,7 +27,7 @@
   "unknownUser": "不明",
   "onboardingPickAnything": "何でも選んで。",
   "onboardingPickAnythingBody": "石ころ。コーヒー。自分自身。月曜日。",
-  "onboardingSellIt": "10秒で売り込め。",
+  "onboardingSellIt": "30秒で売り込め。",
   "onboardingSellItBody": "短く、強く、おもしろく。それがルール。",
   "onboardingSeeItAdIt": "見て、広告して、出す。",
   "onboardingSeeItAdItBody": "広告を見て、もっといいのを作って、公開しよう。",
@@ -189,5 +189,8 @@
   "blockedLoadError": "ブロック中のアカウントを読み込めませんでした。",
   "aboutOpenSourceLibraries": "オープンソースライブラリ",
   "aboutOpenSourceLibrariesSubtitle": "AdGagが使用しているソフトウェアのライセンス",
+  "authConfirmedTitle": "アカウントが確認されました！",
+  "authConfirmedBody": "AdGagへようこそ。何かを選んで売り込もう。",
+  "authConfirmedStart": "はじめる",
   "authResend": "メールを再送信"
 }

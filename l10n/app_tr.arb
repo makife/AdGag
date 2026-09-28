@@ -27,7 +27,7 @@
   "unknownUser": "bilinmiyor",
   "onboardingPickAnything": "Bir şey seç.",
   "onboardingPickAnythingBody": "Bir taş. Kahven. Kendin. Pazartesi.",
-  "onboardingSellIt": "10 saniyede sat.",
+  "onboardingSellIt": "30 saniyede sat.",
   "onboardingSellItBody": "Kısa, vurucu, komik. Format bu.",
   "onboardingSeeItAdIt": "Gör. Reklamını yap. Git.",
   "onboardingSeeItAdItBody": "Bir reklam izle. Daha iyisini yap. Yayınla.",
@@ -189,5 +189,8 @@
   "blockedLoadError": "Engellenen hesaplar yüklenemedi.",
   "aboutOpenSourceLibraries": "Açık kaynak kütüphaneler",
   "aboutOpenSourceLibrariesSubtitle": "AdGag'in kullandığı yazılımların lisansları",
+  "authConfirmedTitle": "Hesabın onaylandı!",
+  "authConfirmedBody": "AdGag'e hoş geldin. Bir şey seç ve sat.",
+  "authConfirmedStart": "Başlayalım",
   "authResend": "E-postayı tekrar gönder"
 }

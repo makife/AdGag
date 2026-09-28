@@ -27,7 +27,7 @@
   "unknownUser": "неизвестно",
   "onboardingPickAnything": "Выбери что угодно.",
   "onboardingPickAnythingBody": "Камень. Твой кофе. Ты сам. Понедельник.",
-  "onboardingSellIt": "Продай за 10 секунд.",
+  "onboardingSellIt": "Продай за 30 секунд.",
   "onboardingSellItBody": "Коротко, ярко, смешно. Вот и весь формат.",
   "onboardingSeeItAdIt": "Увидел. Прорекламировал. Вперёд.",
   "onboardingSeeItAdItBody": "Посмотри рекламу. Сделай лучше. Опубликуй.",
@@ -189,5 +189,8 @@
   "blockedLoadError": "Не удалось загрузить заблокированных.",
   "aboutOpenSourceLibraries": "Библиотеки с открытым кодом",
   "aboutOpenSourceLibrariesSubtitle": "Лицензии ПО, которое использует AdGag",
+  "authConfirmedTitle": "Аккаунт подтверждён!",
+  "authConfirmedBody": "Добро пожаловать в AdGag. Выбери что угодно и продай это.",
+  "authConfirmedStart": "Поехали",
   "authResend": "Отправить письмо ещё раз"
 }

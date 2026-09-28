@@ -92,6 +92,9 @@ class _FakeVideoService implements VideoService {
 
   @override
   String thumbnailUrl(String playbackId) => "https://image.mux.com/$playbackId/thumbnail.jpg";
+
+  @override
+  String animatedPreviewUrl(String playbackId) => "https://image.mux.com/$playbackId/animated.webp";
 }
 
 class _FakeVideoUploader implements VideoUploader {

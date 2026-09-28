@@ -27,7 +27,7 @@
   "unknownUser": "tidak dikenal",
   "onboardingPickAnything": "Pilih apa saja.",
   "onboardingPickAnythingBody": "Sebuah batu. Kopimu. Dirimu. Hari Senin.",
-  "onboardingSellIt": "Jual dalam 10 detik.",
+  "onboardingSellIt": "Jual dalam 30 detik.",
   "onboardingSellItBody": "Singkat, nendang, lucu. Itu formatnya.",
   "onboardingSeeItAdIt": "Lihat. Iklankan. Gas.",
   "onboardingSeeItAdItBody": "Tonton iklan. Buat yang lebih bagus. Terbitkan.",
@@ -189,5 +189,8 @@
   "blockedLoadError": "Gagal memuat akun yang diblokir.",
   "aboutOpenSourceLibraries": "Pustaka sumber terbuka",
   "aboutOpenSourceLibrariesSubtitle": "Lisensi perangkat lunak yang dipakai AdGag",
+  "authConfirmedTitle": "Akunmu sudah dikonfirmasi!",
+  "authConfirmedBody": "Selamat datang di AdGag. Pilih sesuatu dan jual.",
+  "authConfirmedStart": "Ayo mulai",
   "authResend": "Kirim ulang email"
 }

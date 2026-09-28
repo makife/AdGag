@@ -51,3 +51,27 @@ final class LocaleController extends Notifier<Locale?> {
 
 final NotifierProvider<LocaleController, Locale?> localeProvider =
     NotifierProvider<LocaleController, Locale?>(LocaleController.new);
+
+/// Set when sign-up ends with "check your email". The confirmation link
+/// signs the user in by itself, which used to drop them straight onto the
+/// feed with no sign the link worked; while this is set, the router shows
+/// the "Your account is confirmed" page once after that sign-in.
+final class PendingEmailConfirmationController extends Notifier<bool> {
+  static const String _key = "pending_email_confirmation";
+
+  @override
+  bool build() => ref.watch(sharedPreferencesProvider).getBool(_key) ?? false;
+
+  Future<void> set(bool pending) async {
+    state = pending;
+    final SharedPreferences prefs = ref.read(sharedPreferencesProvider);
+    if (pending) {
+      await prefs.setBool(_key, true);
+    } else {
+      await prefs.remove(_key);
+    }
+  }
+}
+
+final NotifierProvider<PendingEmailConfirmationController, bool> pendingEmailConfirmationProvider =
+    NotifierProvider<PendingEmailConfirmationController, bool>(PendingEmailConfirmationController.new);

@@ -27,7 +27,7 @@
   "unknownUser": "알 수 없음",
   "onboardingPickAnything": "무엇이든 골라요.",
   "onboardingPickAnythingBody": "돌멩이. 네 커피. 너 자신. 월요일.",
-  "onboardingSellIt": "10초 만에 팔아 봐요.",
+  "onboardingSellIt": "30초 만에 팔아 봐요.",
   "onboardingSellItBody": "짧고, 강렬하고, 웃기게. 그게 포맷이에요.",
   "onboardingSeeItAdIt": "보고, 광고하고, 올리기.",
   "onboardingSeeItAdItBody": "광고를 보고, 더 잘 만들어서, 올려요.",
@@ -189,5 +189,8 @@
   "blockedLoadError": "차단한 계정을 불러오지 못했어요.",
   "aboutOpenSourceLibraries": "오픈소스 라이브러리",
   "aboutOpenSourceLibrariesSubtitle": "AdGag에서 사용하는 소프트웨어 라이선스",
+  "authConfirmedTitle": "계정이 확인됐어요!",
+  "authConfirmedBody": "AdGag에 오신 걸 환영해요. 무엇이든 골라서 팔아 보세요.",
+  "authConfirmedStart": "시작하기",
   "authResend": "이메일 다시 보내기"
 }

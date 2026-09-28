@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
 import "../../features/auth/presentation/providers/auth_providers.dart";
+import "../../features/auth/presentation/screens/account_confirmed_screen.dart";
 import "../../features/auth/presentation/screens/onboarding_screen.dart";
 import "../../features/auth/presentation/screens/sign_in_screen.dart";
 import "../../features/auth/presentation/screens/sign_up_screen.dart";
@@ -20,6 +21,7 @@ import "../../features/settings/presentation/screens/account_settings_screen.dar
 import "../../features/settings/presentation/screens/blocked_accounts_screen.dart";
 import "../../features/settings/presentation/screens/settings_screen.dart";
 import "../../features/subjects/presentation/screens/subject_screen.dart";
+import "../preferences/app_preferences.dart";
 import "app_shell.dart";
 import "route_paths.dart";
 
@@ -60,6 +62,10 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
       if (!signedIn && !isAuthRoute) {
         return RoutePaths.onboarding;
       }
+      // First sign-in after tapping the email confirmation link.
+      if (signedIn && ref.read(pendingEmailConfirmationProvider) && location != RoutePaths.accountConfirmed) {
+        return RoutePaths.accountConfirmed;
+      }
       if (signedIn && isAuthRoute) {
         return RoutePaths.home;
       }
@@ -77,6 +83,10 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: RoutePaths.signUp,
         builder: (BuildContext context, GoRouterState state) => const SignUpScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.accountConfirmed,
+        builder: (BuildContext context, GoRouterState state) => const AccountConfirmedScreen(),
       ),
       GoRoute(
         path: RoutePaths.subject,

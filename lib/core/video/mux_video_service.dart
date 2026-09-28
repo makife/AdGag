@@ -76,4 +76,9 @@ final class MuxVideoService implements VideoService {
 
   @override
   String thumbnailUrl(String playbackId) => "https://image.mux.com/$playbackId/thumbnail.jpg?time=0";
+
+  /// Mux's animated WebP: 0-3s, 200px wide (tiles are ~96dp), 10fps.
+  @override
+  String animatedPreviewUrl(String playbackId) =>
+      "https://image.mux.com/$playbackId/animated.webp?start=0&end=3&width=200&fps=10";
 }
