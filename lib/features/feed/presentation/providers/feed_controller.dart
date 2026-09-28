@@ -2,6 +2,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/ad.dart";
 import "feed_providers.dart";
+import "sold_providers.dart";
 
 final class FeedState {
   const FeedState({required this.ads, required this.nextCursor, required this.isLoadingMore});
@@ -60,6 +61,10 @@ final class FeedController extends AsyncNotifier<FeedState> {
   /// is rethrown for the caller to show) — never a full-screen spinner.
   Future<void> refresh() async {
     final page = await ref.read(feedRepositoryProvider).fetchPage();
+    // Fresh counts include the viewer's own SOLDs and shares: start the
+    // local adjustments over.
+    ref.invalidate(soldBaselineProvider);
+    ref.invalidate(shareCountDeltaProvider);
     state = AsyncData<FeedState>(FeedState(ads: page.ads, nextCursor: page.nextCursor, isLoadingMore: false));
   }
 }

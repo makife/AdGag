@@ -29,7 +29,6 @@ class SoldButton extends ConsumerStatefulWidget {
 }
 
 class _SoldButtonState extends ConsumerState<SoldButton> with SingleTickerProviderStateMixin {
-  bool? _baseline;
 
   /// Drives the "Sold!" burst (see [_SoldBurst]).
   late final AnimationController _burst = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
@@ -44,19 +43,21 @@ class _SoldButtonState extends ConsumerState<SoldButton> with SingleTickerProvid
   Widget build(BuildContext context) {
     final AsyncValue<bool> soldAsync = ref.watch(soldControllerProvider(widget.adId));
 
-    ref.listen<AsyncValue<bool>>(soldControllerProvider(widget.adId), (previous, next) {
-      // Capture the first resolved value as the baseline the fetched
-      // baseSoldCount already accounted for.
-      if (_baseline == null && next.hasValue) {
-        setState(() => _baseline = next.value);
-      }
-    });
-    if (_baseline == null && soldAsync.hasValue) {
-      _baseline = soldAsync.value;
+    // The first resolved value is the baseline the fetched baseSoldCount
+    // already accounts for (see soldBaselineProvider — it outlives this
+    // button). Stored after the frame: providers can't change during build.
+    final bool? storedBaseline = ref.watch(soldBaselineProvider(widget.adId));
+    if (storedBaseline == null && soldAsync.hasValue) {
+      final bool first = soldAsync.value!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final StateController<bool?> baseline = ref.read(soldBaselineProvider(widget.adId).notifier);
+        baseline.state ??= first;
+      });
     }
 
     final bool isSold = soldAsync.valueOrNull ?? false;
-    final int baselineAdjustment = (isSold ? 1 : 0) - ((_baseline ?? isSold) ? 1 : 0);
+    final bool baseline = storedBaseline ?? soldAsync.valueOrNull ?? isSold;
+    final int baselineAdjustment = (isSold ? 1 : 0) - (baseline ? 1 : 0);
     final int displayCount = widget.baseSoldCount + baselineAdjustment;
 
     return Semantics(

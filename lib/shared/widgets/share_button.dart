@@ -9,6 +9,7 @@ import "../../core/analytics/analytics_providers.dart";
 import "../../core/config/env_config.dart";
 import "../../core/supabase/supabase_providers.dart";
 import "../../core/theme/app_spacing.dart";
+import "../../features/feed/presentation/providers/sold_providers.dart";
 import "action_rail_icon.dart";
 import "count_label.dart";
 
@@ -36,6 +37,7 @@ class ShareButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final int count = shareCount + ref.watch(shareCountDeltaProvider(adId));
     return Semantics(
       button: true,
       label: "GAG!",
@@ -49,8 +51,8 @@ class ShareButton extends ConsumerWidget {
             children: <Widget>[
               const ActionRailIcon(icon: Icons.reply),
               const SizedBox(height: AppSpacing.xs),
-              if (shareCount > 0)
-                CountLabel(count: shareCount, color: Colors.white)
+              if (count > 0)
+                CountLabel(count: count, color: Colors.white)
               else
                 const Text(
                   "GAG!",
@@ -66,11 +68,17 @@ class ShareButton extends ConsumerWidget {
   Future<void> _share(WidgetRef ref) async {
     final String url = "https://${EnvConfig.appLinkHost}/ad/$adId";
     final String subjectLine = subjectDisplayName != null ? "${subjectDisplayName!.toUpperCase()}™ " : "";
-    await SharePlus.instance.share(
+    final ShareResult result = await SharePlus.instance.share(
       ShareParams(text: "${subjectLine}on AdGag: $url"),
     );
+    // Opening the share sheet and backing out isn't a share. ("unavailable" —
+    // the platform can't tell — still counts, as before.)
+    if (result.status == ShareResultStatus.dismissed) {
+      return;
+    }
 
     ref.read(analyticsServiceProvider).track(adId, AdEventType.shared);
+    ref.read(shareCountDeltaProvider(adId).notifier).state++;
 
     try {
       await ref
