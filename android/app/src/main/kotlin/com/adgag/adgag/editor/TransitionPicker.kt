@@ -79,7 +79,7 @@ fun TransitionPickerSheet(viewModel: EditorViewModel, boundary: Int, onDismiss: 
                     style = MaterialTheme.typography.titleMedium,
                 )
                 TextButton(onClick = onDismiss) {
-                    Text(text = "Done", color = AdGagColors.GradientPink, style = MaterialTheme.typography.labelLarge)
+                    Text(text = "Done", color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
                 }
             }
             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
@@ -119,8 +119,8 @@ fun TransitionPickerSheet(viewModel: EditorViewModel, boundary: Int, onDismiss: 
                 steps = ((MaxTransitionDurationMs - MinTransitionDurationMs) / 100 - 1).toInt(),
                 enabled = enabled,
                 colors = SliderDefaults.colors(
-                    thumbColor = AdGagColors.GradientPink,
-                    activeTrackColor = AdGagColors.GradientPink,
+                    thumbColor = AdGagColors.Accent,
+                    activeTrackColor = AdGagColors.Accent,
                 ),
                 modifier = Modifier.padding(horizontal = AdGagSpacing.lg.dp),
             )
@@ -154,7 +154,7 @@ private fun TransitionCard(type: ClipTransition, selected: Boolean, onClick: () 
                 .size(width = 64.dp, height = 96.dp)
                 .clip(RoundedCornerShape(AdGagRadius.sm.dp))
                 .border(
-                    BorderStroke(if (selected) 2.dp else 1.dp, if (selected) AdGagColors.GradientPink else AdGagColors.Border),
+                    BorderStroke(if (selected) 2.dp else 1.dp, if (selected) AdGagColors.Accent else AdGagColors.Border),
                     RoundedCornerShape(AdGagRadius.sm.dp),
                 )
                 .background(Color.Black)
@@ -176,7 +176,7 @@ private fun TransitionCard(type: ClipTransition, selected: Boolean, onClick: () 
         Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
         Text(
             text = type.label,
-            color = if (selected) AdGagColors.GradientPink else AdGagColors.OnSurfaceMuted,
+            color = if (selected) AdGagColors.Accent else AdGagColors.OnSurfaceMuted,
             style = MaterialTheme.typography.labelSmall,
             textAlign = TextAlign.Center,
             maxLines = 1,
@@ -195,7 +195,7 @@ private fun DrawScope.drawPosedFrame(pose: TransitionMath.Pose) {
     translate(left = pose.translateX * w, top = pose.translateY * h) {
         rotate(degrees = pose.rotationDegrees, pivot = center) {
             scale(scale = pose.scale, pivot = center) {
-                drawRect(AdGagColors.GradientPink)
+                drawRect(AdGagColors.Accent)
                 val mountain = Path().apply {
                     moveTo(w * 0.05f, h * 0.78f)
                     lineTo(w * 0.40f, h * 0.36f)

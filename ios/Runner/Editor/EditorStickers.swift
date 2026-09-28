@@ -280,7 +280,7 @@ struct StickerPanel: View {
           }
           .foregroundColor(EditorPalette.danger)
         }
-        Button("Done", action: onClose).foregroundColor(EditorPalette.pink)
+        Button("Done", action: onClose).foregroundColor(EditorPalette.accent)
       }
       EmojiGrid(selectedId: editing?.stickerId, onPick: pick)
     }
@@ -300,7 +300,7 @@ private struct EmojiGrid: View {
             let selected = selectedId == def.id
             Button { onPick(def) } label: {
               ZStack {
-                (selected ? EditorPalette.pink.opacity(0.25) : EditorPalette.surface)
+                (selected ? EditorPalette.accent.opacity(0.25) : EditorPalette.surface)
                 if loaded.contains(def.id) {
                   TimelineView(.animation) { context in
                     let ms = Int64(context.date.timeIntervalSinceReferenceDate * 1000)
@@ -313,7 +313,7 @@ private struct EmojiGrid: View {
               }
               .frame(width: 60, height: 60)
               .clipShape(RoundedRectangle(cornerRadius: 8))
-              .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? EditorPalette.pink : Color.clear, lineWidth: 2))
+              .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? EditorPalette.accent : Color.clear, lineWidth: 2))
             }
             .accessibilityLabel(def.label)
             .task {

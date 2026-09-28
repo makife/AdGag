@@ -581,14 +581,14 @@ private fun EditorToolButton(
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(if (active) AdGagColors.GradientPink.copy(alpha = 0.25f) else AdGagColors.Surface),
+                .background(if (active) AdGagColors.Accent.copy(alpha = 0.25f) else AdGagColors.Surface),
             contentAlignment = Alignment.Center,
         ) {
             IconButton(onClick = onClick) {
                 Icon(
                     imageVector = icon,
                     contentDescription = label,
-                    tint = if (active) AdGagColors.GradientPink else AdGagColors.OnBackground,
+                    tint = if (active) AdGagColors.Accent else AdGagColors.OnBackground,
                 )
             }
         }
@@ -741,7 +741,7 @@ private fun PanelHandle(
                 )
                 if (onDone != null) {
                     TextButton(onClick = onDone) {
-                        Text(text = "Done", color = AdGagColors.GradientPink, style = MaterialTheme.typography.labelLarge)
+                        Text(text = "Done", color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
                     }
                 } else {
                     Spacer(modifier = Modifier.height(40.dp))

@@ -189,13 +189,13 @@ struct EditorView: View {
       if viewModel.isExporting {
         VStack(alignment: .leading, spacing: 4) {
           Text("Exporting your Ad…").font(.footnote).foregroundColor(EditorPalette.muted)
-          ProgressView(value: viewModel.exportProgress).tint(EditorPalette.pink)
+          ProgressView(value: viewModel.exportProgress).tint(EditorPalette.accent)
         }
       }
       if viewModel.isAttachingMusic {
         VStack(alignment: .leading, spacing: 4) {
           Text("Preparing music…").font(.footnote).foregroundColor(EditorPalette.muted)
-          ProgressView().progressViewStyle(.linear).tint(EditorPalette.pink)
+          ProgressView().progressViewStyle(.linear).tint(EditorPalette.accent)
         }
       }
       if let error = viewModel.previewError {
@@ -251,7 +251,7 @@ struct EditorView: View {
         HStack {
           Text(panelTitle(panel)).font(.headline).foregroundColor(.white)
           Spacer()
-          Button("Done") { self.panel = nil }.foregroundColor(EditorPalette.pink)
+          Button("Done") { self.panel = nil }.foregroundColor(EditorPalette.accent)
         }
         switch panel {
         case .transition(let boundary): TransitionPanel(viewModel: viewModel, boundary: boundary)
@@ -300,9 +300,9 @@ private struct ToolButton: View {
     Button(action: action) {
       VStack(spacing: 4) {
         Image(systemName: icon)
-          .foregroundColor(active ? EditorPalette.pink : .white)
+          .foregroundColor(active ? EditorPalette.accent : .white)
           .frame(width: 48, height: 48)
-          .background(active ? EditorPalette.pink.opacity(0.25) : EditorPalette.surface)
+          .background(active ? EditorPalette.accent.opacity(0.25) : EditorPalette.surface)
           .clipShape(Circle())
         Text(label).font(.caption2).foregroundColor(EditorPalette.muted).lineLimit(1)
       }
@@ -351,10 +351,10 @@ private struct TransitionPanel: View {
                   .frame(width: 64, height: 96)
                   .clipShape(RoundedRectangle(cornerRadius: 8))
                   .overlay(RoundedRectangle(cornerRadius: 8)
-                    .stroke(type == spec.type ? EditorPalette.pink : EditorPalette.border,
+                    .stroke(type == spec.type ? EditorPalette.accent : EditorPalette.border,
                             lineWidth: type == spec.type ? 2 : 1))
                 Text(type.label).font(.caption2)
-                  .foregroundColor(type == spec.type ? EditorPalette.pink : EditorPalette.muted)
+                  .foregroundColor(type == spec.type ? EditorPalette.accent : EditorPalette.muted)
                   .lineLimit(1)
               }
               .frame(width: 72)
@@ -373,7 +373,7 @@ private struct TransitionPanel: View {
                        set: { viewModel.setTransitionDuration(boundary, Int64($0)) }),
         in: Double(EditorLimits.minTransitionMs)...Double(EditorLimits.maxTransitionMs), step: 100,
         onEditingChanged: { editing in if !editing { viewModel.commitTransitionDuration(boundary) } })
-        .tint(EditorPalette.pink)
+        .tint(EditorPalette.accent)
         .disabled(spec.type == .NONE)
     }
   }
@@ -403,7 +403,7 @@ private struct TransitionThumbnail: View {
         frame.rotate(by: .degrees(pose.rotationDegrees))
         frame.scaleBy(x: pose.scale, y: pose.scale)
         frame.translateBy(x: -size.width / 2, y: -size.height / 2)
-        frame.fill(Path(CGRect(origin: .zero, size: size)), with: .color(EditorPalette.pink))
+        frame.fill(Path(CGRect(origin: .zero, size: size)), with: .color(EditorPalette.accent))
         var mountain = Path()
         mountain.move(to: CGPoint(x: size.width * 0.05, y: size.height * 0.78))
         mountain.addLine(to: CGPoint(x: size.width * 0.40, y: size.height * 0.36))
@@ -440,7 +440,7 @@ private struct MusicPanel: View {
           Text("Repeats the selected part until the video ends").font(.caption).foregroundColor(EditorPalette.muted)
         }
       }
-      .tint(EditorPalette.pink)
+      .tint(EditorPalette.accent)
       fadeSlider("Fade in", value: viewModel.musicFadeInMs, maxMs: maxFade) {
         viewModel.setMusicFade(inMs: $0, outMs: viewModel.musicFadeOutMs, commit: $1)
       }
@@ -471,7 +471,7 @@ private struct MusicPanel: View {
                             set: { onChange(Int64(($0 / 100).rounded() * 100), false) }),
              in: 0...maxMs,
              onEditingChanged: { editing in if !editing { onChange(value, true) } })
-        .tint(EditorPalette.pink)
+        .tint(EditorPalette.accent)
     }
   }
 }
@@ -529,15 +529,15 @@ private struct EffectsPanel: View {
                 if let image = viewModel.filterThumbnails[filter] {
                   Image(uiImage: image).resizable().scaledToFill()
                 } else {
-                  ProgressView().tint(EditorPalette.pink)
+                  ProgressView().tint(EditorPalette.accent)
                 }
               }
               .frame(width: 64, height: 112)
               .clipShape(RoundedRectangle(cornerRadius: 8))
               .overlay(RoundedRectangle(cornerRadius: 8)
-                .stroke(selected ? EditorPalette.pink : EditorPalette.border, lineWidth: selected ? 2 : 1))
+                .stroke(selected ? EditorPalette.accent : EditorPalette.border, lineWidth: selected ? 2 : 1))
               Text(filter.label).font(.caption2)
-                .foregroundColor(selected ? EditorPalette.pink : EditorPalette.muted).lineLimit(1)
+                .foregroundColor(selected ? EditorPalette.accent : EditorPalette.muted).lineLimit(1)
             }
             .frame(width: 72)
           }
@@ -563,7 +563,7 @@ private struct ChoiceRow: View {
           Button { onSelect(option) } label: {
             Text(formatSpeed(option)).fontWeight(.semibold).foregroundColor(.white)
               .padding(.horizontal, 16).padding(.vertical, 8)
-              .background(isSelected ? EditorPalette.pink : EditorPalette.surface)
+              .background(isSelected ? EditorPalette.accent : EditorPalette.surface)
               .clipShape(Capsule())
               .opacity(isEnabled || isSelected ? 1 : 0.35)
           }
@@ -591,7 +591,7 @@ private struct PanelHandle: View {
           Text("\(label) · drag up to edit").font(.caption).foregroundColor(EditorPalette.muted)
           Spacer()
           if let onDone {
-            Button("Done", action: onDone).foregroundColor(EditorPalette.pink)
+            Button("Done", action: onDone).foregroundColor(EditorPalette.accent)
           }
         }
         .frame(height: 32)

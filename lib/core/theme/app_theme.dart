@@ -24,9 +24,9 @@ abstract final class AppTheme {
 
     final ColorScheme colorScheme = ColorScheme(
       brightness: brightness,
-      primary: AppColors.gradientPink,
+      primary: AppColors.brandTurquoise,
       onPrimary: Colors.white,
-      secondary: AppColors.gradientBlue,
+      secondary: AppColors.brandDeep,
       onSecondary: Colors.white,
       error: AppColors.danger,
       onError: Colors.white,

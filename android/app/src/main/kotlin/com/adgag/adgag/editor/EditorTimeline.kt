@@ -323,7 +323,7 @@ private fun SongRow(viewModel: EditorViewModel, density: Density, globalPosition
                 .width(with(density) { drawWidthPx.toDp() })
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                .background(AdGagColors.GradientPink.copy(alpha = 0.75f)),
+                .background(AdGagColors.Accent.copy(alpha = 0.75f)),
         )
 
         // Where in the SONG the preview is right now (only while the music plays).
@@ -389,7 +389,7 @@ private fun AddClipButton(enabled: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .size(AddButtonSizeDp.dp)
             .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-            .background(if (enabled) AdGagColors.GradientPink else AdGagColors.Border)
+            .background(if (enabled) AdGagColors.Accent else AdGagColors.Border)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -451,7 +451,7 @@ private fun RowScope.ClipStrip(
                             .clip(RoundedCornerShape(AdGagRadius.sm.dp))
                             .then(
                                 if (isSelected) {
-                                    Modifier.border(BorderStroke(2.dp, AdGagColors.GradientPink), RoundedCornerShape(AdGagRadius.sm.dp))
+                                    Modifier.border(BorderStroke(2.dp, AdGagColors.Accent), RoundedCornerShape(AdGagRadius.sm.dp))
                                 } else {
                                     Modifier
                                 },
@@ -478,7 +478,7 @@ private fun RowScope.ClipStrip(
                     .offset(x = with(density) { (xPx - sizePx / 2).toDp() })
                     .size(TransitionButtonSizeDp.dp)
                     .clip(CircleShape)
-                    .background(if (active) AdGagColors.GradientPink else AdGagColors.SurfaceElevated)
+                    .background(if (active) AdGagColors.Accent else AdGagColors.SurfaceElevated)
                     .border(BorderStroke(1.dp, AdGagColors.OnBackground.copy(alpha = 0.6f)), CircleShape)
                     .clickable { onPickTransition(b) },
                 contentAlignment = Alignment.Center,
@@ -673,7 +673,7 @@ private fun HandleBar(xPx: Float, rowWidthPx: Float, density: Density) {
             .width(HandleWidthDp.dp)
             .fillMaxHeight()
             .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-            .background(AdGagColors.GradientPink),
+            .background(AdGagColors.Accent),
     )
 }
 
@@ -720,7 +720,7 @@ private fun TrimHandle(
                 .width(HandleWidthDp.dp)
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                .background(AdGagColors.GradientPink),
+                .background(AdGagColors.Accent),
         )
     }
 }
@@ -782,7 +782,7 @@ private fun RowScope.MusicRow(viewModel: EditorViewModel, density: Density) {
                 .width(with(density) { (segmentEndPx - segmentStartPx).coerceAtLeast(1f).toDp() })
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                .background(AdGagColors.GradientBlue.copy(alpha = 0.55f))
+                .background(AdGagColors.BrandDeep.copy(alpha = 0.55f))
                 .pointerInput(Unit) {
                     detectDragGestures(
                         onDragEnd = { commit() },
@@ -807,7 +807,7 @@ private fun RowScope.MusicRow(viewModel: EditorViewModel, density: Density) {
                         .width(with(density) { (msToPx(repLen) - 1f).coerceAtLeast(1f).toDp() })
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                        .background(AdGagColors.GradientBlue.copy(alpha = 0.25f)),
+                        .background(AdGagColors.BrandDeep.copy(alpha = 0.25f)),
                 )
                 repStart += localDuration
             }
@@ -878,7 +878,7 @@ private fun overlayBars(viewModel: EditorViewModel): List<OverlayBar> =
         OverlayBar(t.id, "Text", t.text.lineSequence().first(), t.startMs, t.endMs, Color(t.color))
     } + viewModel.soundLayers.mapNotNull { l ->
         viewModel.sfx.byId(l.sfxId)?.let { def ->
-            OverlayBar(l.id, "Sound", def.label, l.startMs, l.startMs + def.durationMs, Color(0xFF2FD18A))
+            OverlayBar(l.id, "Sound", def.label, l.startMs, l.startMs + def.durationMs, Color(0xFF8C9BFF))
         }
     }
 
@@ -938,8 +938,8 @@ private fun RowScope.TextRow(viewModel: EditorViewModel, density: Density, onEdi
                 .fillMaxHeight()
                 .padding(vertical = 3.dp)
                 .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                .background(AdGagColors.GradientPink.copy(alpha = 0.45f))
-                .border(BorderStroke(2.dp, AdGagColors.GradientPink), RoundedCornerShape(AdGagRadius.sm.dp))
+                .background(AdGagColors.Accent.copy(alpha = 0.45f))
+                .border(BorderStroke(2.dp, AdGagColors.Accent), RoundedCornerShape(AdGagRadius.sm.dp))
                 .pointerInput(sel.id) { detectTapGestures { onEditText(sel.id) } }
                 // Keyed on the committed timing too: the drag reads localStart/
                 // localEnd, which are NEW state objects after every commit
@@ -1030,7 +1030,7 @@ private fun RowScope.SpeedRow(
                     .fillMaxHeight()
                     .padding(vertical = 5.dp)
                     .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                    .background(AdGagColors.GradientPurple.copy(alpha = 0.45f))
+                    .background(AdGagColors.BrandOcean.copy(alpha = 0.45f))
                     .clickable {
                         viewModel.selectedSpeedRangeId = range.id
                         viewModel.seekToGlobal(range.startMs)
@@ -1066,8 +1066,8 @@ private fun RowScope.SpeedRow(
                 .fillMaxHeight()
                 .padding(vertical = 3.dp)
                 .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                .background(AdGagColors.GradientPurple.copy(alpha = 0.7f))
-                .border(BorderStroke(2.dp, AdGagColors.GradientPink), RoundedCornerShape(AdGagRadius.sm.dp)),
+                .background(AdGagColors.BrandOcean.copy(alpha = 0.7f))
+                .border(BorderStroke(2.dp, AdGagColors.Accent), RoundedCornerShape(AdGagRadius.sm.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Text(text = formatSpeed(sel.speed), color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1)

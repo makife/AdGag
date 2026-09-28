@@ -15,12 +15,15 @@ enum EditorPalette {
   static let surfaceElevated = Color(red: 0.16, green: 0.16, blue: 0.18)
   static let border = Color(white: 0.3)
   static let muted = Color(white: 0.62)
-  static let pink = Color(red: 1.0, green: 0.24, blue: 0.62)
-  static let blue = Color(red: 0.27, green: 0.45, blue: 1.0)
+  // Turquoise brand family — mirror of app_colors.dart / AdGagTheme.kt.
+  /// The accent: active tools, handles, the selected item.
+  static let accent = Color(red: 0x16 / 255, green: 0xC5 / 255, blue: 0xC0 / 255)
+  static let deep = Color(red: 0x2B / 255, green: 0x6C / 255, blue: 0xE6 / 255)
+  static let ocean = Color(red: 0x1F / 255, green: 0xA3 / 255, blue: 0xC9 / 255)
+  static let mint = Color(red: 0x3E / 255, green: 0xE6 / 255, blue: 0xA8 / 255)
   static let danger = Color(red: 1.0, green: 0.35, blue: 0.35)
   static let brand = LinearGradient(
-    colors: [Color(red: 0.27, green: 0.45, blue: 1.0), Color(red: 0.6, green: 0.3, blue: 1.0),
-             Color(red: 1.0, green: 0.24, blue: 0.62), Color(red: 1.0, green: 0.55, blue: 0.2)],
+    colors: [deep, ocean, accent, mint],
     startPoint: .leading, endPoint: .trailing)
 }
 
@@ -143,7 +146,7 @@ struct EditorTimelineView: View {
         .font(.system(size: 20, weight: .semibold))
         .foregroundColor(.white)
         .frame(width: addButtonSize, height: addButtonSize)
-        .background(viewModel.canAddClip ? EditorPalette.pink : EditorPalette.border)
+        .background(viewModel.canAddClip ? EditorPalette.accent : EditorPalette.border)
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
     .disabled(!viewModel.canAddClip)
@@ -196,7 +199,7 @@ private struct ClipStripView: View {
               .clipShape(RoundedRectangle(cornerRadius: 8))
               .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                  .stroke(i == viewModel.selectedClipIndex && viewModel.clips.count > 1 ? EditorPalette.pink : .clear,
+                  .stroke(i == viewModel.selectedClipIndex && viewModel.clips.count > 1 ? EditorPalette.accent : .clear,
                           lineWidth: 2))
           }
         }
@@ -221,7 +224,7 @@ private struct ClipStripView: View {
               .font(.system(size: 12, weight: .bold))
               .foregroundColor(.white)
               .frame(width: 28, height: 28)
-              .background(active ? EditorPalette.pink : EditorPalette.surfaceElevated)
+              .background(active ? EditorPalette.accent : EditorPalette.surfaceElevated)
               .clipShape(Circle())
               .overlay(Circle().stroke(Color.white.opacity(0.6), lineWidth: 1))
           }
@@ -384,7 +387,7 @@ private struct TrimHandle: View {
     let barLeft = min(max(x - handleWidth / 2 - hitLeft, 0), handleHitWidth - handleWidth)
     ZStack(alignment: .topLeading) {
       Color.clear
-      RoundedRectangle(cornerRadius: 6).fill(EditorPalette.pink)
+      RoundedRectangle(cornerRadius: 6).fill(EditorPalette.accent)
         .frame(width: handleWidth, height: height)
         .offset(x: barLeft)
     }
@@ -420,13 +423,13 @@ private struct MusicRowView: View {
         // Loop repetitions after the first play — fainter, not draggable.
         if viewModel.musicLoop && duration > 0 {
           ForEach(Array(repetitionStarts(start: start, unit: duration, total: total).enumerated()), id: \.offset) { _, rep in
-            RoundedRectangle(cornerRadius: 6).fill(EditorPalette.blue.opacity(0.25))
+            RoundedRectangle(cornerRadius: 6).fill(EditorPalette.deep.opacity(0.25))
               .frame(width: max(msToX(min(duration, total - rep)) - 1, 1), height: musicRowHeight)
               .offset(x: msToX(rep) + 1)
           }
         }
 
-        RoundedRectangle(cornerRadius: 6).fill(EditorPalette.blue.opacity(0.55))
+        RoundedRectangle(cornerRadius: 6).fill(EditorPalette.deep.opacity(0.55))
           .frame(width: max(endX - startX, 1), height: musicRowHeight)
           .offset(x: startX)
           .gesture(DragGesture(minimumDistance: 2)
@@ -506,7 +509,7 @@ private func overlayBars(_ viewModel: EditorViewModel) -> [OverlayBar] {
   } + viewModel.soundLayers.compactMap { l -> OverlayBar? in
     guard let def = SfxStore.shared.byId(l.sfxId) else { return nil }
     return OverlayBar(id: l.id, kind: "Sound", label: def.label, startMs: l.startMs,
-                      endMs: l.startMs + def.durationMs, color: Color(red: 0.18, green: 0.82, blue: 0.54))
+                      endMs: l.startMs + def.durationMs, color: Color(red: 0.55, green: 0.61, blue: 1.0))
   } + viewModel.textLayers.map { t in
     let c = argbComponents(t.color)
     return OverlayBar(id: t.id, kind: "Text", label: t.text.components(separatedBy: "\n").first ?? "",
@@ -557,8 +560,8 @@ private struct TextRowView: View {
           let startX = msToX(start)
           let endX = max(msToX(end), startX + 4)
 
-          RoundedRectangle(cornerRadius: 6).fill(EditorPalette.pink.opacity(0.45))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(EditorPalette.pink, lineWidth: 2))
+          RoundedRectangle(cornerRadius: 6).fill(EditorPalette.accent.opacity(0.45))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(EditorPalette.accent, lineWidth: 2))
             .overlay(
               Text(sel.label)
                 .font(.caption2).foregroundColor(.white).lineLimit(1)
@@ -641,7 +644,7 @@ private struct SongRowView: View {
         let realWidth = msToX(section)
         let drawWidth = max(realWidth, 6)
         let drawStart = min(max(msToX(source) - (drawWidth - realWidth) / 2, 0), max(width - drawWidth, 0))
-        RoundedRectangle(cornerRadius: 6).fill(EditorPalette.pink.opacity(0.75))
+        RoundedRectangle(cornerRadius: 6).fill(EditorPalette.accent.opacity(0.75))
           .frame(width: drawWidth, height: songRowHeight)
           .offset(x: drawStart)
 
@@ -695,7 +698,7 @@ private struct SpeedRowView: View {
   @State private var target: DragTarget?
   @State private var origin: (String, Int64, Int64)?
 
-  private static let purple = Color(red: 0.61, green: 0.18, blue: 1.0)
+  private static let purple = EditorPalette.ocean
 
   var body: some View {
     GeometryReader { geo in
@@ -727,7 +730,7 @@ private struct SpeedRowView: View {
           let startX = msToX(start)
           let endX = max(msToX(end), startX + 4)
           RoundedRectangle(cornerRadius: 6).fill(Self.purple.opacity(0.7))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(EditorPalette.pink, lineWidth: 2))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(EditorPalette.accent, lineWidth: 2))
             .overlay(Text(formatSpeed(sel.speed)).font(.caption2).foregroundColor(.white).lineLimit(1))
             .frame(width: endX - startX, height: textRowHeight - 6)
             .offset(x: startX, y: 3)

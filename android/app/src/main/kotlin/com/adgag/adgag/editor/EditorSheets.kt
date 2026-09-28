@@ -86,7 +86,7 @@ fun MusicSheet(viewModel: EditorViewModel, onReplace: () -> Unit, onDismiss: () 
                 Switch(
                     checked = viewModel.musicLoop,
                     onCheckedChange = { viewModel.changeMusicLoop(it) },
-                    colors = SwitchDefaults.colors(checkedTrackColor = AdGagColors.GradientPink),
+                    colors = SwitchDefaults.colors(checkedTrackColor = AdGagColors.Accent),
                 )
             }
 
@@ -204,7 +204,7 @@ fun PreparingMusicIndicator(modifier: Modifier = Modifier) {
         Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
         LinearProgressIndicator(
             modifier = Modifier.fillMaxWidth().height(2.dp),
-            color = AdGagColors.GradientPink,
+            color = AdGagColors.Accent,
             trackColor = AdGagColors.Border,
         )
     }
@@ -243,7 +243,7 @@ fun EffectsSheet(viewModel: EditorViewModel, onDismiss: () -> Unit) {
                                 .border(
                                     BorderStroke(
                                         if (selected) 2.dp else 1.dp,
-                                        if (selected) AdGagColors.GradientPink else AdGagColors.Border,
+                                        if (selected) AdGagColors.Accent else AdGagColors.Border,
                                     ),
                                     RoundedCornerShape(AdGagRadius.sm.dp),
                                 )
@@ -262,14 +262,14 @@ fun EffectsSheet(viewModel: EditorViewModel, onDismiss: () -> Unit) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(18.dp),
                                     strokeWidth = 2.dp,
-                                    color = AdGagColors.GradientPink,
+                                    color = AdGagColors.Accent,
                                 )
                             }
                         }
                         Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
                         Text(
                             text = filter.label,
-                            color = if (selected) AdGagColors.GradientPink else AdGagColors.OnSurfaceMuted,
+                            color = if (selected) AdGagColors.Accent else AdGagColors.OnSurfaceMuted,
                             style = MaterialTheme.typography.labelSmall,
                             maxLines = 1,
                         )
@@ -289,7 +289,7 @@ fun EffectsSheet(viewModel: EditorViewModel, onDismiss: () -> Unit) {
                         modifier = Modifier.weight(1f),
                     )
                     TextButton(onClick = { viewModel.retryPreviewEffects() }) {
-                        Text(text = "Try again", color = AdGagColors.GradientPink, style = MaterialTheme.typography.labelLarge)
+                        Text(text = "Try again", color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
@@ -306,7 +306,7 @@ private fun SheetHeader(title: String, onDone: () -> Unit) {
     ) {
         Text(text = title, color = AdGagColors.OnBackground, style = MaterialTheme.typography.titleMedium)
         TextButton(onClick = onDone) {
-            Text(text = "Done", color = AdGagColors.GradientPink, style = MaterialTheme.typography.labelLarge)
+            Text(text = "Done", color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -343,7 +343,7 @@ private fun ChoiceRow(
                 modifier = Modifier
                     .alpha(if (isEnabled || isSelected) 1f else 0.35f)
                     .clip(RoundedCornerShape(AdGagRadius.pill.dp))
-                    .background(if (isSelected) AdGagColors.GradientPink else AdGagColors.Surface)
+                    .background(if (isSelected) AdGagColors.Accent else AdGagColors.Surface)
                     .clickable(enabled = isEnabled && !isSelected) { onSelect(option) }
                     .padding(horizontal = AdGagSpacing.lg.dp, vertical = AdGagSpacing.sm.dp),
             )
@@ -370,7 +370,7 @@ private fun FadeSlider(label: String, valueMs: Long, maxMs: Long, onChange: (Lon
         onValueChange = { onChange((it / 100).toLong() * 100) }, // 0.1s steps
         valueRange = 0f..maxMs.toFloat().coerceAtLeast(1f),
         enabled = maxMs > 0,
-        colors = SliderDefaults.colors(thumbColor = AdGagColors.GradientPink, activeTrackColor = AdGagColors.GradientPink),
+        colors = SliderDefaults.colors(thumbColor = AdGagColors.Accent, activeTrackColor = AdGagColors.Accent),
         modifier = Modifier.padding(horizontal = AdGagSpacing.lg.dp),
     )
 }

@@ -24,9 +24,18 @@ class AdGagApp extends ConsumerWidget {
     // available — avoids "no MaterialLocalizations found" edge cases from
     // conditionally swapping in a bare widget.
     if (initialUser.isLoading && !initialUser.hasValue) {
-      return const MaterialApp(
+      // Localized too: the splash shows the slogan in the app's language.
+      return MaterialApp(
         debugShowCheckedModeBanner: false,
-        home: SplashScreen(),
+        locale: ref.watch(localeProvider),
+        supportedLocales: supportedLocales,
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: const SplashScreen(),
       );
     }
 

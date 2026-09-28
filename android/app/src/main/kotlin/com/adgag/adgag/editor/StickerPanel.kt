@@ -93,7 +93,7 @@ fun StickerPanelHeader(viewModel: EditorViewModel, editingId: String?, onDismiss
                 }
             }
             TextButton(onClick = onDismiss) {
-                Text(text = "Done", color = AdGagColors.GradientPink, style = MaterialTheme.typography.labelLarge)
+                Text(text = "Done", color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
             }
         }
     }
@@ -130,9 +130,9 @@ private fun EmojiGrid(viewModel: EditorViewModel, selectedId: String?, onPick: (
                     modifier = Modifier
                         .size(60.dp)
                         .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                        .background(if (selected) AdGagColors.GradientPink.copy(alpha = 0.25f) else AdGagColors.Surface)
+                        .background(if (selected) AdGagColors.Accent.copy(alpha = 0.25f) else AdGagColors.Surface)
                         .border(
-                            BorderStroke(if (selected) 2.dp else 0.dp, if (selected) AdGagColors.GradientPink else AdGagColors.Surface),
+                            BorderStroke(if (selected) 2.dp else 0.dp, if (selected) AdGagColors.Accent else AdGagColors.Surface),
                             RoundedCornerShape(AdGagRadius.sm.dp),
                         )
                         .clickable { onPick(def) }

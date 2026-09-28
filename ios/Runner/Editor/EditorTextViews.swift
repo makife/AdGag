@@ -245,15 +245,15 @@ struct TextEditorPanel: View {
             onClose()
           }
           .foregroundColor(EditorPalette.danger)
-          Button("Done", action: onClose).foregroundColor(EditorPalette.pink)
+          Button("Done", action: onClose).foregroundColor(EditorPalette.accent)
         }
         HStack(spacing: 6) {
           ForEach(TextTab.allCases, id: \.self) { t in
             Button { tab = t } label: {
               Text(t.rawValue).font(.caption).fontWeight(.semibold)
-                .foregroundColor(t == tab ? EditorPalette.pink : .white)
+                .foregroundColor(t == tab ? EditorPalette.accent : .white)
                 .frame(maxWidth: .infinity).padding(.vertical, 7)
-                .background(t == tab ? EditorPalette.pink.opacity(0.25) : EditorPalette.surface)
+                .background(t == tab ? EditorPalette.accent.opacity(0.25) : EditorPalette.surface)
                 .clipShape(Capsule())
             }
           }
@@ -323,10 +323,10 @@ private struct PreviewChipRow<Item: Hashable>: View {
                 .background(Color(red: 0.16, green: 0.16, blue: 0.19))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8)
-                  .stroke(selected ? EditorPalette.pink : EditorPalette.border, lineWidth: selected ? 2 : 1))
+                  .stroke(selected ? EditorPalette.accent : EditorPalette.border, lineWidth: selected ? 2 : 1))
               if let label {
                 Text(label(item)).font(.caption2)
-                  .foregroundColor(selected ? EditorPalette.pink : EditorPalette.muted).lineLimit(1)
+                  .foregroundColor(selected ? EditorPalette.accent : EditorPalette.muted).lineLimit(1)
               }
             }
           }
@@ -408,10 +408,10 @@ private struct ColorTab: View {
             HStack(spacing: 6) {
               Circle().fill(swiftUIColor(i == 0 ? layer.color : layer.accentColor)).frame(width: 12, height: 12)
               Text(i == 0 ? "Text" : "Effect colour").font(.caption)
-                .foregroundColor(i == target ? EditorPalette.pink : .white)
+                .foregroundColor(i == target ? EditorPalette.accent : .white)
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
-            .background(i == target ? EditorPalette.pink.opacity(0.25) : EditorPalette.surface)
+            .background(i == target ? EditorPalette.accent.opacity(0.25) : EditorPalette.surface)
             .clipShape(Capsule())
           }
         }
@@ -421,7 +421,7 @@ private struct ColorTab: View {
           ForEach(textPalette, id: \.self) { c in
             Button { set(c) } label: {
               Circle().fill(swiftUIColor(c)).frame(width: 32, height: 32)
-                .overlay(Circle().stroke(c == current ? EditorPalette.pink : EditorPalette.border,
+                .overlay(Circle().stroke(c == current ? EditorPalette.accent : EditorPalette.border,
                                          lineWidth: c == current ? 3 : 1))
             }
           }
@@ -462,9 +462,9 @@ private struct SizeTab: View {
         ForEach(TextLayerAlign.allCases, id: \.self) { a in
           Button { var l = layer; l.align = a; onChange(l) } label: {
             Text(a.label).font(.caption)
-              .foregroundColor(a == layer.align ? EditorPalette.pink : .white)
+              .foregroundColor(a == layer.align ? EditorPalette.accent : .white)
               .padding(.horizontal, 12).padding(.vertical, 6)
-              .background(a == layer.align ? EditorPalette.pink.opacity(0.25) : EditorPalette.surface)
+              .background(a == layer.align ? EditorPalette.accent.opacity(0.25) : EditorPalette.surface)
               .clipShape(Capsule())
           }
         }
@@ -472,7 +472,7 @@ private struct SizeTab: View {
         Button("Straighten") {
           var l = layer; l.rotationDeg = 0; l.scale = 1; l.x = 0.5; onChange(l)
         }
-        .font(.caption).foregroundColor(EditorPalette.pink)
+        .font(.caption).foregroundColor(EditorPalette.accent)
       }
     }
   }
@@ -488,7 +488,7 @@ private struct LabeledSlider: View {
     HStack {
       Text(title).font(.caption).foregroundColor(EditorPalette.muted).frame(width: 96, alignment: .leading)
       Slider(value: Binding(get: { min(max(value, range.lowerBound), range.upperBound) }, set: onChange), in: range)
-        .tint(EditorPalette.pink)
+        .tint(EditorPalette.accent)
     }
   }
 }

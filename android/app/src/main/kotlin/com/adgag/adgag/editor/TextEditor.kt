@@ -287,7 +287,7 @@ fun TextEditorPanel(viewModel: EditorViewModel, layerId: String, onDismiss: () -
                         Text(text = "Delete", color = AdGagColors.Danger, style = MaterialTheme.typography.labelLarge)
                     }
                     TextButton(onClick = close) {
-                        Text(text = "Done", color = AdGagColors.GradientPink, style = MaterialTheme.typography.labelLarge)
+                        Text(text = "Done", color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
@@ -300,9 +300,9 @@ fun TextEditorPanel(viewModel: EditorViewModel, layerId: String, onDismiss: () -
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = AdGagColors.OnBackground,
                     unfocusedTextColor = AdGagColors.OnBackground,
-                    focusedBorderColor = AdGagColors.GradientPink,
+                    focusedBorderColor = AdGagColors.Accent,
                     unfocusedBorderColor = AdGagColors.Border,
-                    cursorColor = AdGagColors.GradientPink,
+                    cursorColor = AdGagColors.Accent,
                 ),
             )
             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
@@ -316,14 +316,14 @@ fun TextEditorPanel(viewModel: EditorViewModel, layerId: String, onDismiss: () -
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(AdGagRadius.pill.dp))
-                            .background(if (on) AdGagColors.GradientPink.copy(alpha = 0.25f) else AdGagColors.Surface)
+                            .background(if (on) AdGagColors.Accent.copy(alpha = 0.25f) else AdGagColors.Surface)
                             .clickable { tab = t }
                             .padding(vertical = AdGagSpacing.sm.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             text = t.label,
-                            color = if (on) AdGagColors.GradientPink else AdGagColors.OnBackground,
+                            color = if (on) AdGagColors.Accent else AdGagColors.OnBackground,
                             style = MaterialTheme.typography.labelMedium,
                         )
                     }
@@ -429,7 +429,7 @@ private fun <T> PreviewChipRow(
                         .size(width = if (label == null) 104.dp else 76.dp, height = if (label == null) 96.dp else 72.dp)
                         .clip(RoundedCornerShape(AdGagRadius.sm.dp))
                         .border(
-                            BorderStroke(if (selected) 2.dp else 1.dp, if (selected) AdGagColors.GradientPink else AdGagColors.Border),
+                            BorderStroke(if (selected) 2.dp else 1.dp, if (selected) AdGagColors.Accent else AdGagColors.Border),
                             RoundedCornerShape(AdGagRadius.sm.dp),
                         )
                         .background(Color(0xFF2A2A30))
@@ -448,7 +448,7 @@ private fun <T> PreviewChipRow(
                     Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
                     Text(
                         text = label(item),
-                        color = if (selected) AdGagColors.GradientPink else AdGagColors.OnSurfaceMuted,
+                        color = if (selected) AdGagColors.Accent else AdGagColors.OnSurfaceMuted,
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,
                     )
@@ -475,7 +475,7 @@ private fun ColorTab(layer: TextLayer, onChange: (TextLayer) -> Unit) {
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(AdGagRadius.pill.dp))
-                        .background(if (on) AdGagColors.GradientPink.copy(alpha = 0.25f) else AdGagColors.Surface)
+                        .background(if (on) AdGagColors.Accent.copy(alpha = 0.25f) else AdGagColors.Surface)
                         .clickable { target = i }
                         .padding(horizontal = AdGagSpacing.md.dp, vertical = AdGagSpacing.xs.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -487,7 +487,7 @@ private fun ColorTab(layer: TextLayer, onChange: (TextLayer) -> Unit) {
                             .background(Color(if (i == 0) layer.color else layer.accentColor)),
                     )
                     Spacer(modifier = Modifier.width(AdGagSpacing.xs.dp))
-                    Text(text = name, color = if (on) AdGagColors.GradientPink else AdGagColors.OnBackground, style = MaterialTheme.typography.labelMedium)
+                    Text(text = name, color = if (on) AdGagColors.Accent else AdGagColors.OnBackground, style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
@@ -503,7 +503,7 @@ private fun ColorTab(layer: TextLayer, onChange: (TextLayer) -> Unit) {
                         .clip(CircleShape)
                         .background(Color(c))
                         .border(
-                            BorderStroke(if (c == current) 3.dp else 1.dp, if (c == current) AdGagColors.GradientPink else AdGagColors.Border),
+                            BorderStroke(if (c == current) 3.dp else 1.dp, if (c == current) AdGagColors.Accent else AdGagColors.Border),
                             CircleShape,
                         )
                         .clickable { set(c) },
@@ -578,20 +578,20 @@ private fun SizeTab(layer: TextLayer, onChange: (TextLayer) -> Unit) {
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(AdGagRadius.pill.dp))
-                        .background(if (on) AdGagColors.GradientPink.copy(alpha = 0.25f) else AdGagColors.Surface)
+                        .background(if (on) AdGagColors.Accent.copy(alpha = 0.25f) else AdGagColors.Surface)
                         .clickable { onChange(layer.copy(align = a)) }
                         .padding(horizontal = AdGagSpacing.md.dp, vertical = AdGagSpacing.xs.dp),
                 ) {
                     Text(
                         text = a.name.lowercase().replaceFirstChar { it.uppercase() },
-                        color = if (on) AdGagColors.GradientPink else AdGagColors.OnBackground,
+                        color = if (on) AdGagColors.Accent else AdGagColors.OnBackground,
                         style = MaterialTheme.typography.labelMedium,
                     )
                 }
             }
             Spacer(modifier = Modifier.weight(1f))
             TextButton(onClick = { onChange(layer.copy(rotationDeg = 0f, scale = 1f, x = 0.5f)) }) {
-                Text(text = "Straighten", color = AdGagColors.GradientPink, style = MaterialTheme.typography.labelMedium)
+                Text(text = "Straighten", color = AdGagColors.Accent, style = MaterialTheme.typography.labelMedium)
             }
         }
     }
@@ -614,7 +614,7 @@ private fun LabeledSlider(label: String, value: Float, range: ClosedFloatingPoin
             onValueChange = onChange,
             valueRange = range,
             modifier = Modifier.weight(1f),
-            colors = SliderDefaults.colors(thumbColor = AdGagColors.GradientPink, activeTrackColor = AdGagColors.GradientPink),
+            colors = SliderDefaults.colors(thumbColor = AdGagColors.Accent, activeTrackColor = AdGagColors.Accent),
         )
     }
 }

@@ -1,5 +1,8 @@
 import "package:flutter/material.dart";
 
+import "../../../../core/localization/generated/app_localizations.dart";
+import "../../../../core/theme/app_theme.dart";
+import "../../../../core/widgets/splash_screen.dart";
 import "../../../../core/router/route_paths.dart";
 import "../../../../core/theme/app_colors.dart";
 import "../../../../core/theme/app_spacing.dart";
@@ -19,11 +22,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int _page = 0;
 
   static const List<_OnboardingSlide> _slides = <_OnboardingSlide>[
-    _OnboardingSlide(
-      title: "AdGag",
-      subtitle: "The social network where everything is an ad.",
-      useLogoImage: true,
-    ),
+    // The brand slide's subtitle is the localized slogan (see _SlideView).
+    _OnboardingSlide(title: "AdGag", subtitle: "", useLogoImage: true),
     _OnboardingSlide(title: "Pick anything.", subtitle: "A rock. Your coffee. Yourself. Monday."),
     _OnboardingSlide(title: "Sell it in 10 seconds.", subtitle: "Short, punchy, funny. That's the format."),
     _OnboardingSlide(title: "See it. Ad it. Go.", subtitle: "Watch an ad. Make a better one. Publish."),
@@ -45,6 +45,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Always dark: the logo's wordmark is white, and the dark look is the
+    // app's own (the feed is dark-first) — a light-mode phone got a white
+    // screen with a black logo box on it.
+    return Theme(
+      data: AppTheme.dark,
+      child: Builder(builder: _buildScreen),
+    );
+  }
+
+  Widget _buildScreen(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -81,7 +91,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         width: i == _page ? 20 : 6,
                         height: 6,
                         decoration: BoxDecoration(
-                          color: i == _page ? AppColors.gradientPink : Theme.of(context).dividerColor,
+                          color: i == _page ? AppColors.brandTurquoise : Theme.of(context).dividerColor,
                           borderRadius: BorderRadius.circular(AppRadius.pill),
                         ),
                       ),
@@ -130,7 +140,11 @@ class _SlideView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           if (slide.useLogoImage)
-            Image.asset("assets/branding/AdGag.png", width: 220)
+            BrandLockup(
+              tagline: AppLocalizations.of(context).appTagline,
+              logoWidth: 220,
+              textAlign: TextAlign.start,
+            )
           else
             ShaderMask(
               shaderCallback: (Rect bounds) => AppColors.brandGradient.createShader(bounds),
@@ -139,8 +153,10 @@ class _SlideView extends StatelessWidget {
                 style: Theme.of(context).textTheme.displayLarge?.copyWith(color: Colors.white),
               ),
             ),
-          const SizedBox(height: AppSpacing.md),
-          Text(slide.subtitle, style: Theme.of(context).textTheme.bodyLarge),
+          if (!slide.useLogoImage) ...<Widget>[
+            const SizedBox(height: AppSpacing.md),
+            Text(slide.subtitle, style: Theme.of(context).textTheme.bodyLarge),
+          ],
         ],
       ),
     );

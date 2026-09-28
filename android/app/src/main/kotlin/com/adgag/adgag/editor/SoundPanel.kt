@@ -78,9 +78,9 @@ fun SoundPanel(viewModel: EditorViewModel, editingId: String?, onDismiss: () -> 
                         .fillMaxWidth()
                         .height(48.dp)
                         .clip(RoundedCornerShape(AdGagRadius.sm.dp))
-                        .background(if (selected) AdGagColors.GradientPink.copy(alpha = 0.25f) else AdGagColors.Surface)
+                        .background(if (selected) AdGagColors.Accent.copy(alpha = 0.25f) else AdGagColors.Surface)
                         .border(
-                            BorderStroke(if (selected) 2.dp else 0.dp, if (selected) AdGagColors.GradientPink else AdGagColors.Surface),
+                            BorderStroke(if (selected) 2.dp else 0.dp, if (selected) AdGagColors.Accent else AdGagColors.Surface),
                             RoundedCornerShape(AdGagRadius.sm.dp),
                         )
                         .clickable { viewModel.sfxPlayer.play(def) },
@@ -162,7 +162,7 @@ fun SoundPanelHeader(viewModel: EditorViewModel, editingId: String?, onDismiss: 
                 }
             }
             TextButton(onClick = onDismiss) {
-                Text(text = "Done", color = AdGagColors.GradientPink, style = MaterialTheme.typography.labelLarge)
+                Text(text = "Done", color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
             }
         }
     }
@@ -176,7 +176,7 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
         style = MaterialTheme.typography.labelLarge,
         modifier = Modifier
             .clip(RoundedCornerShape(AdGagRadius.pill.dp))
-            .background(if (selected) AdGagColors.GradientPink.copy(alpha = 0.35f) else AdGagColors.Surface)
+            .background(if (selected) AdGagColors.Accent.copy(alpha = 0.35f) else AdGagColors.Surface)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 6.dp),
     )

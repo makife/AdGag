@@ -29,17 +29,19 @@ object AdGagColors {
     val Border = Color(0x1FFFFFFF)
     val OverlayScrim = Color(0x99000000)
 
-    val GradientBlue = Color(0xFF2E5BFF)
-    val GradientPurple = Color(0xFF9B2FFF)
-    val GradientPink = Color(0xFFFF2FB0)
-    val GradientOrange = Color(0xFFFF8A2F)
+    // Turquoise brand family (app_colors.dart): deep ocean -> turquoise -> mint.
+    val BrandDeep = Color(0xFF2B6CE6)
+    val BrandOcean = Color(0xFF1FA3C9)
+    /** The accent: active tools, handles, the selected item — was the pink stop. */
+    val Accent = Color(0xFF16C5C0)
+    val BrandMint = Color(0xFF3EE6A8)
 
     val Danger = Color(0xFFFF4D4D)
     val Success = Color(0xFF2FD97F)
 
     /** The "AD" tab / brand-mark gradient — used sparingly as an accent, never a full wash. */
     val BrandGradient = Brush.horizontalGradient(
-        listOf(GradientBlue, GradientPurple, GradientPink, GradientOrange),
+        listOf(BrandDeep, BrandOcean, Accent, BrandMint),
     )
 }
 
@@ -84,9 +86,9 @@ private val AdGagTypography = Typography(
 fun AdGagEditorTheme(content: @Composable () -> Unit) {
     isSystemInDarkTheme() // Deliberately not branched on — see doc comment above.
     val colorScheme = darkColorScheme(
-        primary = AdGagColors.GradientPink,
+        primary = AdGagColors.Accent,
         onPrimary = Color.White,
-        secondary = AdGagColors.GradientBlue,
+        secondary = AdGagColors.BrandDeep,
         onSecondary = Color.White,
         background = AdGagColors.Background,
         onBackground = AdGagColors.OnBackground,

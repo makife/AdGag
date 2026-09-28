@@ -93,7 +93,7 @@ struct SoundPanel: View {
           }
           .foregroundColor(EditorPalette.danger)
         }
-        Button("Done", action: onClose).foregroundColor(EditorPalette.pink)
+        Button("Done", action: onClose).foregroundColor(EditorPalette.accent)
       }
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 8) {
@@ -129,9 +129,9 @@ struct SoundPanel: View {
             }
             .padding(.leading, 8)
             .frame(height: 48)
-            .background(selected ? EditorPalette.pink.opacity(0.25) : EditorPalette.surface)
+            .background(selected ? EditorPalette.accent.opacity(0.25) : EditorPalette.surface)
             .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? EditorPalette.pink : .clear, lineWidth: 2))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? EditorPalette.accent : .clear, lineWidth: 2))
             .contentShape(Rectangle())
             .onTapGesture { SfxPreviewPlayer.shared.play(def) }
           }
@@ -148,7 +148,7 @@ struct SoundPanel: View {
     Button(action: action) {
       Text(label).font(.subheadline).foregroundColor(selected ? .white : EditorPalette.muted)
         .padding(.horizontal, 14).padding(.vertical, 6)
-        .background(selected ? EditorPalette.pink.opacity(0.35) : EditorPalette.surface)
+        .background(selected ? EditorPalette.accent.opacity(0.35) : EditorPalette.surface)
         .clipShape(Capsule())
     }
   }

@@ -59,7 +59,7 @@ class AdThisButton extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              const ActionRailIcon(icon: Icons.bolt, color: AppColors.gradientOrange),
+              const ActionRailIcon(icon: Icons.bolt, color: AppColors.brandMint),
               const SizedBox(height: AppSpacing.xs),
               CountLabel(count: adThisCount, color: Colors.white),
             ],
