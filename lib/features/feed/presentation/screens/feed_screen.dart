@@ -2,6 +2,7 @@ import "dart:async" show unawaited;
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/router/app_shell.dart";
 import "../../../../core/theme/app_colors.dart";
@@ -91,9 +92,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
           return;
         }
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Think you can do better? Try AD THIS."),
-            duration: Duration(seconds: 3),
+          SnackBar(
+            content: Text(AppLocalizations.of(context).feedAdThisHint),
+            duration: const Duration(seconds: 3),
           ),
         );
       });
@@ -108,7 +109,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
       await ref.read(feedControllerProvider.notifier).refresh();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't refresh the feed.")));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).feedRefreshFailed)));
       }
       return;
     }
@@ -152,7 +154,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Text(
-              "Couldn't load the feed.\n$error",
+              "${AppLocalizations.of(context).feedLoadFailed}\n$error",
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white70),
             ),
@@ -169,9 +171,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: SizedBox(
                     height: constraints.maxHeight,
-                    child: const ComingSoonView(
-                      title: "No one's sold anything yet.",
-                      phaseNote: "Be the first to advertise something — creation lands in Phase D.",
+                    child: ComingSoonView(
+                      title: AppLocalizations.of(context).feedEmptyTitle,
+                      phaseNote: AppLocalizations.of(context).feedEmptyBody,
                     ),
                   ),
                 ),

@@ -33,19 +33,22 @@ final class AuthController extends AsyncNotifier<void> {
     );
   }
 
-  Future<void> signUpWithEmail({
+  /// Null when it failed (the error is in [state]).
+  Future<SignUpOutcome?> signUpWithEmail({
     required String email,
     required String password,
     required String username,
   }) async {
     state = const AsyncLoading<void>();
-    state = await AsyncValue.guard(
-      () => ref.read(authRepositoryProvider).signUpWithEmail(
+    SignUpOutcome? outcome;
+    state = await AsyncValue.guard(() async {
+      outcome = await ref.read(authRepositoryProvider).signUpWithEmail(
             email: email,
             password: password,
             username: username,
-          ),
-    );
+          );
+    });
+    return outcome;
   }
 
   Future<void> signInWithApple() async {

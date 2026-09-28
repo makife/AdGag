@@ -3,6 +3,7 @@ import "dart:async" show unawaited;
 import "package:cached_network_image/cached_network_image.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/supabase/supabase_providers.dart";
 import "../../../../core/theme/app_spacing.dart";
@@ -32,7 +33,7 @@ class PublicProfileScreen extends ConsumerWidget {
         error: (Object error, StackTrace stackTrace) => Center(child: Text("$error")),
         data: (PublicProfile? profile) {
           if (profile == null) {
-            return const Center(child: Text("This account doesn't exist."));
+            return Center(child: Text(AppLocalizations.of(context).profileNotFound));
           }
           return _ProfileBody(profile: profile);
         },
@@ -77,7 +78,7 @@ class _ProfileBody extends ConsumerWidget {
                       const SizedBox(width: AppSpacing.sm),
                       IconButton(
                         icon: const Icon(Icons.block_outlined),
-                        tooltip: "Block",
+                        tooltip: AppLocalizations.of(context).blockUser,
                         onPressed: () => unawaited(_block(context, ref)),
                       ),
                     ],
@@ -93,14 +94,13 @@ class _ProfileBody extends ConsumerWidget {
               child: Center(child: CircularProgressIndicator()),
             ),
           ),
-          error: (Object error, StackTrace stackTrace) =>
-              SliverToBoxAdapter(child: Center(child: Text("$error"))),
+          error: (Object error, StackTrace stackTrace) => SliverToBoxAdapter(child: Center(child: Text("$error"))),
           data: (List<Ad> ads) {
             if (ads.isEmpty) {
-              return const SliverToBoxAdapter(
+              return SliverToBoxAdapter(
                 child: Padding(
-                  padding: EdgeInsets.all(AppSpacing.xl),
-                  child: Text("Nothing for sale yet."),
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Text(AppLocalizations.of(context).emptyProfileAds),
                 ),
               );
             }
@@ -140,11 +140,12 @@ class _ProfileBody extends ConsumerWidget {
     try {
       await ref.read(moderationRepositoryProvider).blockUser(profile.id);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Blocked.")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).blockDone)));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Couldn't block: $e")));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).blockFailed("$e"))));
       }
     }
   }
@@ -162,7 +163,8 @@ class _FollowButton extends ConsumerWidget {
 
     return OutlinedButton(
       onPressed: () => unawaited(ref.read(followControllerProvider(userId).notifier).toggle()),
-      child: Text(isFollowing ? "FOLLOWING" : "FOLLOW"),
+      child:
+          Text(isFollowing ? AppLocalizations.of(context).actionFollowing : AppLocalizations.of(context).actionFollow),
     );
   }
 }

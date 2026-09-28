@@ -13,7 +13,8 @@ import "features/auth/presentation/providers/auth_providers.dart";
 class AdGagApp extends ConsumerWidget {
   const AdGagApp({super.key});
 
-  static const List<Locale> supportedLocales = <Locale>[Locale("en"), Locale("tr")];
+  /// Every language in l10n/ (generated from tool/l10n/strings.py).
+  static const List<Locale> supportedLocales = AppLocalizations.supportedLocales;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:image_picker/image_picker.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/media/media_providers.dart";
 import "../../../../core/theme/app_spacing.dart";
@@ -60,7 +61,7 @@ class _CaptureStepState extends ConsumerState<CaptureStep> {
       final LocalVideoDraft draft = LocalVideoDraft(filePath: file.path, duration: duration);
       ref.read(createAdFlowControllerProvider.notifier).onVideoCaptured(draft);
     } catch (e) {
-      setState(() => _error = "Couldn't import that video: $e");
+      setState(() => _error = AppLocalizations.of(context).importFailed("$e"));
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -71,7 +72,7 @@ class _CaptureStepState extends ConsumerState<CaptureStep> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Record or import")),
+      appBar: AppBar(title: Text(AppLocalizations.of(context).captureTitle)),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.xl),
@@ -92,13 +93,13 @@ class _CaptureStepState extends ConsumerState<CaptureStep> {
                 FilledButton.icon(
                   onPressed: _busy ? null : _record,
                   icon: const Icon(Icons.videocam),
-                  label: const Text("Record"),
+                  label: Text(AppLocalizations.of(context).createRecord),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _importFromGallery,
                   icon: const Icon(Icons.photo_library_outlined),
-                  label: const Text("Import from gallery"),
+                  label: Text(AppLocalizations.of(context).createImport),
                 ),
               ],
             ),

@@ -8,6 +8,7 @@ import "../../core/analytics/ad_event_type.dart";
 import "../../core/analytics/analytics_providers.dart";
 import "../../core/config/env_config.dart";
 import "../../core/supabase/supabase_providers.dart";
+import "../../core/localization/generated/app_localizations.dart";
 import "../../core/theme/app_spacing.dart";
 import "../../features/feed/presentation/providers/sold_providers.dart";
 import "action_rail_icon.dart";
@@ -43,7 +44,7 @@ class ShareButton extends ConsumerWidget {
       label: "GAG!",
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.md),
-        onTap: () => unawaited(_share(ref)),
+        onTap: () => unawaited(_share(context, ref)),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.sm),
           child: Column(
@@ -65,12 +66,13 @@ class ShareButton extends ConsumerWidget {
     );
   }
 
-  Future<void> _share(WidgetRef ref) async {
+  Future<void> _share(BuildContext context, WidgetRef ref) async {
     final String url = "https://${EnvConfig.appLinkHost}/ad/$adId";
-    final String subjectLine = subjectDisplayName != null ? "${subjectDisplayName!.toUpperCase()}™ " : "";
-    final ShareResult result = await SharePlus.instance.share(
-      ShareParams(text: "${subjectLine}on AdGag: $url"),
-    );
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final String text = subjectDisplayName != null
+        ? l10n.shareMessage("${subjectDisplayName!.toUpperCase()}™", url)
+        : l10n.shareMessageNoSubject(url);
+    final ShareResult result = await SharePlus.instance.share(ShareParams(text: text));
     // Opening the share sheet and backing out isn't a share. ("unavailable" —
     // the platform can't tell — still counts, as before.)
     if (result.status == ShareResultStatus.dismissed) {

@@ -1,3 +1,5 @@
+import "../localization/generated/app_localizations.dart";
+
 /// Username rules (CLAUDE.md section 24). Mirrored server-side by a CHECK
 /// constraint in supabase/migrations/0002_profiles_and_auth_trigger.sql —
 /// this copy is a UX convenience only, never the enforcement point.
@@ -15,19 +17,20 @@ abstract final class UsernameValidator {
 
   static bool isValid(String username) => _pattern.hasMatch(username);
 
-  /// Returns a user-facing reason the username is invalid, or null if valid.
-  static String? validationError(String username) {
+  /// Returns a user-facing reason the username is invalid, or null if
+  /// valid — in the user's language when [l10n] is given.
+  static String? validationError(String username, [AppLocalizations? l10n]) {
     if (username.length < minLength) {
-      return "Username must be at least $minLength characters.";
+      return l10n?.usernameTooShort("$minLength") ?? "Username must be at least $minLength characters.";
     }
     if (username.length > maxLength) {
-      return "Username must be at most $maxLength characters.";
+      return l10n?.usernameTooLong("$maxLength") ?? "Username must be at most $maxLength characters.";
     }
     if (!RegExp(r"^[a-z]").hasMatch(username)) {
-      return "Username must start with a letter.";
+      return l10n?.usernameStartLetter ?? "Username must start with a letter.";
     }
     if (!_pattern.hasMatch(username)) {
-      return "Username can only contain lowercase letters, numbers, and underscores.";
+      return l10n?.usernameChars ?? "Username can only contain lowercase letters, numbers, and underscores.";
     }
     return null;
   }

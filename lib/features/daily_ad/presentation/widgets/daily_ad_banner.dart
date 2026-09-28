@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/router/route_paths.dart";
 import "../../../../core/theme/app_colors.dart";
@@ -35,9 +36,9 @@ class DailyAdBanner extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const Text(
-                "TODAY'S AD",
-                style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700, fontSize: 12),
+              Text(
+                AppLocalizations.of(context).dailyAdTitle,
+                style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w700, fontSize: 12),
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
@@ -51,7 +52,7 @@ class DailyAdBanner extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: <Widget>[
                   Text(
-                    "${challenge.participantCount} participating",
+                    AppLocalizations.of(context).dailyAdParticipants("${challenge.participantCount}"),
                     style: const TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                   FilledButton(
@@ -68,7 +69,7 @@ class DailyAdBanner extends ConsumerWidget {
                           );
                       context.goTo(RoutePaths.create);
                     },
-                    child: const Text("Join"),
+                    child: Text(AppLocalizations.of(context).dailyAdJoin),
                   ),
                 ],
               ),

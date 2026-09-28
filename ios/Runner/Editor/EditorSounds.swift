@@ -138,8 +138,6 @@ struct SoundPanel: View {
         }
       }
       .frame(height: 196)
-      Text("Tap to listen, + to add at the playhead. Sounds: CC0 (Freesound, Kenney)")
-        .font(.caption2).foregroundColor(EditorPalette.muted)
     }
     .padding(.top, 4)
   }

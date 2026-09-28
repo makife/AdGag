@@ -256,15 +256,19 @@ class EditorViewModel(
     fun addSound(def: SfxDef): SoundLayer {
         player.pause()
         val total = outputDurationMs
-        val now = toOutputMs(globalPositionMs()).coerceIn(0L, total)
-        val start = now.coerceAtMost((total - def.durationMs).coerceAtLeast(0L))
+        // Exactly at the playhead. (It used to be pulled back so the whole
+        // sound fit before the end — a 3s applause added at 9s of a 10s Ad
+        // landed at 7s: "not where I put it". A tail past the end is cut.)
+        val start = toOutputMs(globalPositionMs()).coerceIn(0L, (total - 100L).coerceAtLeast(0L))
         val layer = SoundLayer(sfxId = def.id, startMs = start)
+        sfxPlayer.preload(def)
         soundLayers = soundLayers + layer
         selectedTextId = layer.id
         return layer
     }
 
     fun updateSound(layer: SoundLayer) {
+        sfx.byId(layer.sfxId)?.let(sfxPlayer::preload)
         soundLayers = soundLayers.map { if (it.id == layer.id) layer else it }
     }
 
@@ -359,8 +363,8 @@ class EditorViewModel(
             if (l.id != id) {
                 l
             } else {
-                val len = sfx.byId(l.sfxId)?.durationMs ?: 0L
-                l.copy(startMs = s.coerceAtMost((total - len).coerceAtLeast(0L)))
+                // Wherever it's dragged; a tail past the Ad's end is cut.
+                l.copy(startMs = s)
             }
         }
     }
@@ -522,6 +526,9 @@ class EditorViewModel(
         }
         rebuildAndPrepare(startGlobalMs = startAt, playWhenReady = true)
         clips.forEach { generateThumbnails(it.path) }
+        // Load the sound effects now, so the first one fires on time (a
+        // SoundPool sample loads asynchronously — played on demand it starts late).
+        soundLayers.forEach { l -> sfx.byId(l.sfxId)?.let(sfxPlayer::preload) }
         // The preview music file isn't persisted across the "+" relaunch.
         if (musicPath != null) refreshPreviewMusic()
     }

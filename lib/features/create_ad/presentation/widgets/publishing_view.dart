@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/router/route_paths.dart";
 import "../../../../core/theme/app_spacing.dart";
@@ -28,15 +29,17 @@ class PublishingView extends ConsumerWidget {
                 CircularProgressIndicator(value: state.uploadProgress > 0 ? state.uploadProgress : null),
                 const SizedBox(height: AppSpacing.lg),
                 Text(
-                  state.uploadProgress < 1 ? "Uploading… ${(state.uploadProgress * 100).round()}%" : "Processing…",
+                  state.uploadProgress < 1
+                      ? AppLocalizations.of(context).createUploadingProgress("${(state.uploadProgress * 100).round()}")
+                      : AppLocalizations.of(context).createProcessing,
                 ),
               ] else if (state.step == CreateAdStep.success) ...<Widget>[
                 const Icon(Icons.check_circle, size: 48),
                 const SizedBox(height: AppSpacing.lg),
                 Text(
                   state.processingStillPending
-                      ? "Still processing — it'll show up on your profile soon."
-                      : "Published!",
+                      ? AppLocalizations.of(context).publishStillProcessing
+                      : AppLocalizations.of(context).publishDone,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: AppSpacing.xl),
@@ -45,19 +48,19 @@ class PublishingView extends ConsumerWidget {
                     ref.read(createAdFlowControllerProvider.notifier).reset();
                     context.goTo(RoutePaths.home);
                   },
-                  child: const Text("Done"),
+                  child: Text(AppLocalizations.of(context).genericDone),
                 ),
               ] else if (state.step == CreateAdStep.failure) ...<Widget>[
                 const Icon(Icons.error_outline, size: 48),
                 const SizedBox(height: AppSpacing.lg),
                 Text(
-                  state.errorMessage ?? "This one didn't make the campaign.",
+                  state.errorMessage ?? AppLocalizations.of(context).draftFailed,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 FilledButton(
                   onPressed: () => ref.read(createAdFlowControllerProvider.notifier).reset(),
-                  child: const Text("Try again"),
+                  child: Text(AppLocalizations.of(context).genericTryAgain),
                 ),
               ],
             ],

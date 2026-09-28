@@ -28,7 +28,7 @@ class ProfileScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Profile"),
+        title: Text(AppLocalizations.of(context).navProfile),
         actions: <Widget>[
           IconButton(
             icon: const Icon(Icons.menu),
@@ -40,7 +40,7 @@ class ProfileScreen extends ConsumerWidget {
       body: appUserAsync.when(
         data: (AppUser? user) {
           if (user == null) {
-            return const Center(child: Text("Not signed in."));
+            return Center(child: Text(AppLocalizations.of(context).profileNotSignedIn));
           }
           return _ProfileBody(user: user);
         },
@@ -113,14 +113,13 @@ class _ProfileBody extends ConsumerWidget {
               child: Center(child: CircularProgressIndicator()),
             ),
           ),
-          error: (Object error, StackTrace stackTrace) =>
-              SliverToBoxAdapter(child: Center(child: Text("$error"))),
+          error: (Object error, StackTrace stackTrace) => SliverToBoxAdapter(child: Center(child: Text("$error"))),
           data: (List<Ad> ads) {
             if (ads.isEmpty) {
-              return const SliverToBoxAdapter(
+              return SliverToBoxAdapter(
                 child: Padding(
-                  padding: EdgeInsets.all(AppSpacing.xl),
-                  child: Text("Nothing for sale yet."),
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Text(AppLocalizations.of(context).emptyProfileAds),
                 ),
               );
             }
@@ -176,9 +175,9 @@ class _StatsRow extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: <Widget>[
-        _Stat(label: "Ads", value: ads.length),
-        _Stat(label: "SOLD", value: soldTotal),
-        _Stat(label: "Views", value: viewTotal),
+        _Stat(label: AppLocalizations.of(context).statAds, value: ads.length),
+        _Stat(label: AppLocalizations.of(context).actionSold, value: soldTotal),
+        _Stat(label: AppLocalizations.of(context).statViews, value: viewTotal),
       ],
     );
   }

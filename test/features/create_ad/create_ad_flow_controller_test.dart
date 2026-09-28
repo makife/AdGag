@@ -180,6 +180,8 @@ void main() {
 
     final state = container.read(createAdFlowControllerProvider);
     expect(state.step, CreateAdStep.failure);
-    expect(state.errorMessage, isNotNull);
+    // No message from the controller: the failure view shows its own,
+    // localized "didn't make the campaign" line.
+    expect(state.errorMessage, isNull);
   });
 }

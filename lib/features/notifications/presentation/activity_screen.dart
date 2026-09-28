@@ -3,6 +3,8 @@ import "dart:async" show unawaited;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../../core/localization/generated/app_localizations.dart";
+
 import "../../../core/router/route_paths.dart";
 import "../../../core/widgets/coming_soon_view.dart";
 import "../domain/app_notification.dart";
@@ -20,15 +22,15 @@ class ActivityScreen extends ConsumerWidget {
     final notificationsAsync = ref.watch(recentNotificationsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Activity")),
+      appBar: AppBar(title: Text(AppLocalizations.of(context).navActivity)),
       body: notificationsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (Object error, StackTrace stackTrace) => Center(child: Text("$error")),
         data: (List<AppNotification> notifications) {
           if (notifications.isEmpty) {
-            return const ComingSoonView(
-              title: "Nothing yet",
-              phaseNote: "Follows, REVIEWS and AD THIS on your Ads will show up here.",
+            return ComingSoonView(
+              title: AppLocalizations.of(context).activityEmptyTitle,
+              phaseNote: AppLocalizations.of(context).activityEmptyBody,
             );
           }
           return ListView.builder(
@@ -36,12 +38,10 @@ class ActivityScreen extends ConsumerWidget {
             itemBuilder: (BuildContext context, int index) {
               final AppNotification notification = notifications[index];
               return ListTile(
-                tileColor: notification.isUnread
-                    ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.06)
-                    : null,
+                tileColor: notification.isUnread ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.06) : null,
                 leading: Icon(_iconFor(notification.type)),
-                title: Text(_textFor(notification)),
-                subtitle: Text(_relativeTime(notification.createdAt)),
+                title: Text(_textFor(context, notification)),
+                subtitle: Text(_relativeTime(context, notification.createdAt)),
                 onTap: () {
                   if (notification.isUnread) {
                     unawaited(
@@ -69,20 +69,22 @@ class ActivityScreen extends ConsumerWidget {
         NotificationType.adThis => Icons.bolt,
       };
 
-  String _textFor(AppNotification notification) {
-    final String actor = notification.actorUsername != null ? "@${notification.actorUsername}" : "Someone";
+  String _textFor(BuildContext context, AppNotification notification) {
+    final String actor = notification.actorUsername != null
+        ? "@${notification.actorUsername}"
+        : AppLocalizations.of(context).activitySomeone;
     return switch (notification.type) {
-      NotificationType.newFollower => "$actor started following you.",
-      NotificationType.newReview => "$actor reviewed your Ad.",
-      NotificationType.adThis => "$actor pressed AD THIS on your Ad.",
+      NotificationType.newFollower => AppLocalizations.of(context).activityNewFollower(actor),
+      NotificationType.newReview => AppLocalizations.of(context).activityNewReview(actor),
+      NotificationType.adThis => AppLocalizations.of(context).activityAdThis(actor),
     };
   }
 
-  String _relativeTime(DateTime time) {
+  String _relativeTime(BuildContext context, DateTime time) {
     final Duration diff = DateTime.now().difference(time);
-    if (diff.inMinutes < 1) return "just now";
-    if (diff.inHours < 1) return "${diff.inMinutes}m ago";
-    if (diff.inDays < 1) return "${diff.inHours}h ago";
-    return "${diff.inDays}d ago";
+    if (diff.inMinutes < 1) return AppLocalizations.of(context).timeJustNow;
+    if (diff.inHours < 1) return AppLocalizations.of(context).timeMinutesAgo("${diff.inMinutes}");
+    if (diff.inDays < 1) return AppLocalizations.of(context).timeHoursAgo("${diff.inHours}");
+    return AppLocalizations.of(context).timeDaysAgo("${diff.inDays}");
   }
 }

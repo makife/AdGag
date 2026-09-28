@@ -2,6 +2,7 @@ import "dart:async" show unawaited;
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/theme/app_spacing.dart";
 import "../../domain/report_reason.dart";
@@ -34,12 +35,13 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Thanks — we'll take a look.")),
+          SnackBar(content: Text(AppLocalizations.of(context).reportThanks)),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Couldn't send report: $e")));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).reportFailed("$e"))));
       }
     } finally {
       if (mounted) {
@@ -57,9 +59,9 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const Padding(
-              padding: EdgeInsets.only(bottom: AppSpacing.md),
-              child: Text("Report", style: TextStyle(fontWeight: FontWeight.w700)),
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
+              child: Text(AppLocalizations.of(context).reportAd, style: const TextStyle(fontWeight: FontWeight.w700)),
             ),
             if (_submitting)
               const Padding(

@@ -2,6 +2,7 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/router/route_paths.dart";
 import "../../../../core/theme/app_spacing.dart";
@@ -73,8 +74,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         title: TextField(
           controller: _controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: "Search subjects or people",
+          decoration: InputDecoration(
+            hintText: AppLocalizations.of(context).searchHint,
             border: InputBorder.none,
           ),
           onChanged: _onChanged,
@@ -85,22 +86,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           : ListView(
               children: <Widget>[
                 if (_subjects.isNotEmpty) ...<Widget>[
-                  const Padding(
-                    padding: EdgeInsets.all(AppSpacing.md),
-                    child: Text("SUBJECTS", style: TextStyle(fontWeight: FontWeight.w700)),
+                  Padding(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Text(AppLocalizations.of(context).searchSubjects,
+                        style: const TextStyle(fontWeight: FontWeight.w700),),
                   ),
                   ..._subjects.map(
                     (AdSubject subject) => ListTile(
                       title: Text("${subject.displayName.toUpperCase()}™"),
-                      subtitle: Text("${subject.adsCount} Ads"),
+                      subtitle: Text(AppLocalizations.of(context).subjectAdCount("${subject.adsCount}")),
                       onTap: () => unawaited(context.pushTo(RoutePaths.subjectOf(subject.id))),
                     ),
                   ),
                 ],
                 if (_users.isNotEmpty) ...<Widget>[
-                  const Padding(
-                    padding: EdgeInsets.all(AppSpacing.md),
-                    child: Text("PEOPLE", style: TextStyle(fontWeight: FontWeight.w700)),
+                  Padding(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Text(AppLocalizations.of(context).searchPeople,
+                        style: const TextStyle(fontWeight: FontWeight.w700),),
                   ),
                   ..._users.map(
                     (UserSearchResult user) => ListTile(

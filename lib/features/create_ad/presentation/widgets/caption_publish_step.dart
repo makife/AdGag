@@ -4,6 +4,7 @@ import "dart:io";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:video_player/video_player.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/theme/app_spacing.dart";
 import "../providers/create_ad_flow_controller.dart";
@@ -52,11 +53,11 @@ class _CaptionPublishStepState extends ConsumerState<CaptionPublishStep> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Preview & publish"),
+        title: Text(AppLocalizations.of(context).previewPublishTitle),
         actions: <Widget>[
           TextButton(
             onPressed: () => ref.read(createAdFlowControllerProvider.notifier).retake(),
-            child: const Text("Retake"),
+            child: Text(AppLocalizations.of(context).retake),
           ),
         ],
       ),
@@ -77,7 +78,7 @@ class _CaptionPublishStepState extends ConsumerState<CaptionPublishStep> {
               TextField(
                 maxLength: 150,
                 maxLines: 2,
-                decoration: const InputDecoration(hintText: "Add a caption…"),
+                decoration: InputDecoration(hintText: AppLocalizations.of(context).createCaptionHint),
                 onChanged: (String value) => ref.read(createAdFlowControllerProvider.notifier).setCaption(value),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -87,7 +88,7 @@ class _CaptionPublishStepState extends ConsumerState<CaptionPublishStep> {
                   onPressed: state.finalDraft == null
                       ? null
                       : () => unawaited(ref.read(createAdFlowControllerProvider.notifier).publish()),
-                  child: const Text("Publish"),
+                  child: Text(AppLocalizations.of(context).createPublish),
                 ),
               ),
             ],

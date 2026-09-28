@@ -3,6 +3,7 @@ import "dart:async" show unawaited;
 import "package:cached_network_image/cached_network_image.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/router/route_paths.dart";
 import "../../../../core/theme/app_spacing.dart";
@@ -39,13 +40,19 @@ class _SubjectScreenState extends ConsumerState<SubjectScreen> with SingleTicker
     return Scaffold(
       appBar: AppBar(
         title: subjectAsync.when(
-          data: (subject) => Text(subject == null ? "Subject" : "${subject.displayName.toUpperCase()}™"),
+          data: (subject) => Text(subject == null
+              ? AppLocalizations.of(context).subjectFallbackTitle
+              : "${subject.displayName.toUpperCase()}™",),
           loading: () => const Text("…"),
-          error: (Object error, StackTrace stackTrace) => const Text("Subject"),
+          error: (Object error, StackTrace stackTrace) => Text(AppLocalizations.of(context).subjectFallbackTitle),
         ),
         bottom: TabBar(
           controller: _tabController,
-          tabs: const <Widget>[Tab(text: "Trending"), Tab(text: "Top"), Tab(text: "New")],
+          tabs: <Widget>[
+            Tab(text: AppLocalizations.of(context).subjectTabTrending),
+            Tab(text: AppLocalizations.of(context).subjectTabTop),
+            Tab(text: AppLocalizations.of(context).subjectTabNew),
+          ],
         ),
       ),
       body: Column(
@@ -58,13 +65,14 @@ class _SubjectScreenState extends ConsumerState<SubjectScreen> with SingleTicker
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: <Widget>[
-                        Text("${subject.adsCount} Ads", style: Theme.of(context).textTheme.bodyMedium),
+                        Text(AppLocalizations.of(context).subjectAdCount("${subject.adsCount}"),
+                            style: Theme.of(context).textTheme.bodyMedium,),
                         FilledButton(
                           onPressed: () {
                             ref.read(createAdFlowControllerProvider.notifier).startWithSubject(subject);
                             context.goTo(RoutePaths.create);
                           },
-                          child: const Text("AD THIS SUBJECT"),
+                          child: Text(AppLocalizations.of(context).subjectAdThis),
                         ),
                       ],
                     ),
@@ -103,14 +111,14 @@ class _SubjectAdsGrid extends ConsumerWidget {
       error: (Object error, StackTrace stackTrace) => Center(child: Text("$error")),
       data: (List<Ad> ads) {
         if (ads.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(AppSpacing.xxl),
+          return Padding(
+            padding: const EdgeInsets.all(AppSpacing.xxl),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Text("No one's sold this yet."),
-                SizedBox(height: AppSpacing.xs),
-                Text("Be the first to advertise it.", style: TextStyle(color: Colors.grey)),
+                Text(AppLocalizations.of(context).emptySubjectFeed),
+                const SizedBox(height: AppSpacing.xs),
+                Text(AppLocalizations.of(context).emptySubjectFeedCta, style: const TextStyle(color: Colors.grey)),
               ],
             ),
           );

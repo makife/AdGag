@@ -2,6 +2,7 @@ import "dart:async" show unawaited;
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../core/localization/generated/app_localizations.dart";
 
 import "../../core/supabase/supabase_providers.dart";
 import "../../core/theme/app_spacing.dart";
@@ -29,7 +30,7 @@ class MoreMenuButton extends ConsumerWidget {
 
     return Semantics(
       button: true,
-      label: "More",
+      label: AppLocalizations.of(context).genericMore,
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.md),
         onTap: () => unawaited(_openMenu(context, ref, isOwnAd)),
@@ -52,7 +53,7 @@ class MoreMenuButton extends ConsumerWidget {
               if (isOwnAd)
                 ListTile(
                   leading: const Icon(Icons.delete_outline),
-                  title: const Text("Delete"),
+                  title: Text(AppLocalizations.of(context).genericDelete),
                   onTap: () {
                     Navigator.of(sheetContext).pop();
                     unawaited(_confirmDelete(context, ref));
@@ -60,7 +61,7 @@ class MoreMenuButton extends ConsumerWidget {
                 ),
               ListTile(
                 leading: const Icon(Icons.flag_outlined),
-                title: const Text("Report"),
+                title: Text(AppLocalizations.of(context).reportAd),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   unawaited(
@@ -75,20 +76,20 @@ class MoreMenuButton extends ConsumerWidget {
               if (!isOwnAd)
                 ListTile(
                   leading: const Icon(Icons.block),
-                  title: const Text("Block"),
+                  title: Text(AppLocalizations.of(context).blockUser),
                   onTap: () async {
                     Navigator.of(sheetContext).pop();
                     try {
                       await ref.read(moderationRepositoryProvider).blockUser(adOwnerUserId);
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("Blocked.")),
+                          SnackBar(content: Text(AppLocalizations.of(context).blockDone)),
                         );
                       }
                     } catch (e) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text("Couldn't block: $e")),
+                          SnackBar(content: Text(AppLocalizations.of(context).blockFailed("$e"))),
                         );
                       }
                     }
@@ -105,16 +106,16 @@ class MoreMenuButton extends ConsumerWidget {
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
-        title: const Text("Delete this Ad?"),
-        content: const Text("This can't be undone. It will be removed from feeds immediately."),
+        title: Text(AppLocalizations.of(context).deleteAdTitle),
+        content: Text(AppLocalizations.of(context).deleteAdBody),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text("Cancel"),
+            child: Text(AppLocalizations.of(context).genericCancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text("Delete"),
+            child: Text(AppLocalizations.of(context).genericDelete),
           ),
         ],
       ),
@@ -128,7 +129,7 @@ class MoreMenuButton extends ConsumerWidget {
       ref.invalidate(feedControllerProvider);
       ref.invalidate(adsByUserProvider);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Deleted.")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).deleteDone)));
         if (Navigator.of(context).canPop()) {
           Navigator.of(context).pop();
         }
@@ -136,7 +137,7 @@ class MoreMenuButton extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Couldn't delete: $e")),
+          SnackBar(content: Text(AppLocalizations.of(context).deleteFailed("$e"))),
         );
       }
     }

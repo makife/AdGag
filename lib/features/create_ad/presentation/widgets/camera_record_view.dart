@@ -107,7 +107,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
     final PermissionStatus cameraStatus = await Permission.camera.request();
     final PermissionStatus micStatus = await Permission.microphone.request();
     if (!cameraStatus.isGranted || !micStatus.isGranted) {
-      setState(() => _error = "Camera and microphone permission are required to record.");
+      setState(() => _error = AppLocalizations.of(context).cameraPermission);
       return;
     }
 
@@ -120,7 +120,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
       );
       await _openCamera(description);
     } catch (e) {
-      setState(() => _error = "Couldn't start the camera: $e");
+      setState(() => _error = AppLocalizations.of(context).cameraStartFailed("$e"));
     }
   }
 
@@ -181,7 +181,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
     try {
       await _openCamera(next);
     } catch (e) {
-      setState(() => _error = "Couldn't switch camera: $e");
+      setState(() => _error = AppLocalizations.of(context).cameraSwitchFailed("$e"));
     } finally {
       if (mounted) {
         setState(() => _switchingCamera = false);
@@ -241,7 +241,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
     if (duration < VideoConstraints.min) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Too short — hold on a little longer.")),
+          SnackBar(content: Text(AppLocalizations.of(context).cameraTooShort)),
         );
       }
       return;

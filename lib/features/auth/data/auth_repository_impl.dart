@@ -46,11 +46,7 @@ final class AuthRepositoryImpl implements AuthRepository {
         return null;
       }
       try {
-        final Map<String, dynamic> row = await _client
-            .from("profiles")
-            .select()
-            .eq("id", user.id)
-            .single();
+        final Map<String, dynamic> row = await _client.from("profiles").select().eq("id", user.id).single();
         return AppUser.fromProfileRow(row, email: user.email ?? "");
       } on supa.PostgrestException catch (e, st) {
         // Profile row may not exist yet for a split second right after
@@ -72,18 +68,38 @@ final class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<void> signUpWithEmail({
+  Future<SignUpOutcome> signUpWithEmail({
     required String email,
     required String password,
     required String username,
   }) async {
+    // Checked first: a taken username otherwise fails inside the profile
+    // trigger as an opaque "Database error saving new user". (The trigger's
+    // unique constraint is still the real enforcement.)
+    bool available = true;
     try {
-      await _client.auth.signUp(
+      available = await isUsernameAvailable(username);
+    } catch (_) {
+      // Can't tell — let the sign-up itself decide.
+    }
+    if (!available) {
+      throw const app_error.ConflictException("username_taken");
+    }
+    try {
+      final supa.AuthResponse response = await _client.auth.signUp(
         email: email,
         password: password,
         // Consumed by the handle_new_user() trigger to seed profiles.username.
         data: <String, dynamic>{"username": username},
       );
+      if (response.session != null) {
+        return SignUpOutcome.signedIn;
+      }
+      final List<supa.UserIdentity>? identities = response.user?.identities;
+      if (identities != null && identities.isEmpty) {
+        return SignUpOutcome.emailTaken;
+      }
+      return SignUpOutcome.confirmEmail;
     } on supa.AuthException catch (e) {
       throw app_error.AuthException(e.message, e);
     } on supa.PostgrestException catch (e) {
@@ -91,6 +107,15 @@ final class AuthRepositoryImpl implements AuthRepository {
         throw const app_error.ConflictException("That username is already taken.");
       }
       throw app_error.UnknownException(e.message, e);
+    }
+  }
+
+  @override
+  Future<void> resendConfirmation(String email) async {
+    try {
+      await _client.auth.resend(type: supa.OtpType.signup, email: email);
+    } on supa.AuthException catch (e) {
+      throw app_error.AuthException(e.message, e);
     }
   }
 
@@ -128,11 +153,7 @@ final class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<bool> isUsernameAvailable(String username) async {
-    final List<dynamic> rows = await _client
-        .from("profiles")
-        .select("id")
-        .eq("username", username)
-        .limit(1);
+    final List<dynamic> rows = await _client.from("profiles").select("id").eq("username", username).limit(1);
     return rows.isEmpty;
   }
 }

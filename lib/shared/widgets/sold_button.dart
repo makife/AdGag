@@ -2,6 +2,7 @@ import "dart:async" show unawaited;
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../core/localization/generated/app_localizations.dart";
 
 import "../../core/analytics/ad_event_type.dart";
 import "../../core/analytics/analytics_providers.dart";
@@ -29,7 +30,6 @@ class SoldButton extends ConsumerStatefulWidget {
 }
 
 class _SoldButtonState extends ConsumerState<SoldButton> with SingleTickerProviderStateMixin {
-
   /// Drives the "Sold!" burst (see [_SoldBurst]).
   late final AnimationController _burst = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
 
@@ -62,7 +62,7 @@ class _SoldButtonState extends ConsumerState<SoldButton> with SingleTickerProvid
 
     return Semantics(
       button: true,
-      label: isSold ? "Un-SOLD" : "SOLD",
+      label: isSold ? AppLocalizations.of(context).soldRemove : AppLocalizations.of(context).actionSold,
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.md),
         onTap: () async {
@@ -80,7 +80,7 @@ class _SoldButtonState extends ConsumerState<SoldButton> with SingleTickerProvid
           } catch (_) {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Couldn't update SOLD right now.")),
+                SnackBar(content: Text(AppLocalizations.of(context).soldUpdateFailed)),
               );
             }
           }

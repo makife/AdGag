@@ -3,6 +3,7 @@ import "dart:async" show unawaited;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:image_picker/image_picker.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/media/native_editor_bridge.dart";
 import "../../domain/local_video_draft.dart";
@@ -97,7 +98,8 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Couldn't import that video: $e")));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).importFailed("$e"))));
       }
     }
     // Cancelled or failed: back to the camera (a fresh one).
@@ -176,8 +178,8 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
                     const SizedBox(height: 12),
                     Text(
                       _isCrashLogFromLastAttempt
-                          ? "The native editor crashed last time — here's the checkpoint log leading up to it"
-                          : "Native editor failed",
+                          ? AppLocalizations.of(context).editorCrashedLast
+                          : AppLocalizations.of(context).editorFailed,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center,
                     ),
@@ -190,7 +192,7 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
                     const SizedBox(height: 12),
                     FilledButton(
                       onPressed: () => unawaited(_resumeState != null ? _resume() : _open()),
-                      child: const Text("Retry"),
+                      child: Text(AppLocalizations.of(context).genericRetry),
                     ),
                   ],
                 ),

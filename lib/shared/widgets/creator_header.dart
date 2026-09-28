@@ -2,6 +2,7 @@ import "dart:async" show unawaited;
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../core/localization/generated/app_localizations.dart";
 
 import "../../core/router/route_paths.dart";
 import "../../core/supabase/supabase_providers.dart";
@@ -38,7 +39,7 @@ class CreatorHeader extends ConsumerWidget {
               MiniAvatar(avatarUrl: avatarUrl, username: username),
               const SizedBox(width: AppSpacing.xs + 2),
               Text(
-                "@${username ?? 'unknown'}",
+                "@${username ?? AppLocalizations.of(context).unknownUser}",
                 style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w500, fontSize: 13),
               ),
             ],
@@ -70,7 +71,7 @@ class _FollowChip extends ConsumerWidget {
         } catch (_) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Couldn't update follow right now.")),
+              SnackBar(content: Text(AppLocalizations.of(context).followUpdateFailed)),
             );
           }
         }
@@ -82,7 +83,7 @@ class _FollowChip extends ConsumerWidget {
           borderRadius: BorderRadius.circular(AppRadius.pill),
         ),
         child: Text(
-          isFollowing ? "FOLLOWING" : "FOLLOW",
+          isFollowing ? AppLocalizations.of(context).actionFollowing : AppLocalizations.of(context).actionFollow,
           style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
         ),
       ),

@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/theme/app_spacing.dart";
 import "../providers/create_ad_flow_controller.dart";
@@ -49,7 +50,7 @@ class _SubjectPickerStepState extends ConsumerState<SubjectPickerStep> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("What are you selling today?")),
+      appBar: AppBar(title: Text(AppLocalizations.of(context).createChooseSubject)),
       body: Padding(
         padding: const EdgeInsets.all(AppSpacing.xl),
         child: Column(
@@ -59,7 +60,7 @@ class _SubjectPickerStepState extends ConsumerState<SubjectPickerStep> {
               controller: _controller,
               autofocus: true,
               textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(hintText: "Rock, coffee, Monday, yourself…"),
+              decoration: InputDecoration(hintText: AppLocalizations.of(context).createSubjectHint),
               onSubmitted: (_) => _submit(),
             ),
             if (_error != null) ...<Widget>[
@@ -75,7 +76,7 @@ class _SubjectPickerStepState extends ConsumerState<SubjectPickerStep> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text("Next"),
+                  : Text(AppLocalizations.of(context).genericNext),
             ),
           ],
         ),

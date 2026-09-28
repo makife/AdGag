@@ -24,9 +24,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   static const List<_OnboardingSlide> _slides = <_OnboardingSlide>[
     // The brand slide's subtitle is the localized slogan (see _SlideView).
     _OnboardingSlide(title: "AdGag", subtitle: "", useLogoImage: true),
-    _OnboardingSlide(title: "Pick anything.", subtitle: "A rock. Your coffee. Yourself. Monday."),
-    _OnboardingSlide(title: "Sell it in 10 seconds.", subtitle: "Short, punchy, funny. That's the format."),
-    _OnboardingSlide(title: "See it. Ad it. Go.", subtitle: "Watch an ad. Make a better one. Publish."),
+    _OnboardingSlide(title: "pick", subtitle: "pick"),
+    _OnboardingSlide(title: "sell", subtitle: "sell"),
+    _OnboardingSlide(title: "see", subtitle: "see"),
   ];
 
   @override
@@ -65,7 +65,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 child: TextButton(
                   onPressed: () => context.pushReplacementTo(RoutePaths.signUp),
-                  child: const Text("Skip"),
+                  child: Text(AppLocalizations.of(context).onboardingSkip),
                 ),
               ),
             ),
@@ -102,7 +102,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: _next,
-                      child: Text(_page == _slides.length - 1 ? "Get started" : "Next"),
+                      child: Text(_page == _slides.length - 1
+                          ? AppLocalizations.of(context).onboardingGetStarted
+                          : AppLocalizations.of(context).genericNext,),
                     ),
                   ),
                 ],
@@ -133,30 +135,34 @@ class _SlideView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    // The brand slide is centred (logo + slogan); the others read as copy.
+    if (slide.useLogoImage) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
+        child: Center(child: BrandLockup(tagline: l10n.appTagline, logoWidth: 240)),
+      );
+    }
+    final (String title, String subtitle) = switch (slide.title) {
+      "pick" => (l10n.onboardingPickAnything, l10n.onboardingPickAnythingBody),
+      "sell" => (l10n.onboardingSellIt, l10n.onboardingSellItBody),
+      _ => (l10n.onboardingSeeItAdIt, l10n.onboardingSeeItAdItBody),
+    };
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          if (slide.useLogoImage)
-            BrandLockup(
-              tagline: AppLocalizations.of(context).appTagline,
-              logoWidth: 220,
-              textAlign: TextAlign.start,
-            )
-          else
-            ShaderMask(
-              shaderCallback: (Rect bounds) => AppColors.brandGradient.createShader(bounds),
-              child: Text(
-                slide.title,
-                style: Theme.of(context).textTheme.displayLarge?.copyWith(color: Colors.white),
-              ),
+          ShaderMask(
+            shaderCallback: (Rect bounds) => AppColors.brandGradient.createShader(bounds),
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.displayLarge?.copyWith(color: Colors.white),
             ),
-          if (!slide.useLogoImage) ...<Widget>[
-            const SizedBox(height: AppSpacing.md),
-            Text(slide.subtitle, style: Theme.of(context).textTheme.bodyLarge),
-          ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(subtitle, style: Theme.of(context).textTheme.bodyLarge),
         ],
       ),
     );

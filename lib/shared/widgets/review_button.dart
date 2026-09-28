@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../core/localization/generated/app_localizations.dart";
 
 import "../../core/theme/app_spacing.dart";
 import "../../features/comments/presentation/providers/comments_controller.dart";
@@ -20,7 +21,7 @@ class ReviewButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Semantics(
       button: true,
-      label: "Reviews",
+      label: AppLocalizations.of(context).actionReviews,
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.md),
         onTap: () => ref.read(openReviewsAdIdProvider.notifier).state = adId,

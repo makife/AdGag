@@ -19,7 +19,21 @@ import "../widgets/settings_tiles.dart";
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
-  static const Map<String, String> _languageNames = <String, String>{"en": "English", "tr": "Türkçe"};
+  /// Every supported language, in its own name (tool/l10n/strings.py LANGUAGE_NAMES).
+  static const Map<String, String> _languageNames = <String, String>{
+    "en": "English",
+    "tr": "Türkçe",
+    "es": "Español",
+    "pt": "Português",
+    "de": "Deutsch",
+    "fr": "Français",
+    "it": "Italiano",
+    "ru": "Русский",
+    "ar": "العربية",
+    "id": "Bahasa Indonesia",
+    "ja": "日本語",
+    "ko": "한국어",
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -105,12 +119,15 @@ class SettingsScreen extends ConsumerWidget {
         child: RadioGroup<String?>(
           groupValue: currentCode,
           onChanged: (String? code) => Navigator.of(sheetContext).pop((code,)),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              for (final (String? code, String label) in options)
-                RadioListTile<String?>(value: code, title: Text(label)),
-            ],
+          // 13 rows: scrolls on short screens.
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                for (final (String? code, String label) in options)
+                  RadioListTile<String?>(value: code, title: Text(label)),
+              ],
+            ),
           ),
         ),
       ),

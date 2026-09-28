@@ -3,6 +3,7 @@ import "dart:async" show unawaited;
 import "package:cached_network_image/cached_network_image.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/theme/app_spacing.dart";
 import "../../../daily_ad/presentation/widgets/daily_ad_banner.dart";
@@ -42,7 +43,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Market"),
+        title: Text(AppLocalizations.of(context).navMarket),
         actions: <Widget>[
           IconButton(
             icon: const Icon(Icons.search),
@@ -56,10 +57,9 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
         children: <Widget>[
           const DailyAdBanner(),
           const SizedBox(height: AppSpacing.lg),
-
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            child: Text("Fresh Ads", style: Theme.of(context).textTheme.titleMedium),
+            child: Text(AppLocalizations.of(context).marketFreshAds, style: Theme.of(context).textTheme.titleMedium),
           ),
           const SizedBox(height: AppSpacing.sm),
           SizedBox(
@@ -91,11 +91,11 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
               ),
             ),
           ),
-
           const SizedBox(height: AppSpacing.xl),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            child: Text("Trending Subjects", style: Theme.of(context).textTheme.titleMedium),
+            child: Text(AppLocalizations.of(context).marketTrendingSubjects,
+                style: Theme.of(context).textTheme.titleMedium,),
           ),
           trendingAsync.when(
             loading: () => const Padding(
@@ -148,7 +148,7 @@ class _SubjectExpandableTile extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  "${subject.adsCount} Ads",
+                  AppLocalizations.of(context).subjectAdCount("${subject.adsCount}"),
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
@@ -183,8 +183,7 @@ class _SubjectAdsPreviewRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final AsyncValue<List<Ad>> adsAsync =
-        ref.watch(subjectAdsProvider((subjectId, SubjectAdsSort.trending)));
+    final AsyncValue<List<Ad>> adsAsync = ref.watch(subjectAdsProvider((subjectId, SubjectAdsSort.trending)));
 
     return SizedBox(
       height: 150,
@@ -192,10 +191,11 @@ class _SubjectAdsPreviewRow extends ConsumerWidget {
         padding: const EdgeInsets.only(bottom: AppSpacing.md),
         child: adsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (Object error, StackTrace stackTrace) => const Center(child: Text("Couldn't load this.")),
+          error: (Object error, StackTrace stackTrace) =>
+              Center(child: Text(AppLocalizations.of(context).genericLoadFailed)),
           data: (List<Ad> ads) {
             if (ads.isEmpty) {
-              return const Center(child: Text("No one's sold this yet."));
+              return Center(child: Text(AppLocalizations.of(context).emptySubjectFeed));
             }
             return ListView.builder(
               scrollDirection: Axis.horizontal,

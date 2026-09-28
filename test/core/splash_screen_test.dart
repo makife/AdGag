@@ -17,14 +17,26 @@ Widget _app(Locale locale) => MaterialApp(
     );
 
 void main() {
-  testWidgets("splash shows the slogan in the app's language", (WidgetTester tester) async {
+  testWidgets("splash shows only the logo, no slogan", (WidgetTester tester) async {
     await tester.pumpWidget(_app(const Locale("tr")));
     await tester.pumpAndSettle();
-    expect(find.text("Her şeyin reklam olduğu sosyal ağ."), findsOneWidget);
-
-    await tester.pumpWidget(_app(const Locale("en")));
-    await tester.pumpAndSettle();
-    expect(find.text("The social network where everything is an ad."), findsOneWidget);
     expect(find.bySemanticsLabel("AdGag"), findsOneWidget);
+    expect(find.text("Her şeyin reklam olduğu sosyal ağ."), findsNothing);
+  });
+
+  testWidgets("the brand lockup shows the slogan in the app's language", (WidgetTester tester) async {
+    Widget lockup(Locale locale) => MaterialApp(
+          locale: locale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home:
+              Builder(builder: (BuildContext context) => BrandLockup(tagline: AppLocalizations.of(context).appTagline)),
+        );
+    await tester.pumpWidget(lockup(const Locale("tr")));
+    await tester.pumpAndSettle();
+    expect(find.text("Her şeyin reklam olduğu sosyal ağ."), findsOneWidget);
+    await tester.pumpWidget(lockup(const Locale("ja")));
+    await tester.pumpAndSettle();
+    expect(find.text("すべてが広告になるSNS。"), findsOneWidget);
   });
 }

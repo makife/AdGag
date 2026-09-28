@@ -3,6 +3,7 @@ import "dart:async" show unawaited;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
+import "../localization/generated/app_localizations.dart";
 
 import "../../features/create_ad/domain/create_ad_step.dart";
 import "../../features/create_ad/presentation/providers/create_ad_flow_controller.dart";
@@ -50,11 +51,11 @@ class AppShell extends ConsumerWidget {
   }
 
   static const List<_TabSpec> _tabs = <_TabSpec>[
-    _TabSpec(icon: Icons.home_outlined, selectedIcon: Icons.home, label: "Home"),
-    _TabSpec(icon: Icons.storefront_outlined, selectedIcon: Icons.storefront, label: "Market"),
-    _TabSpec(icon: null, selectedIcon: null, label: "AD"), // central branded action
-    _TabSpec(icon: Icons.bolt_outlined, selectedIcon: Icons.bolt, label: "Activity"),
-    _TabSpec(icon: Icons.person_outline, selectedIcon: Icons.person, label: "Profile"),
+    _TabSpec(icon: Icons.home_outlined, selectedIcon: Icons.home, label: _TabLabel.home),
+    _TabSpec(icon: Icons.storefront_outlined, selectedIcon: Icons.storefront, label: _TabLabel.market),
+    _TabSpec(icon: null, selectedIcon: null, label: _TabLabel.ad), // central branded action
+    _TabSpec(icon: Icons.bolt_outlined, selectedIcon: Icons.bolt, label: _TabLabel.activity),
+    _TabSpec(icon: Icons.person_outline, selectedIcon: Icons.person, label: _TabLabel.profile),
   ];
 
   /// The AD tab's index in [_tabs].
@@ -154,7 +155,7 @@ class AppShell extends ConsumerWidget {
                         child: InkWell(
                           onTap: () => unawaited(_onTabTap(context, ref, index)),
                           child: Semantics(
-                            label: tab.label,
+                            label: tab.label.text(context),
                             selected: isSelected,
                             button: true,
                             child: Column(
@@ -170,7 +171,7 @@ class AppShell extends ConsumerWidget {
                                 if (roomy) ...<Widget>[
                                   const SizedBox(height: 2),
                                   Text(
-                                    tab.label,
+                                    tab.label.text(context),
                                     style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
@@ -194,9 +195,29 @@ class AppShell extends ConsumerWidget {
   }
 }
 
+/// Bottom-nav labels, resolved in the user's language (AD stays AD).
+enum _TabLabel {
+  home,
+  market,
+  ad,
+  activity,
+  profile;
+
+  String text(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return switch (this) {
+      _TabLabel.home => l10n.navHome,
+      _TabLabel.market => l10n.navMarket,
+      _TabLabel.ad => l10n.navAd,
+      _TabLabel.activity => l10n.navActivity,
+      _TabLabel.profile => l10n.navProfile,
+    };
+  }
+}
+
 class _TabSpec {
   const _TabSpec({required this.icon, required this.selectedIcon, required this.label});
   final IconData? icon;
   final IconData? selectedIcon;
-  final String label;
+  final _TabLabel label;
 }

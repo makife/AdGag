@@ -1,8 +1,10 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/router/route_paths.dart";
 import "../../../../core/theme/app_spacing.dart";
+import "../auth_error_message.dart";
 import "../providers/auth_providers.dart";
 
 class SignInScreen extends ConsumerStatefulWidget {
@@ -40,7 +42,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     ref.listen<AsyncValue<void>>(authControllerProvider, (previous, next) {
       if (next.hasError) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(next.error.toString())),
+          SnackBar(content: Text(authErrorMessage(context, next.error))),
         );
       }
     });
@@ -55,24 +57,24 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text("Sign in", style: Theme.of(context).textTheme.headlineLarge),
+                Text(AppLocalizations.of(context).authSignIn, style: Theme.of(context).textTheme.headlineLarge),
                 const SizedBox(height: AppSpacing.xxl),
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   autofillHints: const <String>[AutofillHints.email],
-                  decoration: const InputDecoration(labelText: "Email"),
+                  decoration: InputDecoration(labelText: AppLocalizations.of(context).authEmailLabel),
                   validator: (String? v) =>
-                      (v == null || !v.contains("@")) ? "Enter a valid email" : null,
+                      (v == null || !v.contains("@")) ? AppLocalizations.of(context).authInvalidEmail : null,
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextFormField(
                   controller: _passwordController,
                   obscureText: true,
                   autofillHints: const <String>[AutofillHints.password],
-                  decoration: const InputDecoration(labelText: "Password"),
+                  decoration: InputDecoration(labelText: AppLocalizations.of(context).authPasswordLabel),
                   validator: (String? v) =>
-                      (v == null || v.length < 8) ? "At least 8 characters" : null,
+                      (v == null || v.length < 8) ? AppLocalizations.of(context).accountPasswordTooShort : null,
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 SizedBox(
@@ -85,14 +87,14 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text("Sign in"),
+                        : Text(AppLocalizations.of(context).authSignIn),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 Center(
                   child: TextButton(
                     onPressed: () => context.pushReplacementTo(RoutePaths.signUp),
-                    child: const Text("Need an account? Create one"),
+                    child: Text(AppLocalizations.of(context).authNoAccount),
                   ),
                 ),
               ],

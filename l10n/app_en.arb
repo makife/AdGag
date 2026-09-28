@@ -1,37 +1,45 @@
 {
   "@@locale": "en",
-
   "appName": "AdGag",
-  "@appName": { "description": "Brand name shown on splash/onboarding. Replace globally if the brand changes (see CLAUDE.md section 65)." },
-
-  "appTagline": "The social network where everything is an ad.",
-  "appTaglineShort": "See it. Ad it. Go.",
-
-  "navHome": "Home",
-  "navMarket": "Market",
   "navAd": "AD",
-  "navActivity": "Activity",
-  "navProfile": "Profile",
-
   "actionSold": "SOLD",
-  "actionSoldCount": "{count} SOLD",
-  "@actionSoldCount": {
-    "description": "Sold count label under a video",
-    "placeholders": { "count": { "type": "String" } }
-  },
   "actionReviews": "REVIEWS",
   "actionShare": "GAG!",
   "actionAdThis": "AD THIS",
-  "actionFollow": "FOLLOW",
-  "actionFollowing": "FOLLOWING",
-
+  "actionSoldCount": "{count} SOLD",
+  "@actionSoldCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "appTagline": "The social network where everything is an ad.",
+  "appTaglineShort": "See it. Ad it. Go.",
   "onboardingSlogan": "The social network where everything is an ad.",
+  "navHome": "Home",
+  "navMarket": "Market",
+  "navActivity": "Activity",
+  "navProfile": "Profile",
+  "genericRetry": "Retry",
+  "genericTryAgain": "Try again",
+  "genericCancel": "Cancel",
+  "genericSave": "Save",
+  "genericDone": "Done",
+  "genericNext": "Next",
+  "genericDelete": "Delete",
+  "genericMore": "More",
+  "genericLoadFailed": "Couldn't load this.",
+  "genericOffline": "You're offline. Some content may be unavailable.",
+  "unknownUser": "unknown",
   "onboardingPickAnything": "Pick anything.",
+  "onboardingPickAnythingBody": "A rock. Your coffee. Yourself. Monday.",
   "onboardingSellIt": "Sell it in 10 seconds.",
+  "onboardingSellItBody": "Short, punchy, funny. That's the format.",
   "onboardingSeeItAdIt": "See it. Ad it. Go.",
+  "onboardingSeeItAdItBody": "Watch an ad. Make a better one. Publish.",
   "onboardingGetStarted": "Get started",
   "onboardingSkip": "Skip",
-
   "authSignInWithApple": "Continue with Apple",
   "authSignInWithGoogle": "Continue with Google",
   "authSignInWithEmail": "Continue with email",
@@ -40,39 +48,114 @@
   "authUsernameLabel": "Username",
   "authSignIn": "Sign in",
   "authSignUp": "Create account",
+  "authNoAccount": "Need an account? Create one",
+  "authHaveAccount": "Already have an account? Sign in",
+  "authInvalidEmail": "Enter a valid email",
   "authGenericError": "Something went wrong. Please try again.",
-
-  "emptySubjectFeed": "No one's sold this yet.",
-  "emptySubjectFeedCta": "Be the first to advertise it.",
-  "emptyProfileAds": "Nothing for sale yet.",
-  "draftFailed": "This one didn't make the campaign.",
-
-  "createChooseSubject": "What are you selling today?",
-  "createRecord": "Record",
-  "createImport": "Import from gallery",
-  "createCaptionHint": "Add a caption…",
-  "createPublish": "Publish",
-  "createUploading": "Uploading…",
-  "createProcessing": "Processing…",
-
-  "dailyAdTitle": "Today's Ad",
-  "dailyAdJoin": "Join",
-  "dailyAdParticipants": "{count} participating",
-  "@dailyAdParticipants": {
-    "placeholders": { "count": { "type": "String" } }
+  "authCheckEmailTitle": "Check your email",
+  "authCheckEmailBody": "We sent a confirmation link to {email}. Open it to activate your account, then sign in.",
+  "@authCheckEmailBody": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
   },
-
-  "subjectAdCount": "{count} Ads",
-  "@subjectAdCount": {
-    "placeholders": { "count": { "type": "String" } }
+  "authCheckSpam": "Can't find it? Check your spam folder.",
+  "authGoToSignIn": "Go to sign in",
+  "authEmailTaken": "An account with this email already exists. Sign in instead.",
+  "authUsernameTaken": "That username is taken. Try another one.",
+  "authEmailNotConfirmed": "Confirm your email first — check your inbox for the link.",
+  "authWrongCredentials": "Wrong email or password.",
+  "usernameTooShort": "Username must be at least {min} characters.",
+  "@usernameTooShort": {
+    "placeholders": {
+      "min": {
+        "type": "String"
+      }
+    }
   },
-  "subjectAdThis": "AD THIS SUBJECT",
-  "subjectTabTrending": "Trending",
-  "subjectTabTop": "Top",
-  "subjectTabNew": "New",
-
+  "usernameTooLong": "Username must be at most {max} characters.",
+  "@usernameTooLong": {
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "usernameStartLetter": "Username must start with a letter.",
+  "usernameChars": "Only lowercase letters, numbers and underscores.",
+  "actionFollow": "FOLLOW",
+  "actionFollowing": "FOLLOWING",
+  "feedAdThisHint": "Think you can do better? Try AD THIS.",
+  "feedRefreshFailed": "Couldn't refresh the feed.",
+  "feedLoadFailed": "Couldn't load the feed.",
+  "feedEmptyTitle": "No one's sold anything yet.",
+  "feedEmptyBody": "Be the first to advertise something.",
+  "soldUpdateFailed": "Couldn't update SOLD right now.",
+  "soldRemove": "Remove SOLD",
+  "followUpdateFailed": "Couldn't update follow right now.",
+  "shareMessage": "{subject} on AdGag: {url}",
+  "@shareMessage": {
+    "placeholders": {
+      "subject": {
+        "type": "String"
+      },
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "shareMessageNoSubject": "On AdGag: {url}",
+  "@shareMessageNoSubject": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewsClose": "Close reviews",
+  "reviewsEmpty": "No reviews yet.",
+  "reviewsHint": "Add a review…",
+  "reviewsPostFailed": "Couldn't post: {error}",
+  "@reviewsPostFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "reportAd": "Report",
   "blockUser": "Block",
+  "blockDone": "Blocked.",
+  "blockFailed": "Couldn't block: {error}",
+  "@blockFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteAdTitle": "Delete this Ad?",
+  "deleteAdBody": "This can't be undone. It will be removed from feeds immediately.",
+  "deleteDone": "Deleted.",
+  "deleteFailed": "Couldn't delete: {error}",
+  "@deleteFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "reportThanks": "Thanks — we'll take a look.",
+  "reportFailed": "Couldn't send report: {error}",
+  "@reportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "reportReasonNudity": "Nudity or sexual content",
   "reportReasonViolence": "Violence",
   "reportReasonHate": "Hate or harassment",
@@ -82,17 +165,164 @@
   "reportReasonCopyright": "Copyright",
   "reportReasonImpersonation": "Impersonation",
   "reportReasonOther": "Other",
-
-  "genericRetry": "Retry",
-  "genericCancel": "Cancel",
-  "captureCancelExtraClip": "Cancel",
-  "@captureCancelExtraClip": {"description": "Top-left button on the camera opened from the editor timeline's + button; goes back to the editor without adding a clip."},
-  "genericOffline": "You're offline. Some content may be unavailable.",
-  "genericSave": "Save",
-
+  "subjectFallbackTitle": "Subject",
+  "subjectAdCount": "{count} Ads",
+  "@subjectAdCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "subjectAdThis": "AD THIS SUBJECT",
+  "subjectTabTrending": "Trending",
+  "subjectTabTop": "Top",
+  "subjectTabNew": "New",
+  "emptySubjectFeed": "No one's sold this yet.",
+  "emptySubjectFeedCta": "Be the first to advertise it.",
+  "marketFreshAds": "Fresh Ads",
+  "marketTrendingSubjects": "Trending Subjects",
+  "searchHint": "Search subjects or people",
+  "searchSubjects": "SUBJECTS",
+  "searchPeople": "PEOPLE",
+  "dailyAdTitle": "TODAY'S AD",
+  "dailyAdJoin": "Join",
+  "dailyAdParticipants": "{count} participating",
+  "@dailyAdParticipants": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "profileNotFound": "This account doesn't exist.",
+  "profileNotSignedIn": "Not signed in.",
+  "emptyProfileAds": "Nothing for sale yet.",
+  "statAds": "Ads",
+  "statViews": "Views",
   "profileEditProfile": "Edit profile",
   "profileMenuTooltip": "Settings",
-
+  "displayNameLabel": "Display name",
+  "bioLabel": "Bio",
+  "avatarUploadFailed": "Couldn't upload photo: {error}",
+  "@avatarUploadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "saveFailed": "Couldn't save: {error}",
+  "@saveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "activityEmptyTitle": "Nothing yet",
+  "activityEmptyBody": "Follows, REVIEWS and AD THIS on your Ads will show up here.",
+  "activitySomeone": "Someone",
+  "activityNewFollower": "{actor} started following you.",
+  "@activityNewFollower": {
+    "placeholders": {
+      "actor": {
+        "type": "String"
+      }
+    }
+  },
+  "activityNewReview": "{actor} reviewed your Ad.",
+  "@activityNewReview": {
+    "placeholders": {
+      "actor": {
+        "type": "String"
+      }
+    }
+  },
+  "activityAdThis": "{actor} pressed AD THIS on your Ad.",
+  "@activityAdThis": {
+    "placeholders": {
+      "actor": {
+        "type": "String"
+      }
+    }
+  },
+  "timeJustNow": "just now",
+  "timeMinutesAgo": "{n}m ago",
+  "@timeMinutesAgo": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      }
+    }
+  },
+  "timeHoursAgo": "{n}h ago",
+  "@timeHoursAgo": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      }
+    }
+  },
+  "timeDaysAgo": "{n}d ago",
+  "@timeDaysAgo": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      }
+    }
+  },
+  "createChooseSubject": "What are you selling today?",
+  "createSubjectHint": "Rock, coffee, Monday, yourself…",
+  "captureTitle": "Record or import",
+  "createRecord": "Record",
+  "createImport": "Import from gallery",
+  "importFailed": "Couldn't import that video: {error}",
+  "@importFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "cameraPermission": "Camera and microphone access is needed to record.",
+  "cameraStartFailed": "Couldn't start the camera: {error}",
+  "@cameraStartFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "cameraSwitchFailed": "Couldn't switch camera: {error}",
+  "@cameraSwitchFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "cameraTooShort": "Too short — hold on a little longer.",
+  "captureCancelExtraClip": "Cancel",
+  "editorCrashedLast": "The editor closed unexpectedly last time. This is what happened just before:",
+  "editorFailed": "The editor couldn't open",
+  "previewPublishTitle": "Preview & publish",
+  "retake": "Retake",
+  "createCaptionHint": "Add a caption…",
+  "createPublish": "Publish",
+  "createUploading": "Uploading…",
+  "createUploadingProgress": "Uploading… {percent}%",
+  "@createUploadingProgress": {
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "createProcessing": "Processing…",
+  "publishStillProcessing": "Still processing — it'll show up on your profile soon.",
+  "publishDone": "Published!",
+  "draftFailed": "This one didn't make the campaign.",
   "settingsTitle": "Settings",
   "settingsSectionAccount": "Your account",
   "settingsEditProfile": "Edit profile",
@@ -112,11 +342,14 @@
   "settingsSectionLogin": "Login",
   "settingsLogOut": "Log out {username}",
   "@settingsLogOut": {
-    "placeholders": { "username": { "type": "String" } }
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
   },
   "settingsLogOutConfirmTitle": "Log out of your account?",
   "settingsLogOutConfirm": "Log out",
-
   "accountEmail": "Email",
   "accountEmailNote": "Only you can see this.",
   "accountChangePassword": "Change password",
@@ -125,17 +358,20 @@
   "accountPasswordTooShort": "At least 8 characters",
   "accountPasswordMismatch": "Passwords don't match",
   "accountPasswordChanged": "Password changed.",
-
   "blockedEmpty": "You haven't blocked anyone",
   "blockedEmptyNote": "When you block someone, they show up here. They can't see your Ads or follow you.",
   "blockedUnblock": "Unblock",
   "blockedUnblockConfirmTitle": "Unblock @{username}?",
   "@blockedUnblockConfirmTitle": {
-    "placeholders": { "username": { "type": "String" } }
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
   },
   "blockedUnblockConfirmNote": "They'll be able to see your Ads and follow you again. They won't be notified.",
   "blockedLoadError": "Couldn't load your blocked accounts.",
-
   "aboutOpenSourceLibraries": "Open source libraries",
-  "aboutOpenSourceLibrariesSubtitle": "Licenses of the software AdGag uses"
+  "aboutOpenSourceLibrariesSubtitle": "Licenses of the software AdGag uses",
+  "authResend": "Resend email"
 }

@@ -5,6 +5,7 @@ import "package:cached_network_image/cached_network_image.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:image_picker/image_picker.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/theme/app_spacing.dart";
 import "../../../auth/presentation/providers/auth_providers.dart";
@@ -62,7 +63,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         ref.invalidate(profileByUsernameProvider(username));
       }
     } catch (e) {
-      setState(() => _error = "Couldn't upload avatar: $e");
+      setState(() => _error = AppLocalizations.of(context).avatarUploadFailed("$e"));
     } finally {
       if (mounted) {
         setState(() => _uploadingAvatar = false);
@@ -89,7 +90,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         Navigator.of(context).pop();
       }
     } catch (e) {
-      setState(() => _error = "Couldn't save: $e");
+      setState(() => _error = AppLocalizations.of(context).saveFailed("$e"));
     } finally {
       if (mounted) {
         setState(() => _saving = false);
@@ -113,7 +114,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Edit profile")),
+      appBar: AppBar(title: Text(AppLocalizations.of(context).profileEditProfile)),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -131,9 +132,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                         backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                         backgroundImage: _pendingAvatarPath != null
                             ? FileImage(File(_pendingAvatarPath!))
-                            : (profile?.avatarUrl != null
-                                ? CachedNetworkImageProvider(profile!.avatarUrl!)
-                                : null),
+                            : (profile?.avatarUrl != null ? CachedNetworkImageProvider(profile!.avatarUrl!) : null),
                         child: (_pendingAvatarPath == null && profile?.avatarUrl == null)
                             ? const Icon(Icons.person, size: 40)
                             : null,
@@ -161,14 +160,14 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               TextField(
                 controller: _displayNameController,
                 maxLength: 40,
-                decoration: const InputDecoration(labelText: "Display name"),
+                decoration: InputDecoration(labelText: AppLocalizations.of(context).displayNameLabel),
               ),
               const SizedBox(height: AppSpacing.md),
               TextField(
                 controller: _bioController,
                 maxLength: 300,
                 maxLines: 3,
-                decoration: const InputDecoration(labelText: "Bio"),
+                decoration: InputDecoration(labelText: AppLocalizations.of(context).bioLabel),
               ),
               if (_error != null) ...<Widget>[
                 const SizedBox(height: AppSpacing.sm),
@@ -179,7 +178,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 onPressed: _saving ? null : () => unawaited(_save()),
                 child: _saving
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text("Save"),
+                    : Text(AppLocalizations.of(context).genericSave),
               ),
             ],
           ),

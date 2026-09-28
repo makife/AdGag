@@ -86,7 +86,7 @@ final class CreateAdFlowController extends Notifier<CreateAdFlowState> {
     if (subjectId == null || draft == null) {
       state = state.copyWith(
         step: CreateAdStep.failure,
-        errorMessage: "Missing subject or video.",
+        errorMessage: null, // the view shows its localized "didn't make the campaign"
       );
       return;
     }
@@ -139,7 +139,7 @@ final class CreateAdFlowController extends Notifier<CreateAdFlowState> {
         case AdStatus.deleted:
           state = state.copyWith(
             step: CreateAdStep.failure,
-            errorMessage: "This one didn't make the campaign.",
+            errorMessage: null, // localized by the view
           );
           return;
         case AdStatus.draft:

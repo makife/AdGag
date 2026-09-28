@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/theme/app_colors.dart";
 import "../../../../core/video/video_controller_pool.dart";
@@ -40,13 +41,13 @@ class _AdDetailScreenState extends ConsumerState<AdDetailScreen> {
       body: adAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (Object error, StackTrace stackTrace) => Center(
-          child: Text("Couldn't load this Ad.", style: Theme.of(context).textTheme.bodyMedium),
+          child: Text(AppLocalizations.of(context).genericLoadFailed, style: Theme.of(context).textTheme.bodyMedium),
         ),
         data: (ad) {
           if (ad == null) {
             return Center(
               child: Text(
-                "This ad isn't available anymore.",
+                AppLocalizations.of(context).draftFailed,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white70),
               ),
             );

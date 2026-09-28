@@ -2,6 +2,7 @@ import "dart:async" show unawaited;
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/supabase/supabase_providers.dart";
 import "../../../../core/theme/app_spacing.dart";
@@ -61,7 +62,8 @@ class _ReviewsPanelState extends ConsumerState<ReviewsPanel> {
       FocusManager.instance.primaryFocus?.unfocus();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Couldn't post: $e")));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).reviewsPostFailed("$e"))));
       }
     } finally {
       if (mounted) {
@@ -91,14 +93,15 @@ class _ReviewsPanelState extends ConsumerState<ReviewsPanel> {
             Row(
               children: <Widget>[
                 const SizedBox(width: 48),
-                const Expanded(
+                Expanded(
                   child: Center(
-                    child: Text("REVIEWS", style: TextStyle(fontWeight: FontWeight.w700)),
+                    child: Text(AppLocalizations.of(context).actionReviews,
+                        style: const TextStyle(fontWeight: FontWeight.w700),),
                   ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close),
-                  tooltip: "Close reviews",
+                  tooltip: AppLocalizations.of(context).reviewsClose,
                   onPressed: () {
                     FocusManager.instance.primaryFocus?.unfocus();
                     widget.onClose();
@@ -112,7 +115,7 @@ class _ReviewsPanelState extends ConsumerState<ReviewsPanel> {
                 error: (Object error, StackTrace stackTrace) => Center(child: Text("$error")),
                 data: (CommentsState state) {
                   if (state.comments.isEmpty) {
-                    return const Center(child: Text("No reviews yet."));
+                    return Center(child: Text(AppLocalizations.of(context).reviewsEmpty));
                   }
                   return ListView.builder(
                     controller: _scroll,
@@ -130,7 +133,7 @@ class _ReviewsPanelState extends ConsumerState<ReviewsPanel> {
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: MiniAvatar(avatarUrl: comment.avatarUrl, username: comment.username, size: 32),
-                        title: Text("@${comment.username ?? 'unknown'}"),
+                        title: Text("@${comment.username ?? AppLocalizations.of(context).unknownUser}"),
                         subtitle: Text(comment.body),
                         trailing: isOwn
                             ? IconButton(
@@ -154,7 +157,7 @@ class _ReviewsPanelState extends ConsumerState<ReviewsPanel> {
                     child: TextField(
                       controller: _input,
                       maxLength: 500,
-                      decoration: const InputDecoration(hintText: "Add a review…", counterText: ""),
+                      decoration: InputDecoration(hintText: AppLocalizations.of(context).reviewsHint, counterText: ""),
                       textInputAction: TextInputAction.send,
                       onSubmitted: (_) => _post(),
                       // Tapping the video or the list closes the keyboard.

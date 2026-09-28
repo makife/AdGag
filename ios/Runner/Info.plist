@@ -58,6 +58,21 @@
 			</array>
 		</dict>
 	</dict>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>tr</string>
+		<string>es</string>
+		<string>pt</string>
+		<string>de</string>
+		<string>fr</string>
+		<string>it</string>
+		<string>ru</string>
+		<string>ar</string>
+		<string>id</string>
+		<string>ja</string>
+		<string>ko</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>AdGag uses the camera to record your Ads.</string>
 	<key>NSMicrophoneUsageDescription</key>

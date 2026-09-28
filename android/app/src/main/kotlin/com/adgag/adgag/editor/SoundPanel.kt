@@ -127,12 +127,6 @@ fun SoundPanel(viewModel: EditorViewModel, editingId: String?, onDismiss: () -> 
                 }
             }
         }
-        Text(
-            text = "Tap to listen, + to add at the playhead. Sounds: CC0 (Freesound, Kenney)",
-            color = AdGagColors.OnSurfaceMuted,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = AdGagSpacing.lg.dp),
-        )
         Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
     }
 }
