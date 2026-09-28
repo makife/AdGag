@@ -1496,6 +1496,12 @@ Everything is committed and pushed to `master` (github.com/makife/AdGag). Androi
 - Logos were RECOLORED programmatically (hue remap, shading kept) from the originals — not redrawn; a designer-made final is still recommended before store launch. `assets/branding/AdGagIkon.png` = launcher icon source; `AdGagLogo.png` = icon + wordmark, no frame, no "SEE IT. AD IT. GO.", transparent (white "Gag" → dark backgrounds only). The old framed `AdGag.png` is deleted (in git history). Splash/onboarding show `BrandLockup`: the logo + `appTagline` as real, localized text; onboarding is forced dark.
 - `dart run flutter_launcher_icons` fails on this machine with "Erişim engellendi" (Windows blocks dart.exe from writing under Desktop — likely Controlled Folder Access; Python can write). Icons were regenerated with a Python/PIL script resizing `AdGagIkon.png` to every existing icon file's size (Android mipmaps, iOS AppIcon — RGB, no alpha — web, macOS, Windows .ico).
 
+## Store prep (2026-09-28)
+
+- iOS bundle id is now `com.ergan.adgag` (tests `com.ergan.adgag.RunnerTests`), matching Android's applicationId. iOS Info.plist had NO camera/microphone/photo-library usage descriptions (iOS kills the app on first camera access without them; App Store rejects) — added (English only; a `tr.lproj/InfoPlist.strings` would localize them).
+- Privacy policy: `docs/privacy-policy/index.html` (TR + EN, auto language, KVKK + GDPR), written from what the code actually collects. It still has `[GELİŞTİRİCİ ADI]` / `[İLETİŞİM E-POSTASI]` placeholders to fill, and it must be HOSTED at a public URL for both stores.
+- **Promises in that policy that the code doesn't do yet — do before launch:** (1) deleting an Ad does NOT delete its Mux asset (`delete_own_ad` only flips the row; no Edge Function calls Mux's DELETE /video/v1/assets) — the policy promises deletion within 30 days; (2) account deletion is by email only — Google Play requires an in-app account-deletion path AND a web link for apps with sign-up; (3) the policy says under-13s can't sign up, but sign-up has no age check.
+
 ## Status: all 8 development-order phases (section 52) implemented
 
 Phases A through H are done — auth, social graph, video pipeline, creation flow, engagement (SOLD/REVIEWS/AD THIS/share/subject pages), discovery/ranking, safety (reports/blocks/rate-limiting), and polish (notifications/deep-link target/analytics/onboarding hint). See the per-phase git commits and README's "Implementation Milestones" section for what shipped in each.

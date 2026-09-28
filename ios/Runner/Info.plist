@@ -58,6 +58,12 @@
 			</array>
 		</dict>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>AdGag uses the camera to record your Ads.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>AdGag uses the microphone to record sound with your Ads.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>AdGag opens your photo library so you can pick a video or a profile photo.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
