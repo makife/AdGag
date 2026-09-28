@@ -1487,7 +1487,7 @@ Everything is committed and pushed to `master` (github.com/makife/AdGag). Androi
 
 ## Play upload key + Android CI (2026-09-28)
 
-- Release builds are signed with the Play UPLOAD key when `android/key.properties` exists (points at `android/adgag-upload.jks`, alias `upload`, SHA-256 06:D3:F0:7F:…:F5:7E:D5). BOTH files are gitignored and exist only on the owner's machine (+ GitHub secrets) — losing them means asking Google to reset the upload key (possible with Play App Signing). Without the file, release falls back to the debug key.
+- Release builds are signed with the Play UPLOAD key when `android/key.properties` exists for applicationId `com.ergan.adgag` (points at `android/adgag-upload.jks`, alias `upload`, SHA-256 06:D3:F0:7F:…:F5:7E:D5). BOTH files are gitignored and exist only on the owner's machine (+ GitHub secrets) — losing them means asking Google to reset the upload key (possible with Play App Signing). Without the file, release falls back to the debug key.
 - `.github/workflows/android-build.yml` builds the AAB + APK (artifacts) on manual run / `v*` tags / app pushes to master; needs secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ENV_DEV_JSON` (fails fast without the last). CI uses `--build-number=${{ github.run_number }}` so every upload's versionCode grows; local builds use pubspec's `+N`.
 
 ## Status: all 8 development-order phases (section 52) implemented

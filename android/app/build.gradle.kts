@@ -49,8 +49,10 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.adgag.adgag"
+        // The app's identity on Google Play — permanent once the first
+        // release is uploaded. (The Kotlin package / `namespace` above stays
+        // com.adgag.adgag: it's internal and doesn't have to match.)
+        applicationId = "com.ergan.adgag"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
