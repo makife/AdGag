@@ -11,10 +11,10 @@
   "navActivity": "Aktivite",
   "navProfile": "Profil",
 
-  "actionSold": "SATILDI",
-  "actionSoldCount": "{count} SATILDI",
+  "actionSold": "SOLD",
+  "actionSoldCount": "{count} SOLD",
   "actionReviews": "YORUMLAR",
-  "actionShare": "PAYLAŞ",
+  "actionShare": "GAG!",
   "actionAdThis": "BUNU REKLAM ET",
   "actionFollow": "TAKİP ET",
   "actionFollowing": "TAKİPTE",

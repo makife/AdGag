@@ -12,7 +12,9 @@ import "../../core/theme/app_spacing.dart";
 import "action_rail_icon.dart";
 import "count_label.dart";
 
-/// External SHARE (CLAUDE.md section 33). Opens the native share sheet
+/// External share, branded "GAG!" — a fixed brand word, never translated
+/// (like SOLD). Shows "GAG!" under the icon until the Ad has shares, then
+/// the count (CLAUDE.md section 33). Opens the native share sheet
 /// with a universal-link-shaped URL. The in-app side is wired
 /// (AdDetailScreen at RoutePaths.adDetail resolves `/ad/:id`); what's
 /// still missing is the platform association files (apple-app-site-
@@ -36,7 +38,7 @@ class ShareButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Semantics(
       button: true,
-      label: "Share",
+      label: "GAG!",
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.md),
         onTap: () => unawaited(_share(ref)),
@@ -47,7 +49,13 @@ class ShareButton extends ConsumerWidget {
             children: <Widget>[
               const ActionRailIcon(icon: Icons.reply),
               const SizedBox(height: AppSpacing.xs),
-              CountLabel(count: shareCount, color: Colors.white),
+              if (shareCount > 0)
+                CountLabel(count: shareCount, color: Colors.white)
+              else
+                const Text(
+                  "GAG!",
+                  style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800),
+                ),
             ],
           ),
         ),

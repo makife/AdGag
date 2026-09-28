@@ -20,7 +20,7 @@
     "placeholders": { "count": { "type": "String" } }
   },
   "actionReviews": "REVIEWS",
-  "actionShare": "SHARE",
+  "actionShare": "GAG!",
   "actionAdThis": "AD THIS",
   "actionFollow": "FOLLOW",
   "actionFollowing": "FOLLOWING",
