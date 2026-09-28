@@ -71,7 +71,7 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
     if (draft == null) {
       return;
     }
-    await _run(() => NativeEditorBridge.openEditor(videoPath: draft.filePath));
+    await _run(() => NativeEditorBridge.openEditor(videoPath: draft.filePath, rotationDegrees: draft.rotationDegrees));
   }
 
   /// Reopens the editor with the saved session, appending [newClipPath] if a take was recorded.
@@ -155,7 +155,7 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
         body: CameraRecordView(
           key: ValueKey<int>(_cameraGeneration),
           maxDuration: extraClipMax,
-          onRecorded: (String filePath, Duration _) => unawaited(_resume(newClipPath: filePath)),
+          onRecorded: (String filePath, Duration _, int __) => unawaited(_resume(newClipPath: filePath)),
           onCancel: () => unawaited(_resume()),
           onPickFromGallery: () => unawaited(_pickExtraFromGallery()),
         ),

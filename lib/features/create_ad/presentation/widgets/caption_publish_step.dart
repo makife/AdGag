@@ -78,8 +78,7 @@ class _CaptionPublishStepState extends ConsumerState<CaptionPublishStep> {
                 maxLength: 150,
                 maxLines: 2,
                 decoration: const InputDecoration(hintText: "Add a caption…"),
-                onChanged: (String value) =>
-                    ref.read(createAdFlowControllerProvider.notifier).setCaption(value),
+                onChanged: (String value) => ref.read(createAdFlowControllerProvider.notifier).setCaption(value),
               ),
               const SizedBox(height: AppSpacing.md),
               SizedBox(

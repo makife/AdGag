@@ -230,8 +230,12 @@ fun EditorScreen(
                     modifier = Modifier.graphicsLayer {
                         val pose = transitionPoseAt(viewModel, frameGlobalMs.longValue)
                         rotationZ = viewModel.rotationDegrees + pose.rotationDegrees
-                        scaleX = pose.scale
-                        scaleY = pose.scale
+                        // Turned a quarter, the fitted picture is too big for
+                        // the area (a sideways take showed cut off): shrink it
+                        // so the TURNED picture fits.
+                        val turn = quarterTurnFit(viewModel, size.width, size.height)
+                        scaleX = pose.scale * turn
+                        scaleY = pose.scale * turn
                         translationX = pose.translateX * size.width
                         translationY = pose.translateY * size.height
                     },
@@ -433,6 +437,20 @@ fun EditorScreen(
         }
 
     }
+}
+
+/**
+ * Scale that makes the preview fit its [areaW] x [areaH] area after a 90/270°
+ * rotation: ContentFrame fits the UNturned picture; turned, its bounding box
+ * swaps width and height. 1 when not turned a quarter.
+ */
+@UnstableApi
+private fun quarterTurnFit(viewModel: EditorViewModel, areaW: Float, areaH: Float): Float {
+    if (viewModel.rotationDegrees % 180 != 90 || areaW <= 0f || areaH <= 0f) return 1f
+    // outputAspect is AFTER the user's rotation; the picture ContentFrame fits is before it.
+    val sourceAspect = 1f / viewModel.outputAspect
+    val (w, h) = if (areaW / areaH > sourceAspect) areaH * sourceAspect to areaH else areaW to areaW / sourceAspect
+    return minOf(areaW / h, areaH / w)
 }
 
 /**

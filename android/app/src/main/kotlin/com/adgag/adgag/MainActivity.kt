@@ -93,6 +93,7 @@ class MainActivity : FlutterActivity() {
                             if (newClipPath != null) putExtra(NativeEditorActivity.EXTRA_NEW_CLIP_PATH, newClipPath)
                         } else {
                             putExtra(NativeEditorActivity.EXTRA_VIDEO_PATH, videoPath)
+                            putExtra(NativeEditorActivity.EXTRA_ROTATION, call.argument<Int>("rotationDegrees") ?: 0)
                         }
                     }
                     DebugLog.log(applicationContext, "MainActivity: about to startActivityForResult")
@@ -109,6 +110,23 @@ class MainActivity : FlutterActivity() {
                 // even a hard-crashed one (a process death kills the
                 // whole app, so this is only ever read on the NEXT
                 // launch, not within the same crashed session).
+                // A video's duration from its container metadata — no decoder.
+                // video_player's initialize() (the old way) opens a hardware
+                // decoder just to read it, which failed on a 1080p HEVC
+                // gallery video (DECODER init error, format_supported=YES).
+                "probeDurationMs" -> {
+                    val path = call.argument<String>("path")
+                    val retriever = android.media.MediaMetadataRetriever()
+                    val ms = try {
+                        retriever.setDataSource(path)
+                        retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+                    } catch (e: Exception) {
+                        null
+                    } finally {
+                        retriever.release()
+                    }
+                    if (ms == null || ms <= 0) result.error("PROBE_FAILED", "Couldn't read the video's duration", null) else result.success(ms)
+                }
                 "readAndClearNativeEditorDebugLog" -> {
                     result.success(DebugLog.readAndClear(applicationContext))
                 }

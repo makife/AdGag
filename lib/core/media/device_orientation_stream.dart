@@ -14,9 +14,7 @@ Stream<DeviceOrientation> physicalDeviceOrientation() {
   if (!Platform.isAndroid) {
     return const Stream<DeviceOrientation>.empty();
   }
-  return const EventChannel("com.adgag.adgag/device_orientation")
-      .receiveBroadcastStream()
-      .map(
+  return const EventChannel("com.adgag.adgag/device_orientation").receiveBroadcastStream().map(
         (Object? name) => DeviceOrientation.values.firstWhere(
           (DeviceOrientation o) => o.name == name,
           orElse: () => DeviceOrientation.portraitUp,

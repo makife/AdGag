@@ -35,7 +35,10 @@ class CameraRecordView extends StatefulWidget {
     super.key,
   });
 
-  final void Function(String filePath, Duration duration) onRecorded;
+  /// [rotationDegrees]: how far (clockwise) the recording must be turned to
+  /// be upright — 90/270 when the phone was held sideways (see
+  /// [_rotationForTake]). The editor starts with that rotation.
+  final void Function(String filePath, Duration duration, int rotationDegrees) onRecorded;
 
   /// Recording auto-stops here — less than [VideoConstraints.max] for an
   /// extra take, since all takes together share the 30s cap.
@@ -64,9 +67,13 @@ class _CameraRecordViewState extends State<CameraRecordView> {
   String? _error;
 
   /// How the phone is physically held. The UI stays portrait (like the
-  /// system camera); a sideways phone records a LANDSCAPE video and the
-  /// on-screen controls turn in place to stay upright.
+  /// system camera) and the on-screen controls turn in place to stay
+  /// upright; a take started sideways is handed to the editor with a 90°
+  /// rotation, so it comes out as a landscape video.
   DeviceOrientation _orientation = DeviceOrientation.portraitUp;
+
+  /// The orientation the current take was started in (frozen for the take).
+  DeviceOrientation _takeOrientation = DeviceOrientation.portraitUp;
   StreamSubscription<DeviceOrientation>? _orientationSub;
 
   @override
@@ -193,17 +200,11 @@ class _CameraRecordViewState extends State<CameraRecordView> {
       return;
     }
 
-    // Record in the orientation the phone is physically held in (the camera
-    // plugin otherwise follows the UI, which is locked to portrait — a
-    // sideways phone then recorded a sideways portrait video). Android only:
-    // on iOS the plugin already follows the device.
-    if (Platform.isAndroid) {
-      try {
-        await controller.lockCaptureOrientation(_orientation);
-      } catch (_) {
-        // Recording in portrait is better than not recording at all.
-      }
-    }
+    // NOT lockCaptureOrientation: locking the camera to landscape made
+    // CameraPreview rotate itself (a stretched preview) and stopping the
+    // recording hang (user report). The camera records as the UI is —
+    // portrait — and the editor turns a sideways take upright instead.
+    _takeOrientation = _orientation;
     await controller.startVideoRecording();
     _recordingStartedAt = DateTime.now();
     setState(() {
@@ -250,8 +251,29 @@ class _CameraRecordViewState extends State<CameraRecordView> {
     // screen is the native editor, which immediately needs hardware
     // codecs of its own — a still-releasing camera session was one cause
     // of the editor's DECODER_INIT_FAILED / crash-on-open reports.
+    final int rotation = _rotationForTake();
     await _releaseCamera();
-    widget.onRecorded(file.path, duration);
+    widget.onRecorded(file.path, duration, rotation);
+  }
+
+  /// Clockwise degrees that make a take upright. The frame is recorded in
+  /// the portrait UI's orientation, so with the phone turned left (its top
+  /// pointing left) the world's "up" lies along the frame's right edge:
+  /// turn it 270° clockwise. The front camera's recording isn't mirrored,
+  /// so its image is left-right swapped relative to the phone — the
+  /// opposite turn. Android only (the iOS camera plugin records in the
+  /// device orientation itself).
+  int _rotationForTake() {
+    if (!Platform.isAndroid) {
+      return 0;
+    }
+    final bool front = _controller?.description.lensDirection == CameraLensDirection.front;
+    return switch (_takeOrientation) {
+      DeviceOrientation.landscapeLeft => front ? 90 : 270,
+      DeviceOrientation.landscapeRight => front ? 270 : 90,
+      DeviceOrientation.portraitDown => 180,
+      DeviceOrientation.portraitUp => 0,
+    };
   }
 
   /// Nulls the controller first (so build() never renders a disposed

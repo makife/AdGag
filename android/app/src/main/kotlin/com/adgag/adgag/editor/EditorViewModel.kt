@@ -1256,7 +1256,12 @@ class EditorViewModel(
                     .build()
                 val videoEffects = mutableListOf<Effect>()
                 if (rotationDegrees != 0) {
-                    videoEffects += ScaleAndRotateTransformation.Builder().setRotationDegrees(rotationDegrees.toFloat()).build()
+                    // rotationDegrees is CLOCKWISE (the preview's Compose rotationZ);
+                    // Media3's setRotationDegrees is COUNTER-clockwise (verified in
+                    // media3-effect 1.11.0) — 90/270 used to come out upside down.
+                    videoEffects += ScaleAndRotateTransformation.Builder()
+                        .setRotationDegrees(((360 - rotationDegrees) % 360).toFloat())
+                        .build()
                 }
                 // Clips can differ in size/orientation (front vs back camera);
                 // normalize every clip to the first one's frame so the

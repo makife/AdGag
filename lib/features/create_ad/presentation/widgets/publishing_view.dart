@@ -28,9 +28,7 @@ class PublishingView extends ConsumerWidget {
                 CircularProgressIndicator(value: state.uploadProgress > 0 ? state.uploadProgress : null),
                 const SizedBox(height: AppSpacing.lg),
                 Text(
-                  state.uploadProgress < 1
-                      ? "Uploading… ${(state.uploadProgress * 100).round()}%"
-                      : "Processing…",
+                  state.uploadProgress < 1 ? "Uploading… ${(state.uploadProgress * 100).round()}%" : "Processing…",
                 ),
               ] else if (state.step == CreateAdStep.success) ...<Widget>[
                 const Icon(Icons.check_circle, size: 48),

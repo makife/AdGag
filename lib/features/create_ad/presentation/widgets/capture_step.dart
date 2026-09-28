@@ -24,11 +24,11 @@ class _CaptureStepState extends ConsumerState<CaptureStep> {
   String? _error;
 
   Future<void> _record() async {
-    final (String, Duration)? result = await Navigator.of(context).push<(String, Duration)>(
-      MaterialPageRoute<(String, Duration)>(
+    final (String, Duration, int)? result = await Navigator.of(context).push<(String, Duration, int)>(
+      MaterialPageRoute<(String, Duration, int)>(
         builder: (BuildContext routeContext) => CameraRecordView(
-          onRecorded: (String path, Duration duration) {
-            Navigator.of(routeContext).pop((path, duration));
+          onRecorded: (String path, Duration duration, int rotationDegrees) {
+            Navigator.of(routeContext).pop((path, duration, rotationDegrees));
           },
           // A visible way back (the recording screen had only system back).
           onCancel: () => Navigator.of(routeContext).pop(),
@@ -37,7 +37,8 @@ class _CaptureStepState extends ConsumerState<CaptureStep> {
     );
 
     if (result != null) {
-      final LocalVideoDraft draft = LocalVideoDraft(filePath: result.$1, duration: result.$2);
+      final LocalVideoDraft draft =
+          LocalVideoDraft(filePath: result.$1, duration: result.$2, rotationDegrees: result.$3);
       ref.read(createAdFlowControllerProvider.notifier).onVideoCaptured(draft);
     }
   }

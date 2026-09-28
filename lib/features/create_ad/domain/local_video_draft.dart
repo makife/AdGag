@@ -4,11 +4,14 @@ import "video_constraints.dart";
 /// any upload has started (CLAUDE.md section 39/40 — drafts should
 /// "retain local draft when possible").
 final class LocalVideoDraft {
-  const LocalVideoDraft({required this.filePath, required this.duration});
+  const LocalVideoDraft({required this.filePath, required this.duration, this.rotationDegrees = 0});
 
   final String filePath;
   final Duration duration;
 
-  bool get isWithinConstraints =>
-      duration >= VideoConstraints.min && duration <= VideoConstraints.max;
+  /// Clockwise turn that makes the recording upright (a take recorded with
+  /// the phone sideways) — the editor starts with this rotation.
+  final int rotationDegrees;
+
+  bool get isWithinConstraints => duration >= VideoConstraints.min && duration <= VideoConstraints.max;
 }

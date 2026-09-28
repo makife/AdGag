@@ -46,12 +46,18 @@ abstract final class NativeEditorBridge {
   /// — not an error. Throws [PlatformException] for a genuine native-side
   /// failure (the caller should surface it, per this app's "never
   /// silently fail" rule).
-  static Future<NativeEditorOutcome?> openEditor({String? videoPath, String? state, String? newClipPath}) async {
+  static Future<NativeEditorOutcome?> openEditor({
+    String? videoPath,
+    String? state,
+    String? newClipPath,
+    int rotationDegrees = 0,
+  }) async {
     assert(videoPath != null || state != null, "openEditor needs a videoPath or a state to resume");
     final Object? raw = await _channel.invokeMethod<Object?>("openEditor", <String, Object?>{
       "videoPath": videoPath,
       "state": state,
       "newClipPath": newClipPath,
+      "rotationDegrees": rotationDegrees,
     });
     if (raw == null) {
       return null;

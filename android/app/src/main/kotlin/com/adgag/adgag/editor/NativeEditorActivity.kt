@@ -30,6 +30,8 @@ class NativeEditorActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_VIDEO_PATH = "video_path"
+        /** Clockwise start rotation for a fresh session (a take recorded with the phone sideways). */
+        const val EXTRA_ROTATION = "rotation_degrees"
         /** Relaunch after recording another clip: the previous session's state (EditorSessionState JSON)... */
         const val EXTRA_STATE_JSON = "state_json"
         /** ...plus the newly recorded clip to append (absent if the user cancelled the recording). */
@@ -53,6 +55,7 @@ class NativeEditorActivity : ComponentActivity() {
                     val path = intent.getStringExtra(EXTRA_VIDEO_PATH)
                         ?: error("NativeEditorActivity started without $EXTRA_VIDEO_PATH or $EXTRA_STATE_JSON")
                     EditorViewModel.initialStateFor(applicationContext, path)
+                        .copy(rotationDegrees = ((intent.getIntExtra(EXTRA_ROTATION, 0) % 360) + 360) % 360)
                 }
                 @Suppress("UNCHECKED_CAST")
                 return EditorViewModel(applicationContext, state, intent.getStringExtra(EXTRA_NEW_CLIP_PATH)) as T
