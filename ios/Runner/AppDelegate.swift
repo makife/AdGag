@@ -39,6 +39,8 @@ import UIKit
         return
       }
       let args = call.arguments as? [String: Any] ?? [:]
+      // The language the Flutter app is showing; the editor's strings follow it.
+      EditorL10n.load(args["languageCode"] as? String)
       // Same contract as Android (MainActivity): a fresh session from
       // videoPath, or a resumed one from state (+ an optional new clip
       // recorded via the timeline's "+").

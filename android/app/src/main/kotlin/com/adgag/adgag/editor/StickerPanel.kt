@@ -76,24 +76,24 @@ fun StickerPanelHeader(viewModel: EditorViewModel, editingId: String?, onDismiss
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = if (editing != null) "Change sticker" else "Stickers",
+            text = if (editing != null) tr("Change sticker") else tr("Stickers"),
             color = AdGagColors.OnBackground,
             style = MaterialTheme.typography.titleMedium,
         )
         Row {
             if (editing != null) {
                 TextButton(onClick = { viewModel.updateSticker(editing.copy(flipX = !editing.flipX)) }) {
-                    Text(text = "Flip", color = AdGagColors.OnBackground, style = MaterialTheme.typography.labelLarge)
+                    Text(text = tr("Flip"), color = AdGagColors.OnBackground, style = MaterialTheme.typography.labelLarge)
                 }
                 TextButton(onClick = {
                     viewModel.removeSticker(editing.id)
                     onDismiss()
                 }) {
-                    Text(text = "Delete", color = AdGagColors.Danger, style = MaterialTheme.typography.labelLarge)
+                    Text(text = tr("Delete"), color = AdGagColors.Danger, style = MaterialTheme.typography.labelLarge)
                 }
             }
             TextButton(onClick = onDismiss) {
-                Text(text = "Done", color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
+                Text(text = tr("Done"), color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
             }
         }
     }
@@ -153,7 +153,7 @@ private fun EmojiGrid(viewModel: EditorViewModel, selectedId: String?, onPick: (
             }
         }
         Text(
-            text = "Animated emoji: Google Noto Emoji (CC BY 4.0)",
+            text = tr("Animated emoji: Google Noto Emoji (CC BY 4.0)"),
             color = AdGagColors.OnSurfaceMuted,
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(horizontal = AdGagSpacing.lg.dp),

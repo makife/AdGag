@@ -41,7 +41,7 @@ data class EditorClip(
  * Compose transform/veil on the surface) and the export render it as
  * per-clip Media3 effects (TransitionEffects.kt).
  */
-enum class ClipTransition(val label: String) {
+enum class ClipTransition(private val labelEn: String) {
     NONE("Cut"),
     FADE("Fade in"),
     FADE_OUT("Fade out"),
@@ -52,7 +52,10 @@ enum class ClipTransition(val label: String) {
     SLIDE_FROM_TOP("Slide ↓"),
     ZOOM_IN("Zoom in"),
     ZOOM_OUT("Zoom out"),
-    SPIN("Spin"),
+    SPIN("Spin");
+
+    /** Shown in the editor's language ([tr]). */
+    val label: String get() = tr(labelEn)
 }
 
 /** One boundary's transition: which effect, and how long it runs. */

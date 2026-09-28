@@ -265,22 +265,22 @@ struct StickerPanel: View {
     let editing = editingId.flatMap { id in viewModel.stickerLayers.first { $0.id == id } }
     VStack(alignment: .leading, spacing: 8) {
       HStack {
-        Text(editing != nil ? "Change sticker" : "Stickers").font(.headline).foregroundColor(.white)
+        Text(editing != nil ? tr("Change sticker") : tr("Stickers")).font(.headline).foregroundColor(.white)
         Spacer()
         if let editing {
-          Button("Flip") {
+          Button(tr("Flip")) {
             var s = editing
             s.flipX.toggle()
             viewModel.updateSticker(s)
           }
           .foregroundColor(.white)
-          Button("Delete") {
+          Button(tr("Delete")) {
             viewModel.removeSticker(editing.id)
             onClose()
           }
           .foregroundColor(EditorPalette.danger)
         }
-        Button("Done", action: onClose).foregroundColor(EditorPalette.accent)
+        Button(tr("Done"), action: onClose).foregroundColor(EditorPalette.accent)
       }
       EmojiGrid(selectedId: editing?.stickerId, onPick: pick)
     }
@@ -315,7 +315,7 @@ private struct EmojiGrid: View {
               .clipShape(RoundedRectangle(cornerRadius: 8))
               .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? EditorPalette.accent : Color.clear, lineWidth: 2))
             }
-            .accessibilityLabel(def.label)
+            .accessibilityLabel(tr(def.label))
             .task {
               await Task.detached(priority: .utility) { _ = StickerStore.shared.smallSheet(def) }.value
               loaded.insert(def.id)
@@ -324,7 +324,7 @@ private struct EmojiGrid: View {
         }
       }
       .frame(height: 196)
-      Text("Animated emoji: Google Noto Emoji (CC BY 4.0)").font(.caption2).foregroundColor(EditorPalette.muted)
+      Text(tr("Animated emoji: Google Noto Emoji (CC BY 4.0)")).font(.caption2).foregroundColor(EditorPalette.muted)
     }
   }
 }

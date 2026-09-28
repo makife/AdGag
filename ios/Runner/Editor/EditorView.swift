@@ -59,7 +59,7 @@ struct EditorView: View {
 
   private var topBar: some View {
     HStack {
-      Button("Cancel", action: onCancel)
+      Button(tr("Cancel"), action: onCancel)
         .foregroundColor(.white)
         .padding(.horizontal, 14).padding(.vertical, 8)
         .background(Color.black.opacity(0.4))
@@ -70,7 +70,7 @@ struct EditorView: View {
           if let path { onExported(path, durationMs) }
         }
       } label: {
-        Text("Next").fontWeight(.semibold).foregroundColor(.white)
+        Text(tr("Next")).fontWeight(.semibold).foregroundColor(.white)
           .padding(.horizontal, 18).padding(.vertical, 8)
           .background(viewModel.isExporting ? AnyView(EditorPalette.border) : AnyView(EditorPalette.brand))
           .clipShape(Capsule())
@@ -119,7 +119,7 @@ struct EditorView: View {
     if let range = viewModel.addSpeedRangeAtPlayhead() {
       panel = .speed(range.id)
     } else {
-      viewModel.showNotice("No room for slow motion — the Ad is already 30s. Trim it first.")
+      viewModel.showNotice(tr("No room for slow motion — the Ad is already 30s. Trim it first."))
     }
   }
 
@@ -137,8 +137,8 @@ struct EditorView: View {
   private var bottomPanel: some View {
     VStack(spacing: 0) {
       PanelHandle(collapsed: $panelCollapsed,
-                  label: bottomKind == .text ? "Text" : bottomKind == .stickers ? "Stickers"
-                    : bottomKind == .sounds ? "Sound FX" : "Editor",
+                  label: bottomKind == .text ? tr("Text") : bottomKind == .stickers ? tr("Stickers")
+                    : bottomKind == .sounds ? tr("Sound FX") : tr("Editor"),
                   onDone: bottomKind == .editor ? nil : { panel = nil })
       if !panelCollapsed {
         Group {
@@ -188,21 +188,21 @@ struct EditorView: View {
       }
       if viewModel.isExporting {
         VStack(alignment: .leading, spacing: 4) {
-          Text("Exporting your Ad…").font(.footnote).foregroundColor(EditorPalette.muted)
+          Text(tr("Exporting your Ad…")).font(.footnote).foregroundColor(EditorPalette.muted)
           ProgressView(value: viewModel.exportProgress).tint(EditorPalette.accent)
         }
       }
       if viewModel.isAttachingMusic {
         VStack(alignment: .leading, spacing: 4) {
-          Text("Preparing music…").font(.footnote).foregroundColor(EditorPalette.muted)
+          Text(tr("Preparing music…")).font(.footnote).foregroundColor(EditorPalette.muted)
           ProgressView().progressViewStyle(.linear).tint(EditorPalette.accent)
         }
       }
       if let error = viewModel.previewError {
-        Text("Preview problem: \(error)").font(.footnote).foregroundColor(EditorPalette.danger).lineLimit(3)
+        Text(tr("Preview problem: {0}", error)).font(.footnote).foregroundColor(EditorPalette.danger).lineLimit(3)
       }
       if let error = viewModel.exportError {
-        Text("Export failed: \(error)").font(.footnote).foregroundColor(EditorPalette.danger).lineLimit(3)
+        Text(tr("Export failed: {0}", error)).font(.footnote).foregroundColor(EditorPalette.danger).lineLimit(3)
       }
     }
   }
@@ -211,30 +211,30 @@ struct EditorView: View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: 16) {
         ToolButton(icon: "textformat",
-                   label: viewModel.textLayers.isEmpty ? "Text" : "Text (\(viewModel.textLayers.count))",
+                   label: viewModel.textLayers.isEmpty ? tr("Text") : tr("Text ({0})", viewModel.textLayers.count),
                    active: !viewModel.textLayers.isEmpty) { addText() }
         ToolButton(icon: "face.smiling",
-                   label: viewModel.stickerLayers.isEmpty ? "Stickers" : "Stickers (\(viewModel.stickerLayers.count))",
+                   label: viewModel.stickerLayers.isEmpty ? tr("Stickers") : tr("Stickers ({0})", viewModel.stickerLayers.count),
                    active: !viewModel.stickerLayers.isEmpty) {
           viewModel.pause()
           panel = .stickers(nil)
         }
         ToolButton(icon: "waveform",
-                   label: viewModel.soundLayers.isEmpty ? "Sound FX" : "Sound FX (\(viewModel.soundLayers.count))",
+                   label: viewModel.soundLayers.isEmpty ? tr("Sound FX") : tr("Sound FX ({0})", viewModel.soundLayers.count),
                    active: !viewModel.soundLayers.isEmpty) {
           viewModel.pause()
           panel = .sounds(nil)
         }
-        ToolButton(icon: "rotate.right", label: "Rotate", active: false) { viewModel.rotateNinety() }
+        ToolButton(icon: "rotate.right", label: tr("Rotate"), active: false) { viewModel.rotateNinety() }
         ToolButton(icon: viewModel.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
-                   label: viewModel.isMuted ? "Muted" : "Mute", active: viewModel.isMuted) { viewModel.toggleMute() }
+                   label: viewModel.isMuted ? tr("Muted") : tr("Mute"), active: viewModel.isMuted) { viewModel.toggleMute() }
         ToolButton(icon: "slowmo",
-                   label: viewModel.speedRanges.isEmpty ? "Slow-mo" : "Slow-mo (\(viewModel.speedRanges.count))",
+                   label: viewModel.speedRanges.isEmpty ? tr("Slow-mo") : tr("Slow-mo ({0})", viewModel.speedRanges.count),
                    active: !viewModel.speedRanges.isEmpty) { openSpeed() }
         ToolButton(icon: "wand.and.stars",
-                   label: viewModel.videoFilter == .NONE ? "Effects" : viewModel.videoFilter.label,
+                   label: viewModel.videoFilter == .NONE ? tr("Effects") : viewModel.videoFilter.label,
                    active: viewModel.videoFilter != .NONE) { panel = .effects }
-        ToolButton(icon: "music.note", label: viewModel.hasMusic ? "Music" : "Add music",
+        ToolButton(icon: "music.note", label: viewModel.hasMusic ? tr("Music") : tr("Add music"),
                    active: viewModel.hasMusic) {
           if viewModel.hasMusic { panel = .music } else { pickingMusic = true }
         }
@@ -251,7 +251,7 @@ struct EditorView: View {
         HStack {
           Text(panelTitle(panel)).font(.headline).foregroundColor(.white)
           Spacer()
-          Button("Done") { self.panel = nil }.foregroundColor(EditorPalette.accent)
+          Button(tr("Done")) { self.panel = nil }.foregroundColor(EditorPalette.accent)
         }
         switch panel {
         case .transition(let boundary): TransitionPanel(viewModel: viewModel, boundary: boundary)
@@ -279,13 +279,13 @@ struct EditorView: View {
 
   private func panelTitle(_ panel: Panel) -> String {
     switch panel {
-    case .transition(let b): return "Clip \(b + 1) → Clip \(b + 2)"
-    case .music: return "Music"
-    case .speed: return "Slow motion"
-    case .effects: return "Effects"
-    case .text: return "Text"
-    case .stickers: return "Stickers"
-    case .sounds: return "Sound FX"
+    case .transition(let b): return tr("Clip {0} → Clip {1}", b + 1, b + 2)
+    case .music: return tr("Music")
+    case .speed: return tr("Slow motion")
+    case .effects: return tr("Effects")
+    case .text: return tr("Text")
+    case .stickers: return tr("Stickers")
+    case .sounds: return tr("Sound FX")
     }
   }
 }
@@ -363,7 +363,7 @@ private struct TransitionPanel: View {
         }
       }
       HStack {
-        Text("Duration").font(.caption).foregroundColor(EditorPalette.muted)
+        Text(tr("Duration")).font(.caption).foregroundColor(EditorPalette.muted)
         Spacer()
         Text(spec.type == .NONE ? "—" : String(format: "%.1fs", Double(spec.durationMs) / 1000))
           .font(.caption).foregroundColor(.white)
@@ -431,26 +431,26 @@ private struct MusicPanel: View {
   var body: some View {
     let maxFade = Double(max(min(EditorLimits.maxMusicFadeMs, viewModel.musicCoveredMs), 1))
     VStack(alignment: .leading, spacing: 10) {
-      Text("Speed").font(.caption).foregroundColor(EditorPalette.muted)
+      Text(tr("Speed")).font(.caption).foregroundColor(EditorPalette.muted)
       ChoiceRow(options: EditorLimits.musicSpeedOptions, selected: viewModel.musicSpeed,
                 enabled: { _ in true }) { viewModel.changeMusicSpeed($0) }
       Toggle(isOn: Binding(get: { viewModel.musicLoop }, set: { viewModel.changeMusicLoop($0) })) {
         VStack(alignment: .leading, spacing: 2) {
-          Text("Loop to fill the video").foregroundColor(.white)
-          Text("Repeats the selected part until the video ends").font(.caption).foregroundColor(EditorPalette.muted)
+          Text(tr("Loop to fill the video")).foregroundColor(.white)
+          Text(tr("Repeats the selected part until the video ends")).font(.caption).foregroundColor(EditorPalette.muted)
         }
       }
       .tint(EditorPalette.accent)
-      fadeSlider("Fade in", value: viewModel.musicFadeInMs, maxMs: maxFade) {
+      fadeSlider(tr("Fade in"), value: viewModel.musicFadeInMs, maxMs: maxFade) {
         viewModel.setMusicFade(inMs: $0, outMs: viewModel.musicFadeOutMs, commit: $1)
       }
-      fadeSlider("Fade out", value: viewModel.musicFadeOutMs, maxMs: maxFade) {
+      fadeSlider(tr("Fade out"), value: viewModel.musicFadeOutMs, maxMs: maxFade) {
         viewModel.setMusicFade(inMs: viewModel.musicFadeInMs, outMs: $0, commit: $1)
       }
       HStack {
-        Button("Replace music", action: onReplace).foregroundColor(.white)
+        Button(tr("Replace music"), action: onReplace).foregroundColor(.white)
         Spacer()
-        Button("Remove music") {
+        Button(tr("Remove music")) {
           viewModel.removeMusic()
           onRemoved()
         }
@@ -465,7 +465,7 @@ private struct MusicPanel: View {
       HStack {
         Text(title).font(.caption).foregroundColor(EditorPalette.muted)
         Spacer()
-        Text(value == 0 ? "Off" : String(format: "%.1fs", Double(value) / 1000)).font(.caption).foregroundColor(.white)
+        Text(value == 0 ? tr("Off") : String(format: "%.1fs", Double(value) / 1000)).font(.caption).foregroundColor(.white)
       }
       Slider(value: Binding(get: { min(Double(value), maxMs) },
                             set: { onChange(Int64(($0 / 100).rounded() * 100), false) }),
@@ -489,21 +489,22 @@ private struct SpeedPanel: View {
       let blocked = EditorLimits.speedRangeOptions.filter { !viewModel.canUseRangeSpeed(range.id, $0) }
       let wholeOk = viewModel.canApplySpeedToWholeVideo(range.id)
       VStack(alignment: .leading, spacing: 10) {
-        Text("\(formatPreciseSeconds(range.startMs)) – \(formatPreciseSeconds(range.endMs)) of your clips plays at "
-          + "\(formatSpeed(range.speed)). Drag the pink edges on the Speed row to change which part.")
+        Text(tr("{0} – {1} of your clips plays at {2}. Drag the edges on the Speed row to change which part.",
+                formatPreciseSeconds(range.startMs), formatPreciseSeconds(range.endMs), formatSpeed(range.speed)))
           .font(.caption).foregroundColor(EditorPalette.muted)
         ChoiceRow(options: EditorLimits.speedRangeOptions, selected: range.speed,
                   enabled: { viewModel.canUseRangeSpeed(range.id, $0) }) { viewModel.setSpeedRangeSpeed(range.id, $0) }
         Text(blocked.isEmpty
-          ? "Your Ad: \(formatClock(viewModel.outputDurationMs)) of 0:30."
-          : "\(blocked.map(formatSpeed).joined(separator: ", ")) would make the Ad longer than 30s — shorten the range first.")
+          ? tr("Your Ad: {0} of 0:30.", formatClock(viewModel.outputDurationMs))
+          : tr("{0} would make the Ad longer than 30s — shorten the range first.",
+               blocked.map(formatSpeed).joined(separator: ", ")))
           .font(.caption).foregroundColor(EditorPalette.muted)
         HStack {
-          Button("Whole video") { viewModel.applySpeedToWholeVideo(range.id) }
+          Button(tr("Whole video")) { viewModel.applySpeedToWholeVideo(range.id) }
             .foregroundColor(wholeOk ? .white : EditorPalette.muted)
             .disabled(!wholeOk)
           Spacer()
-          Button("Remove slow motion") {
+          Button(tr("Remove slow motion")) {
             viewModel.removeSpeedRange(range.id)
             onRemoved()
           }
@@ -588,10 +589,10 @@ private struct PanelHandle: View {
       Capsule().fill(Color.white.opacity(0.35)).frame(width: 44, height: 5)
       if collapsed {
         HStack {
-          Text("\(label) · drag up to edit").font(.caption).foregroundColor(EditorPalette.muted)
+          Text(tr("{0} · drag up to edit", label)).font(.caption).foregroundColor(EditorPalette.muted)
           Spacer()
           if let onDone {
-            Button("Done", action: onDone).foregroundColor(EditorPalette.accent)
+            Button(tr("Done"), action: onDone).foregroundColor(EditorPalette.accent)
           }
         }
         .frame(height: 32)
@@ -605,6 +606,6 @@ private struct PanelHandle: View {
     .gesture(DragGesture(minimumDistance: 6).onEnded { value in
       if value.translation.height > 36 { collapsed = true } else if value.translation.height < -36 { collapsed = false }
     })
-    .accessibilityLabel(collapsed ? "Expand \(label)" : "Collapse \(label)")
+    .accessibilityLabel(collapsed ? tr("Expand {0}", label) : tr("Collapse {0}", label))
   }
 }

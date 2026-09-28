@@ -319,7 +319,7 @@ final class EditorViewModel: ObservableObject {
       let dest = dir.appendingPathComponent("editor_music_\(Int(Date().timeIntervalSince1970 * 1000)).\(ext)")
       try FileManager.default.copyItem(at: url, to: dest)
       guard let songMs = Self.durationMs(path: dest.path) else {
-        throw NSError(domain: "AdGag", code: 20, userInfo: [NSLocalizedDescriptionKey: "Couldn't read that audio file."])
+        throw NSError(domain: "AdGag", code: 20, userInfo: [NSLocalizedDescriptionKey: tr("Couldn't read that audio file.")])
       }
       musicOriginalPath = dest.path
       musicSpeed = 1
@@ -426,7 +426,7 @@ final class EditorViewModel: ObservableObject {
     let needed = EditorLimits.defaultSpeedRangeMs // at 0.5x a range adds its own length
     let room = EditorLimits.maxTotalMs - outputDurationMs
     let cut = room < needed ? shortenEnd(needed - room) : 0
-    if cut > 0 { showNotice("Shortened the end by \(formatPreciseSeconds(cut)) so slow motion fits in 30s.") }
+    if cut > 0 { showNotice(tr("Shortened the end by {0} so slow motion fits in 30s.", formatPreciseSeconds(cut))) }
     guard let speed = [0.5, 0.75].first(where: { maxRangeLengthMs(except: nil, speed: $0) >= EditorLimits.minSpeedRangeMs })
     else {
       if cut > 0 { rebuild(resumeAtSourceMs: 0, play: false) }
@@ -593,6 +593,7 @@ final class EditorViewModel: ObservableObject {
     let now = min(max(currentOutputMs(), 0), total)
     let start = total - now < 1_000 ? max(total - 3_000, 0) : now
     var layer = TextLayer()
+    layer.text = tr("Your text")
     layer.startMs = start
     layer.endMs = min(total, start + 3_000)
     textLayers.append(layer)
@@ -759,7 +760,7 @@ final class EditorViewModel: ObservableObject {
       return
     }
     guard let session = AVAssetExportSession(asset: built.asset, presetName: AVAssetExportPresetHighestQuality) else {
-      exportError = "Couldn't start the export."
+      exportError = tr("Couldn't start the export.")
       return
     }
     try? FileManager.default.removeItem(at: outputURL)
@@ -788,7 +789,7 @@ final class EditorViewModel: ObservableObject {
         if status == .completed {
           completion(outputURL.path, durationMs)
         } else {
-          self.exportError = message ?? "Export failed"
+          self.exportError = message ?? tr("Export failed")
           completion(nil, 0)
         }
       }

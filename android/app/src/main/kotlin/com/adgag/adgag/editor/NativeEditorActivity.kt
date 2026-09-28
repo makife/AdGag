@@ -32,6 +32,8 @@ class NativeEditorActivity : ComponentActivity() {
         const val EXTRA_VIDEO_PATH = "video_path"
         /** Clockwise start rotation for a fresh session (a take recorded with the phone sideways). */
         const val EXTRA_ROTATION = "rotation_degrees"
+        /** The Flutter app's UI language code; the editor's strings follow it ([EditorL10n]). */
+        const val EXTRA_LANGUAGE = "language_code"
         /** Relaunch after recording another clip: the previous session's state (EditorSessionState JSON)... */
         const val EXTRA_STATE_JSON = "state_json"
         /** ...plus the newly recorded clip to append (absent if the user cancelled the recording). */
@@ -67,6 +69,7 @@ class NativeEditorActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         DebugLog.log(applicationContext, "onCreate: start")
+        EditorL10n.load(applicationContext, intent.getStringExtra(EXTRA_LANGUAGE))
         super.onCreate(savedInstanceState)
         DebugLog.log(applicationContext, "onCreate: super.onCreate done")
         // Real user report: this screen crashed the whole app on first

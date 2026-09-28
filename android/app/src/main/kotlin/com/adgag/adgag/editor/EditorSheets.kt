@@ -52,9 +52,9 @@ fun MusicSheet(viewModel: EditorViewModel, onReplace: () -> Unit, onDismiss: () 
         containerColor = AdGagColors.SurfaceElevated,
     ) {
         Column(modifier = Modifier.padding(bottom = AdGagSpacing.xl.dp)) {
-            SheetHeader(title = "Music", onDone = onDismiss)
+            SheetHeader(title = tr("Music"), onDone = onDismiss)
 
-            SectionLabel("Speed")
+            SectionLabel(tr("Speed"))
             ChoiceRow(
                 options = MusicSpeedOptions,
                 selected = viewModel.musicSpeed,
@@ -76,9 +76,9 @@ fun MusicSheet(viewModel: EditorViewModel, onReplace: () -> Unit, onDismiss: () 
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "Loop to fill the video", color = AdGagColors.OnBackground, style = MaterialTheme.typography.bodyMedium)
+                    Text(text = tr("Loop to fill the video"), color = AdGagColors.OnBackground, style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        text = "Repeats the selected part until the video ends",
+                        text = tr("Repeats the selected part until the video ends"),
                         color = AdGagColors.OnSurfaceMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -92,13 +92,13 @@ fun MusicSheet(viewModel: EditorViewModel, onReplace: () -> Unit, onDismiss: () 
 
             val maxFade = minOf(MaxMusicFadeMs, viewModel.musicCoveredMs).coerceAtLeast(0L)
             FadeSlider(
-                label = "Fade in",
+                label = tr("Fade in"),
                 valueMs = viewModel.musicFadeInMs,
                 maxMs = maxFade,
                 onChange = { viewModel.setMusicFade(it, viewModel.musicFadeOutMs) },
             )
             FadeSlider(
-                label = "Fade out",
+                label = tr("Fade out"),
                 valueMs = viewModel.musicFadeOutMs,
                 maxMs = maxFade,
                 onChange = { viewModel.setMusicFade(viewModel.musicFadeInMs, it) },
@@ -110,13 +110,13 @@ fun MusicSheet(viewModel: EditorViewModel, onReplace: () -> Unit, onDismiss: () 
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 TextButton(onClick = onReplace) {
-                    Text(text = "Replace music", color = AdGagColors.OnBackground, style = MaterialTheme.typography.labelLarge)
+                    Text(text = tr("Replace music"), color = AdGagColors.OnBackground, style = MaterialTheme.typography.labelLarge)
                 }
                 TextButton(onClick = {
                     viewModel.removeMusic()
                     onDismiss()
                 }) {
-                    Text(text = "Remove music", color = AdGagColors.Danger, style = MaterialTheme.typography.labelLarge)
+                    Text(text = tr("Remove music"), color = AdGagColors.Danger, style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -144,10 +144,12 @@ fun SpeedRangeSheet(viewModel: EditorViewModel, rangeId: String, onDismiss: () -
         containerColor = AdGagColors.SurfaceElevated,
     ) {
         Column(modifier = Modifier.padding(bottom = AdGagSpacing.xl.dp)) {
-            SheetHeader(title = "Slow motion", onDone = onDismiss)
+            SheetHeader(title = tr("Slow motion"), onDone = onDismiss)
             Text(
-                text = "${formatPreciseSeconds(range.startMs)} – ${formatPreciseSeconds(range.endMs)} of your clips " +
-                    "plays at ${formatSpeed(range.speed)}. Drag the pink edges on the Speed row to change which part.",
+                text = tr(
+                    "{0} – {1} of your clips plays at {2}. Drag the edges on the Speed row to change which part.",
+                    formatPreciseSeconds(range.startMs), formatPreciseSeconds(range.endMs), formatSpeed(range.speed),
+                ),
                 color = AdGagColors.OnSurfaceMuted,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(horizontal = AdGagSpacing.lg.dp),
@@ -164,9 +166,9 @@ fun SpeedRangeSheet(viewModel: EditorViewModel, rangeId: String, onDismiss: () -
             val blocked = SpeedRangeOptions.filterNot { viewModel.canUseRangeSpeed(range.id, it) }
             Text(
                 text = if (blocked.isEmpty()) {
-                    "Your Ad: ${formatClock(viewModel.outputDurationMs)} of 0:30."
+                    tr("Your Ad: {0} of 0:30.", formatClock(viewModel.outputDurationMs))
                 } else {
-                    "${blocked.joinToString { formatSpeed(it) }} would make the Ad longer than 30s — shorten the range first."
+                    tr("{0} would make the Ad longer than 30s — shorten the range first.", blocked.joinToString { formatSpeed(it) })
                 },
                 color = AdGagColors.OnSurfaceMuted,
                 style = MaterialTheme.typography.bodySmall,
@@ -180,7 +182,7 @@ fun SpeedRangeSheet(viewModel: EditorViewModel, rangeId: String, onDismiss: () -
                 val wholeOk = viewModel.canApplySpeedToWholeVideo(range.id)
                 TextButton(onClick = { viewModel.applySpeedToWholeVideo(range.id) }, enabled = wholeOk) {
                     Text(
-                        text = "Whole video",
+                        text = tr("Whole video"),
                         color = if (wholeOk) AdGagColors.OnBackground else AdGagColors.OnSurfaceMuted,
                         style = MaterialTheme.typography.labelLarge,
                     )
@@ -189,7 +191,7 @@ fun SpeedRangeSheet(viewModel: EditorViewModel, rangeId: String, onDismiss: () -
                     viewModel.removeSpeedRange(range.id)
                     onDismiss()
                 }) {
-                    Text(text = "Remove slow motion", color = AdGagColors.Danger, style = MaterialTheme.typography.labelLarge)
+                    Text(text = tr("Remove slow motion"), color = AdGagColors.Danger, style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -200,7 +202,7 @@ fun SpeedRangeSheet(viewModel: EditorViewModel, rangeId: String, onDismiss: () -
 @Composable
 fun PreparingMusicIndicator(modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(text = "Preparing music…", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.bodySmall)
+        Text(text = tr("Preparing music…"), color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.bodySmall)
         Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
         LinearProgressIndicator(
             modifier = Modifier.fillMaxWidth().height(2.dp),
@@ -225,7 +227,7 @@ fun EffectsSheet(viewModel: EditorViewModel, onDismiss: () -> Unit) {
         containerColor = AdGagColors.SurfaceElevated,
     ) {
         Column(modifier = Modifier.padding(bottom = AdGagSpacing.xl.dp)) {
-            SheetHeader(title = "Effects", onDone = onDismiss)
+            SheetHeader(title = tr("Effects"), onDone = onDismiss)
             LazyRow(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = AdGagSpacing.lg.dp),
                 horizontalArrangement = Arrangement.spacedBy(AdGagSpacing.md.dp),
@@ -283,13 +285,13 @@ fun EffectsSheet(viewModel: EditorViewModel, onDismiss: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "Live preview of effects is off on this device. The effect is still applied to your Ad.",
+                        text = tr("Live preview of effects is off on this device. The effect is still applied to your Ad."),
                         color = AdGagColors.OnSurfaceMuted,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.weight(1f),
                     )
                     TextButton(onClick = { viewModel.retryPreviewEffects() }) {
-                        Text(text = "Try again", color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
+                        Text(text = tr("Try again"), color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
@@ -306,7 +308,7 @@ private fun SheetHeader(title: String, onDone: () -> Unit) {
     ) {
         Text(text = title, color = AdGagColors.OnBackground, style = MaterialTheme.typography.titleMedium)
         TextButton(onClick = onDone) {
-            Text(text = "Done", color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
+            Text(text = tr("Done"), color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -360,7 +362,7 @@ private fun FadeSlider(label: String, valueMs: Long, maxMs: Long, onChange: (Lon
     ) {
         Text(text = label, color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
         Text(
-            text = if (valueMs == 0L) "Off" else "%.1fs".format(valueMs / 1000f),
+            text = if (valueMs == 0L) tr("Off") else "%.1fs".format(valueMs / 1000f),
             color = AdGagColors.OnBackground,
             style = MaterialTheme.typography.labelMedium,
         )

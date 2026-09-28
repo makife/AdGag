@@ -49,9 +49,9 @@ struct EditorTimelineView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
-        label("Clips")
+        label(tr("Clips"))
         Spacer()
-        label((viewModel.speedRanges.isEmpty ? "" : "slow-mo · ")
+        label((viewModel.speedRanges.isEmpty ? "" : tr("slow-mo") + " · ")
           + "\(formatClock(viewModel.outputDurationMs)) / \(formatClock(EditorLimits.maxTotalMs))")
       }
       aligned(trailing: AnyView(addButton)) { ClipStripView(viewModel: viewModel, onPickTransition: onPickTransition) }
@@ -60,11 +60,11 @@ struct EditorTimelineView: View {
       if viewModel.clips.indices.contains(index) {
         let clip = viewModel.clips[index]
         HStack {
-          label(viewModel.clips.count > 1 ? "Clip \(index + 1) · trim" : "Trim")
+          label(viewModel.clips.count > 1 ? tr("Clip {0} · trim", index + 1) : tr("Trim"))
           Spacer()
           label("\(formatClock(clip.trimStartMs)) – \(formatClock(clip.trimEndMs))")
           if viewModel.clips.count > 1 {
-            Button("Delete clip") { viewModel.removeClip(index) }
+            Button(tr("Delete clip")) { viewModel.removeClip(index) }
               .font(.caption).foregroundColor(EditorPalette.danger)
           }
         }
@@ -76,17 +76,17 @@ struct EditorTimelineView: View {
         let selRange = viewModel.speedRanges.first { $0.id == viewModel.selectedSpeedRangeId }
         HStack {
           if let selRange {
-            label("Slow motion · \(formatSpeed(selRange.speed))")
+            label(tr("Slow motion") + " · \(formatSpeed(selRange.speed))")
             Spacer()
             label("\(formatPreciseSeconds(selRange.startMs)) – \(formatPreciseSeconds(selRange.endMs))")
           } else {
-            label("Slow motion · tap one to select")
+            label(tr("Slow motion · tap one to select"))
             Spacer()
           }
         }
         // Same layout (and SOURCE time scale) as the clip strip, so a range
         // sits right under the footage it slows down.
-        aligned(trailing: AnyView(rowAddButton(label: "Add slow motion", action: onAddSpeedRange))) {
+        aligned(trailing: AnyView(rowAddButton(label: tr("Add slow motion"), action: onAddSpeedRange))) {
           SpeedRowView(viewModel: viewModel, onEditSpeedRange: onEditSpeedRange)
         }
       }
@@ -100,28 +100,28 @@ struct EditorTimelineView: View {
             Spacer()
             label("\(formatClock(selected.startMs)) – \(formatClock(selected.endMs))")
           } else {
-            label("Text, stickers & sounds · tap one to select")
+            label(tr("Text, stickers & sounds · tap one to select"))
             Spacer()
           }
         }
-        aligned(trailing: AnyView(rowAddButton(label: "Add text", action: onAddText))) { TextRowView(viewModel: viewModel, onEditText: onEditText) }
+        aligned(trailing: AnyView(rowAddButton(label: tr("Add text"), action: onAddText))) { TextRowView(viewModel: viewModel, onEditText: onEditText) }
       }
 
       if viewModel.hasMusic {
         HStack {
-          label("Music" + (viewModel.musicSpeed != 1 ? " · \(formatSpeed(viewModel.musicSpeed))" : "")
-            + (viewModel.musicLoop ? " · loop" : ""))
+          label(tr("Music") + (viewModel.musicSpeed != 1 ? " · \(formatSpeed(viewModel.musicSpeed))" : "")
+            + (viewModel.musicLoop ? " · " + tr("loop") : ""))
           Spacer()
           label("\(formatClock(viewModel.musicStartOffsetMs)) – "
             + formatClock(viewModel.musicStartOffsetMs + viewModel.musicPlayDurationMs))
         }
         aligned(trailing: AnyView(musicSettingsButton)) { MusicRowView(viewModel: viewModel) }
         HStack {
-          label("Song section")
+          label(tr("Song section"))
           Spacer()
           label("\(formatClock(viewModel.musicSourceStartMs)) – "
-            + "\(formatClock(viewModel.musicSourceStartMs + viewModel.musicPlayDurationMs)) of "
-            + formatClock(viewModel.musicDurationMs ?? 0))
+            + tr("{0} of {1}", formatClock(viewModel.musicSourceStartMs + viewModel.musicPlayDurationMs),
+                 formatClock(viewModel.musicDurationMs ?? 0)))
         }
         SongRowView(viewModel: viewModel)
       }
@@ -150,7 +150,7 @@ struct EditorTimelineView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
     .disabled(!viewModel.canAddClip)
-    .accessibilityLabel("Record another clip")
+    .accessibilityLabel(tr("Record another clip"))
   }
 
   private func rowAddButton(label: String, action: @escaping () -> Void) -> some View {
@@ -172,7 +172,7 @@ struct EditorTimelineView: View {
         .background(EditorPalette.surface)
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
-    .accessibilityLabel("Music settings")
+    .accessibilityLabel(tr("Music settings"))
   }
 }
 
@@ -229,7 +229,7 @@ private struct ClipStripView: View {
               .overlay(Circle().stroke(Color.white.opacity(0.6), lineWidth: 1))
           }
           .position(x: msToX(viewModel.clipStartMs(b + 1)), y: stripHeight / 2)
-          .accessibilityLabel("Transition effect")
+          .accessibilityLabel(tr("Transition effect"))
         }
 
         // Playhead.
@@ -504,15 +504,15 @@ private struct OverlayBar: Identifiable {
 @MainActor
 private func overlayBars(_ viewModel: EditorViewModel) -> [OverlayBar] {
   viewModel.stickerLayers.map { s in
-    OverlayBar(id: s.id, kind: "Sticker", label: StickerStore.shared.byId(s.stickerId)?.label ?? "Sticker",
+    OverlayBar(id: s.id, kind: tr("Sticker"), label: tr(StickerStore.shared.byId(s.stickerId)?.label ?? "Sticker"),
                startMs: s.startMs, endMs: s.endMs, color: Color(red: 1, green: 0.7, blue: 0))
   } + viewModel.soundLayers.compactMap { l -> OverlayBar? in
     guard let def = SfxStore.shared.byId(l.sfxId) else { return nil }
-    return OverlayBar(id: l.id, kind: "Sound", label: def.label, startMs: l.startMs,
+    return OverlayBar(id: l.id, kind: tr("Sound"), label: tr(def.label), startMs: l.startMs,
                       endMs: l.startMs + def.durationMs, color: Color(red: 0.55, green: 0.61, blue: 1.0))
   } + viewModel.textLayers.map { t in
     let c = argbComponents(t.color)
-    return OverlayBar(id: t.id, kind: "Text", label: t.text.components(separatedBy: "\n").first ?? "",
+    return OverlayBar(id: t.id, kind: tr("Text"), label: t.text.components(separatedBy: "\n").first ?? "",
                       startMs: t.startMs, endMs: t.endMs,
                       color: Color(red: Double(c.r), green: Double(c.g), blue: Double(c.b)))
   }

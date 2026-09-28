@@ -95,6 +95,7 @@ class MainActivity : FlutterActivity() {
                             putExtra(NativeEditorActivity.EXTRA_VIDEO_PATH, videoPath)
                             putExtra(NativeEditorActivity.EXTRA_ROTATION, call.argument<Int>("rotationDegrees") ?: 0)
                         }
+                        putExtra(NativeEditorActivity.EXTRA_LANGUAGE, call.argument<String>("languageCode"))
                     }
                     DebugLog.log(applicationContext, "MainActivity: about to startActivityForResult")
                     startActivityForResult(intent, editorRequestCode)

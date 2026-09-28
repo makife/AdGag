@@ -67,12 +67,21 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
     unawaited(_open());
   }
 
+  /// The language the app is showing — the native editor follows it.
+  String get _languageCode => Localizations.localeOf(context).languageCode;
+
   Future<void> _open() async {
     final LocalVideoDraft? draft = ref.read(createAdFlowControllerProvider).capturedDraft;
     if (draft == null) {
       return;
     }
-    await _run(() => NativeEditorBridge.openEditor(videoPath: draft.filePath, rotationDegrees: draft.rotationDegrees));
+    await _run(
+      () => NativeEditorBridge.openEditor(
+        videoPath: draft.filePath,
+        rotationDegrees: draft.rotationDegrees,
+        languageCode: _languageCode,
+      ),
+    );
   }
 
   /// Reopens the editor with the saved session, appending [newClipPath] if a take was recorded.
@@ -81,7 +90,7 @@ class _NativeEditorStepState extends ConsumerState<NativeEditorStep> {
     if (state == null) {
       return unawaited(_open());
     }
-    await _run(() => NativeEditorBridge.openEditor(state: state, newClipPath: newClipPath));
+    await _run(() => NativeEditorBridge.openEditor(state: state, newClipPath: newClipPath, languageCode: _languageCode));
   }
 
   /// The "+" take from the gallery instead of the camera. Any length is

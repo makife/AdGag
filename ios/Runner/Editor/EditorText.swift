@@ -15,7 +15,7 @@ import UIKit
 
 enum TextLayerAlign: String, Codable, CaseIterable {
   case LEFT, CENTER, RIGHT
-  var label: String { String(rawValue.prefix(1)) + rawValue.dropFirst().lowercased() }
+  var label: String { tr(String(rawValue.prefix(1)) + rawValue.dropFirst().lowercased()) }
 }
 
 enum TextStyleEffect: String, Codable, CaseIterable {
@@ -23,7 +23,9 @@ enum TextStyleEffect: String, Codable, CaseIterable {
   case COMIC, RETRO, GLITCH, GOLD, SUNSET, OCEAN, RAINBOW_FILL
   case STICKER, LONG_SHADOW, DOUBLE_OUTLINE, CHROME, FIRE, ICE, SPLIT, CANDY
 
-  var label: String {
+  /// Shown in the editor's language (`tr`).
+  var label: String { tr(labelEn) }
+  var labelEn: String {
     switch self {
     case .NONE: return "Plain"
     case .OUTLINE: return "Outline"
@@ -60,7 +62,9 @@ enum TextExit: String, Codable, CaseIterable {
   case NONE, FADE, SHRINK, BLOW_UP, SPIN, SLIDE_UP, SLIDE_DOWN, SLIDE_LEFT, SLIDE_RIGHT
   case ERASE, FALL, SCATTER, FLICKER_OUT
 
-  var label: String {
+  /// Shown in the editor's language (`tr`).
+  var label: String { tr(labelEn) }
+  var labelEn: String {
     switch self {
     case .NONE: return "None"
     case .FADE: return "Fade"
@@ -83,7 +87,9 @@ enum TextAnimation: String, Codable, CaseIterable {
   case NONE, FADE, POP, BOUNCE, ZOOM, SPIN, SLIDE_UP, SLIDE_DOWN, SLIDE_LEFT, SLIDE_RIGHT
   case TYPEWRITER, RISE, DROP, WAVE, JUMP, SHAKE, PULSE, SWING, FLICKER, RAINBOW
 
-  var label: String {
+  /// Shown in the editor's language (`tr`).
+  var label: String { tr(labelEn) }
+  var labelEn: String {
     switch self {
     case .NONE: return "None"
     case .FADE: return "Fade"

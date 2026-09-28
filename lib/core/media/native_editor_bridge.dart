@@ -51,6 +51,7 @@ abstract final class NativeEditorBridge {
     String? state,
     String? newClipPath,
     int rotationDegrees = 0,
+    String languageCode = "en",
   }) async {
     assert(videoPath != null || state != null, "openEditor needs a videoPath or a state to resume");
     final Object? raw = await _channel.invokeMethod<Object?>("openEditor", <String, Object?>{
@@ -58,6 +59,8 @@ abstract final class NativeEditorBridge {
       "state": state,
       "newClipPath": newClipPath,
       "rotationDegrees": rotationDegrees,
+      // The language the app is showing; the native editor uses the same.
+      "languageCode": languageCode,
     });
     if (raw == null) {
       return null;

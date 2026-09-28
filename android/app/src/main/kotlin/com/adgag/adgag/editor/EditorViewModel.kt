@@ -336,7 +336,7 @@ class EditorViewModel(
         val total = outputDurationMs.coerceAtLeast(500L)
         val now = toOutputMs(globalPositionMs()).coerceIn(0L, total)
         val start = if (total - now < 1_000L) (total - 3_000L).coerceAtLeast(0L) else now
-        val layer = TextLayer(startMs = start, endMs = minOf(total, start + 3_000L))
+        val layer = TextLayer(text = tr("Your text"), startMs = start, endMs = minOf(total, start + 3_000L))
         textLayers = textLayers + layer
         selectedTextId = layer.id
         return layer
@@ -697,7 +697,7 @@ class EditorViewModel(
             }
             if (copied == null) {
                 isAttachingMusic = false
-                previewError = "Couldn't read that audio file."
+                previewError = tr("Couldn't read that audio file.")
                 return@launch
             }
             musicOriginalPath = copied.first
@@ -756,7 +756,7 @@ class EditorViewModel(
                 throw e // superseded by a newer music change — not an error
             } catch (e: Exception) {
                 Log.w("EditorViewModel", "Re-timing music failed", e)
-                previewError = "Couldn't change the music speed."
+                previewError = tr("Couldn't change the music speed.")
                 isAttachingMusic = false
             }
         }
@@ -798,7 +798,7 @@ class EditorViewModel(
         val needed = (DefaultSpeedRangeMs * (1.0 / 0.5f - 1.0)).toLong()
         val room = MaxTotalDurationMs - outputDurationMs
         val cut = if (room < needed) shortenEnd(needed - room) else 0L
-        if (cut > 0) showNotice("Shortened the end by ${formatPreciseSeconds(cut)} so slow motion fits in 30s.")
+        if (cut > 0) showNotice(tr("Shortened the end by {0} so slow motion fits in 30s.", formatPreciseSeconds(cut)))
         val speed = listOf(0.5f, 0.75f).firstOrNull { maxRangeLengthMs(null, it) >= MinSpeedRangeMs }
         if (speed == null) {
             if (cut > 0) rebuildAndPrepare(startGlobalMs = 0L, playWhenReady = false)
@@ -983,7 +983,7 @@ class EditorViewModel(
                 throw e // superseded by a newer music change — not an error
             } catch (e: Exception) {
                 Log.w("EditorViewModel", "Preparing preview music failed", e)
-                previewError = "Couldn't prepare the music preview."
+                previewError = tr("Couldn't prepare the music preview.")
                 isAttachingMusic = false
             }
         }
@@ -1561,7 +1561,7 @@ class EditorViewModel(
                         return
                     }
                     isExporting = false
-                    val message = "${exportException.errorCodeName}: ${exportException.message ?: "Export failed"}"
+                    val message = "${exportException.errorCodeName}: ${exportException.message ?: tr("Export failed")}"
                     exportError = message
                     // Staying on this screen — bring the preview back.
                     rebuildAndPrepare(startGlobalMs = resumeAt, playWhenReady = false)

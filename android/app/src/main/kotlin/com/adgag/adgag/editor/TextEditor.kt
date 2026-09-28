@@ -247,7 +247,10 @@ private fun DrawScope.drawCaptions(viewModel: EditorViewModel, globalMs: Long) {
     }
 }
 
-private enum class TextTab(val label: String) { FONT("Font"), STYLE("Style"), MOTION("In"), EXIT("Out"), COLOR("Color"), SIZE("Size") }
+private enum class TextTab(private val labelEn: String) { FONT("Font"), STYLE("Style"), MOTION("In"), EXIT("Out"), COLOR("Color"), SIZE("Size");
+
+    val label: String get() = tr(labelEn)
+}
 
 /**
  * Edits one caption: its words, then Font / Style / In / Out / Color / Size.
@@ -278,16 +281,16 @@ fun TextEditorPanel(viewModel: EditorViewModel, layerId: String, onDismiss: () -
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(text = "Text", color = AdGagColors.OnBackground, style = MaterialTheme.typography.titleMedium)
+                Text(text = tr("Text"), color = AdGagColors.OnBackground, style = MaterialTheme.typography.titleMedium)
                 Row {
                     TextButton(onClick = {
                         viewModel.removeText(layerId)
                         onDismiss()
                     }) {
-                        Text(text = "Delete", color = AdGagColors.Danger, style = MaterialTheme.typography.labelLarge)
+                        Text(text = tr("Delete"), color = AdGagColors.Danger, style = MaterialTheme.typography.labelLarge)
                     }
                     TextButton(onClick = close) {
-                        Text(text = "Done", color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
+                        Text(text = tr("Done"), color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
@@ -296,7 +299,7 @@ fun TextEditorPanel(viewModel: EditorViewModel, layerId: String, onDismiss: () -
                 onValueChange = { viewModel.updateText(layer.copy(text = it.take(120))) },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = AdGagSpacing.lg.dp),
                 maxLines = 2,
-                placeholder = { Text("Type something", color = AdGagColors.OnSurfaceMuted) },
+                placeholder = { Text(tr("Type something"), color = AdGagColors.OnSurfaceMuted) },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = AdGagColors.OnBackground,
                     unfocusedTextColor = AdGagColors.OnBackground,
@@ -470,7 +473,7 @@ private fun ColorTab(layer: TextLayer, onChange: (TextLayer) -> Unit) {
             modifier = Modifier.padding(horizontal = AdGagSpacing.lg.dp),
             horizontalArrangement = Arrangement.spacedBy(AdGagSpacing.sm.dp),
         ) {
-            listOf("Text", "Effect colour").forEachIndexed { i, name ->
+            listOf(tr("Text"), tr("Effect colour")).forEachIndexed { i, name ->
                 val on = i == target
                 Row(
                     modifier = Modifier
@@ -514,7 +517,7 @@ private fun ColorTab(layer: TextLayer, onChange: (TextLayer) -> Unit) {
         // Full colour scale: drag along the spectrum (hue), plus white/black ends.
         SpectrumBar(onPick = ::set)
         Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
-        LabeledSlider("Opacity", layer.opacity, 0.1f..1f) { onChange(layer.copy(opacity = it)) }
+        LabeledSlider(tr("Opacity"), layer.opacity, 0.1f..1f) { onChange(layer.copy(opacity = it)) }
     }
 }
 
@@ -566,8 +569,8 @@ private fun SpectrumBar(onPick: (Int) -> Unit) {
 @Composable
 private fun SizeTab(layer: TextLayer, onChange: (TextLayer) -> Unit) {
     Column {
-        LabeledSlider("Size", layer.sizeFrac, 0.025f..0.2f) { onChange(layer.copy(sizeFrac = it)) }
-        LabeledSlider("Letter spacing", layer.letterSpacing, -0.05f..0.6f) { onChange(layer.copy(letterSpacing = it)) }
+        LabeledSlider(tr("Size"), layer.sizeFrac, 0.025f..0.2f) { onChange(layer.copy(sizeFrac = it)) }
+        LabeledSlider(tr("Letter spacing"), layer.letterSpacing, -0.05f..0.6f) { onChange(layer.copy(letterSpacing = it)) }
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = AdGagSpacing.lg.dp),
             horizontalArrangement = Arrangement.spacedBy(AdGagSpacing.sm.dp),
@@ -591,7 +594,7 @@ private fun SizeTab(layer: TextLayer, onChange: (TextLayer) -> Unit) {
             }
             Spacer(modifier = Modifier.weight(1f))
             TextButton(onClick = { onChange(layer.copy(rotationDeg = 0f, scale = 1f, x = 0.5f)) }) {
-                Text(text = "Straighten", color = AdGagColors.Accent, style = MaterialTheme.typography.labelMedium)
+                Text(text = tr("Straighten"), color = AdGagColors.Accent, style = MaterialTheme.typography.labelMedium)
             }
         }
     }

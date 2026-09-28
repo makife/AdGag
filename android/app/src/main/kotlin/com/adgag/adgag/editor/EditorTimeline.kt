@@ -92,10 +92,10 @@ fun EditorTimeline(
 
     Column(modifier = modifier) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(text = "Clips", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
+            Text(text = tr("Clips"), color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
             Text(
                 // OUTPUT length — what the 30s cap applies to (differs from the strip under slow motion).
-                text = (if (viewModel.speedRanges.isNotEmpty()) "slow-mo · " else "") +
+                text = (if (viewModel.speedRanges.isNotEmpty()) tr("slow-mo") + " · " else "") +
                     "${formatSeconds(viewModel.outputDurationMs)} / ${formatSeconds(MaxTotalDurationMs)}",
                 color = AdGagColors.OnSurfaceMuted,
                 style = MaterialTheme.typography.labelMedium,
@@ -116,7 +116,7 @@ fun EditorTimeline(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = if (viewModel.clips.size > 1) "Clip ${selected + 1} · trim" else "Trim",
+                    text = if (viewModel.clips.size > 1) tr("Clip {0} · trim", selected + 1) else tr("Trim"),
                     color = AdGagColors.OnSurfaceMuted,
                     style = MaterialTheme.typography.labelMedium,
                 )
@@ -129,7 +129,7 @@ fun EditorTimeline(
                     if (viewModel.clips.size > 1) {
                         Spacer(modifier = Modifier.width(AdGagSpacing.md.dp))
                         Text(
-                            text = "Delete clip",
+                            text = tr("Delete clip"),
                             color = AdGagColors.Danger,
                             style = MaterialTheme.typography.labelMedium,
                             modifier = Modifier.clickable { viewModel.removeClip(selected) },
@@ -146,7 +146,7 @@ fun EditorTimeline(
             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    text = if (selRange != null) "Slow motion · ${formatSpeed(selRange.speed)}" else "Slow motion · tap one to select",
+                    text = if (selRange != null) tr("Slow motion") + " · ${formatSpeed(selRange.speed)}" else tr("Slow motion · tap one to select"),
                     color = AdGagColors.OnSurfaceMuted,
                     style = MaterialTheme.typography.labelMedium,
                 )
@@ -161,7 +161,7 @@ fun EditorTimeline(
             Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
             // Same layout (and SOURCE time scale) as the clip strip, so a
             // range sits right under the footage it slows down.
-            AlignedRow(trailing = { AddRowItemButton(contentDescription = "Add slow motion", onClick = onAddSpeedRange) }) {
+            AlignedRow(trailing = { AddRowItemButton(contentDescription = tr("Add slow motion"), onClick = onAddSpeedRange) }) {
                 SpeedRow(viewModel, density, positionMs, onEditSpeedRange)
             }
         }
@@ -171,7 +171,7 @@ fun EditorTimeline(
             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    text = if (sel != null) "${sel.kind} · \"${sel.label.take(18)}\"" else "Text, stickers & sounds · tap one to select",
+                    text = if (sel != null) "${sel.kind} · \"${sel.label.take(18)}\"" else tr("Text, stickers & sounds · tap one to select"),
                     color = AdGagColors.OnSurfaceMuted,
                     style = MaterialTheme.typography.labelMedium,
                     maxLines = 1,
@@ -185,7 +185,7 @@ fun EditorTimeline(
                 }
             }
             Spacer(modifier = Modifier.height(AdGagSpacing.xs.dp))
-            AlignedRow(trailing = { AddRowItemButton(contentDescription = "Add text", onClick = onAddText) }) {
+            AlignedRow(trailing = { AddRowItemButton(contentDescription = tr("Add text"), onClick = onAddText) }) {
                 TextRow(viewModel, density, onEditText)
             }
         }
@@ -194,9 +194,9 @@ fun EditorTimeline(
             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    text = "Music" +
+                    text = tr("Music") +
                         (if (viewModel.musicSpeed != 1f) " · ${formatSpeed(viewModel.musicSpeed)}" else "") +
-                        (if (viewModel.musicLoop) " · loop" else ""),
+                        (if (viewModel.musicLoop) " · " + tr("loop") else ""),
                     color = AdGagColors.OnSurfaceMuted,
                     style = MaterialTheme.typography.labelMedium,
                 )
@@ -217,10 +217,10 @@ fun EditorTimeline(
             val songMs = viewModel.musicDurationMs ?: 0L
             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(text = "Song section", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
+                Text(text = tr("Song section"), color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
                 Text(
                     text = "${formatSeconds(viewModel.musicSourceStartMs)} – " +
-                        "${formatSeconds(viewModel.musicSourceStartMs + viewModel.musicPlayDurationMs)} of ${formatSeconds(songMs)}",
+                        tr("{0} of {1}", formatSeconds(viewModel.musicSourceStartMs + viewModel.musicPlayDurationMs), formatSeconds(songMs)),
                     color = AdGagColors.OnSurfaceMuted,
                     style = MaterialTheme.typography.labelMedium,
                 )
@@ -376,7 +376,7 @@ private fun MusicSettingsButton(onClick: () -> Unit) {
     ) {
         Icon(
             imageVector = Icons.Filled.Tune,
-            contentDescription = "Music settings",
+            contentDescription = tr("Music settings"),
             tint = AdGagColors.OnBackground,
             modifier = Modifier.size(18.dp),
         )
@@ -393,7 +393,7 @@ private fun AddClipButton(enabled: Boolean, onClick: () -> Unit) {
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(imageVector = Icons.Filled.Add, contentDescription = "Record another clip", tint = AdGagColors.OnBackground)
+        Icon(imageVector = Icons.Filled.Add, contentDescription = tr("Record another clip"), tint = AdGagColors.OnBackground)
     }
 }
 
@@ -485,7 +485,7 @@ private fun RowScope.ClipStrip(
             ) {
                 Icon(
                     imageVector = Icons.Filled.AutoAwesome,
-                    contentDescription = "Transition effect",
+                    contentDescription = tr("Transition effect"),
                     tint = AdGagColors.OnBackground,
                     modifier = Modifier.size(16.dp),
                 )
@@ -873,12 +873,12 @@ private data class OverlayBar(val id: String, val kind: String, val label: Strin
 @UnstableApi
 private fun overlayBars(viewModel: EditorViewModel): List<OverlayBar> =
     viewModel.stickerLayers.map { s ->
-        OverlayBar(s.id, "Sticker", viewModel.stickers.byId(s.stickerId)?.label ?: "Sticker", s.startMs, s.endMs, Color(0xFFFFB300))
+        OverlayBar(s.id, tr("Sticker"), tr(viewModel.stickers.byId(s.stickerId)?.label ?: "Sticker"), s.startMs, s.endMs, Color(0xFFFFB300))
     } + viewModel.textLayers.map { t ->
-        OverlayBar(t.id, "Text", t.text.lineSequence().first(), t.startMs, t.endMs, Color(t.color))
+        OverlayBar(t.id, tr("Text"), t.text.lineSequence().first(), t.startMs, t.endMs, Color(t.color))
     } + viewModel.soundLayers.mapNotNull { l ->
         viewModel.sfx.byId(l.sfxId)?.let { def ->
-            OverlayBar(l.id, "Sound", def.label, l.startMs, l.startMs + def.durationMs, Color(0xFF8C9BFF))
+            OverlayBar(l.id, tr("Sound"), tr(def.label), l.startMs, l.startMs + def.durationMs, Color(0xFF8C9BFF))
         }
     }
 

@@ -147,7 +147,7 @@ fun EditorScreen(
             if (range != null) {
                 speedSheetFor = range.id
             } else {
-                viewModel.showNotice("No room for slow motion — the Ad is already 30s. Trim it first.")
+                viewModel.showNotice(tr("No room for slow motion — the Ad is already 30s. Trim it first."))
             }
         }
         // Tapping a selected overlay (or its timeline bar) opens the matching editor.
@@ -195,8 +195,8 @@ fun EditorScreen(
             ) {
                 ScrimIconButton(
                     icon = null,
-                    text = "Cancel",
-                    contentDescription = "Cancel",
+                    text = tr("Cancel"),
+                    contentDescription = tr("Cancel"),
                     onClick = onCancel,
                 )
                 NextButton(
@@ -279,7 +279,7 @@ fun EditorScreen(
                 ) {
                     ScrimIconButton(
                         icon = Icons.Filled.PlayArrow,
-                        contentDescription = "Play",
+                        contentDescription = tr("Play"),
                         size = 64.dp,
                         onClick = { viewModel.togglePlayPause() },
                     )
@@ -319,10 +319,10 @@ fun EditorScreen(
                 PanelHandle(
                     collapsed = panelCollapsed,
                     label = when (panelKind) {
-                        PanelKind.EDITOR -> "Editor"
-                        PanelKind.TEXT -> "Text"
-                        PanelKind.STICKERS -> "Stickers"
-                        PanelKind.SOUNDS -> "Sound FX"
+                        PanelKind.EDITOR -> tr("Editor")
+                        PanelKind.TEXT -> tr("Text")
+                        PanelKind.STICKERS -> tr("Stickers")
+                        PanelKind.SOUNDS -> tr("Sound FX")
                     },
                     onCollapsedChange = { panelCollapsed = it },
                     onDone = if (panelKind == PanelKind.EDITOR) {
@@ -410,7 +410,7 @@ fun EditorScreen(
                         if (previewError != null) {
                             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
                             Text(
-                                text = "Preview problem: $previewError",
+                                text = tr("Preview problem: {0}", previewError),
                                 color = AdGagColors.Danger,
                                 style = MaterialTheme.typography.bodySmall,
                                 maxLines = 3,
@@ -421,7 +421,7 @@ fun EditorScreen(
                         if (error != null) {
                             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
                             Text(
-                                text = "Export failed: $error",
+                                text = tr("Export failed: {0}", error),
                                 color = AdGagColors.Danger,
                                 style = MaterialTheme.typography.bodySmall,
                                 maxLines = 3,
@@ -520,48 +520,48 @@ private fun ToolRow(
     ) {
         EditorToolButton(
             icon = Icons.Filled.TextFields,
-            label = if (viewModel.textLayers.isEmpty()) "Text" else "Text (${viewModel.textLayers.size})",
+            label = if (viewModel.textLayers.isEmpty()) tr("Text") else tr("Text ({0})", viewModel.textLayers.size),
             active = viewModel.textLayers.isNotEmpty(),
             onClick = onText,
         )
         EditorToolButton(
             icon = Icons.Filled.EmojiEmotions,
-            label = if (viewModel.stickerLayers.isEmpty()) "Stickers" else "Stickers (${viewModel.stickerLayers.size})",
+            label = if (viewModel.stickerLayers.isEmpty()) tr("Stickers") else tr("Stickers ({0})", viewModel.stickerLayers.size),
             active = viewModel.stickerLayers.isNotEmpty(),
             onClick = onStickers,
         )
         EditorToolButton(
             icon = Icons.Filled.GraphicEq,
-            label = if (viewModel.soundLayers.isEmpty()) "Sound FX" else "Sound FX (${viewModel.soundLayers.size})",
+            label = if (viewModel.soundLayers.isEmpty()) tr("Sound FX") else tr("Sound FX ({0})", viewModel.soundLayers.size),
             active = viewModel.soundLayers.isNotEmpty(),
             onClick = onSounds,
         )
         EditorToolButton(
             icon = Icons.Filled.RotateRight,
-            label = "Rotate",
+            label = tr("Rotate"),
             onClick = { viewModel.rotateNinety() },
         )
         EditorToolButton(
             icon = if (viewModel.isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
-            label = if (viewModel.isMuted) "Muted" else "Mute",
+            label = if (viewModel.isMuted) tr("Muted") else tr("Mute"),
             active = viewModel.isMuted,
             onClick = { viewModel.toggleMute() },
         )
         EditorToolButton(
             icon = Icons.Filled.SlowMotionVideo,
-            label = if (viewModel.speedRanges.isEmpty()) "Slow-mo" else "Slow-mo (${viewModel.speedRanges.size})",
+            label = if (viewModel.speedRanges.isEmpty()) tr("Slow-mo") else tr("Slow-mo ({0})", viewModel.speedRanges.size),
             active = viewModel.speedRanges.isNotEmpty(),
             onClick = onSpeed,
         )
         EditorToolButton(
             icon = Icons.Filled.AutoFixHigh,
-            label = if (viewModel.videoFilter == VideoFilter.NONE) "Effects" else viewModel.videoFilter.label,
+            label = if (viewModel.videoFilter == VideoFilter.NONE) tr("Effects") else viewModel.videoFilter.label,
             active = viewModel.videoFilter != VideoFilter.NONE,
             onClick = onEffects,
         )
         EditorToolButton(
             icon = if (viewModel.musicPath != null) Icons.Filled.MusicNote else Icons.Filled.MusicOff,
-            label = if (viewModel.musicPath != null) "Music" else "Add music",
+            label = if (viewModel.musicPath != null) tr("Music") else tr("Add music"),
             active = viewModel.musicPath != null,
             onClick = onMusic,
         )
@@ -648,7 +648,7 @@ private fun NextButton(enabled: Boolean, onClick: () -> Unit) {
     ) {
         TextButton(onClick = onClick, enabled = enabled) {
             Text(
-                text = "Next",
+                text = tr("Next"),
                 color = Color.White,
                 style = MaterialTheme.typography.labelLarge,
                 fontSize = 15.sp,
@@ -661,7 +661,7 @@ private fun NextButton(enabled: Boolean, onClick: () -> Unit) {
 private fun ExportProgress(progress: Float) {
     Column {
         Text(
-            text = "Exporting your Ad…",
+            text = tr("Exporting your Ad…"),
             color = AdGagColors.OnSurfaceMuted,
             style = MaterialTheme.typography.bodyMedium,
         )
@@ -735,13 +735,13 @@ private fun PanelHandle(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "$label · drag up to edit",
+                    text = tr("{0} · drag up to edit", label),
                     color = AdGagColors.OnSurfaceMuted,
                     style = MaterialTheme.typography.labelMedium,
                 )
                 if (onDone != null) {
                     TextButton(onClick = onDone) {
-                        Text(text = "Done", color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
+                        Text(text = tr("Done"), color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
                     }
                 } else {
                     Spacer(modifier = Modifier.height(40.dp))

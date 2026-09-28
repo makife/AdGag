@@ -38,7 +38,9 @@ enum ClipTransition: String, Codable, CaseIterable {
   case SLIDE_FROM_RIGHT, SLIDE_FROM_LEFT, SLIDE_FROM_BOTTOM, SLIDE_FROM_TOP
   case ZOOM_IN, ZOOM_OUT, SPIN
 
-  var label: String {
+  /// Shown in the editor's language (`tr`).
+  var label: String { tr(labelEn) }
+  var labelEn: String {
     switch self {
     case .NONE: return "Cut"
     case .FADE: return "Fade in"
@@ -65,7 +67,9 @@ enum VideoFilter: String, Codable, CaseIterable {
   case NONE, BW, SEPIA, VINTAGE, COOL, WARM, VIVID, INVERT, FISHEYE, OLD_TV, STATIC, VHS
   case GLITCH, PIXELATE, MIRROR, FLOWERS, HEARTS, FILM, IVY, BALLOONS, STARS, CONFETTI
 
-  var label: String {
+  /// Shown in the editor's language (`tr`).
+  var label: String { tr(labelEn) }
+  var labelEn: String {
     switch self {
     case .NONE: return "Original"
     case .BW: return "B&W"

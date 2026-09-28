@@ -84,21 +84,21 @@ struct SoundPanel: View {
     let store = SfxStore.shared
     VStack(alignment: .leading, spacing: 8) {
       HStack {
-        Text(editing != nil ? "Change sound" : "Sound FX").font(.headline).foregroundColor(.white)
+        Text(editing != nil ? tr("Change sound") : tr("Sound FX")).font(.headline).foregroundColor(.white)
         Spacer()
         if let editing {
-          Button("Delete") {
+          Button(tr("Delete")) {
             viewModel.removeSound(editing.id)
             onClose()
           }
           .foregroundColor(EditorPalette.danger)
         }
-        Button("Done", action: onClose).foregroundColor(EditorPalette.accent)
+        Button(tr("Done"), action: onClose).foregroundColor(EditorPalette.accent)
       }
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 8) {
-          chip("All", selected: category == nil) { category = nil }
-          ForEach(store.categories, id: \.self) { c in chip(c, selected: category == c) { category = c } }
+          chip(tr("All"), selected: category == nil) { category = nil }
+          ForEach(store.categories, id: \.self) { c in chip(tr(c), selected: category == c) { category = c } }
         }
       }
       ScrollView {
@@ -108,7 +108,7 @@ struct SoundPanel: View {
             HStack(spacing: 4) {
               Image(systemName: "play.fill").font(.system(size: 11)).foregroundColor(EditorPalette.muted)
               VStack(alignment: .leading, spacing: 1) {
-                Text(def.label).font(.caption).foregroundColor(.white).lineLimit(1)
+                Text(tr(def.label)).font(.caption).foregroundColor(.white).lineLimit(1)
                 Text(formatPreciseSeconds(def.durationMs)).font(.caption2).foregroundColor(EditorPalette.muted)
               }
               Spacer(minLength: 0)
@@ -125,7 +125,7 @@ struct SoundPanel: View {
               } label: {
                 Image(systemName: "plus").foregroundColor(.white).frame(width: 36, height: 44)
               }
-              .accessibilityLabel(editing != nil ? "Use this sound" : "Add")
+              .accessibilityLabel(editing != nil ? tr("Use this sound") : tr("Add"))
             }
             .padding(.leading, 8)
             .frame(height: 48)

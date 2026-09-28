@@ -41,7 +41,7 @@ import kotlin.math.sin
  * hash of the point's POSITION, so a corner looks the same from either
  * edge.
  */
-enum class VideoFilter(val label: String, val fragment: String?) {
+enum class VideoFilter(private val labelEn: String, val fragment: String?) {
     NONE("Original", null),
     BW("B&W", """
         vec4 c = tex(vUv);
@@ -242,7 +242,10 @@ enum class VideoFilter(val label: String, val fragment: String?) {
             if (abs(rq.x) < 0.008 && abs(rq.y) < 0.004) col = palette(h3 / 0.7);
         }
         gl_FragColor = vec4(col, c.a);
-    """),
+    """);
+
+    /** Shown in the editor's language ([tr]). */
+    val label: String get() = tr(labelEn)
 }
 
 /** Shared GLSL: precision, inputs and helpers every [VideoFilter.fragment] body can use. */

@@ -74,12 +74,12 @@ fun TransitionPickerSheet(viewModel: EditorViewModel, boundary: Int, onDismiss: 
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Clip ${boundary + 1} → Clip ${boundary + 2}",
+                    text = tr("Clip {0} → Clip {1}", boundary + 1, boundary + 2),
                     color = AdGagColors.OnBackground,
                     style = MaterialTheme.typography.titleMedium,
                 )
                 TextButton(onClick = onDismiss) {
-                    Text(text = "Done", color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
+                    Text(text = tr("Done"), color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
                 }
             }
             Spacer(modifier = Modifier.height(AdGagSpacing.sm.dp))
@@ -103,7 +103,7 @@ fun TransitionPickerSheet(viewModel: EditorViewModel, boundary: Int, onDismiss: 
                 modifier = Modifier.fillMaxWidth().padding(horizontal = AdGagSpacing.lg.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(text = "Duration", color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
+                Text(text = tr("Duration"), color = AdGagColors.OnSurfaceMuted, style = MaterialTheme.typography.labelMedium)
                 Text(
                     text = if (enabled) "%.1fs".format(spec.durationMs / 1000f) else "—",
                     color = AdGagColors.OnBackground,

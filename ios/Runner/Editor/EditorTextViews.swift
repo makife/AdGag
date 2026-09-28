@@ -232,25 +232,25 @@ struct TextEditorPanel: View {
     if let layer = viewModel.textLayers.first(where: { $0.id == layerId }) {
       VStack(alignment: .leading, spacing: 10) {
         HStack(spacing: 8) {
-          Text("Text").font(.headline).foregroundColor(.white)
-          TextField("Type something", text: Binding(
+          Text(tr("Text")).font(.headline).foregroundColor(.white)
+          TextField(tr("Type something"), text: Binding(
             get: { layer.text },
             set: { var l = layer; l.text = String($0.prefix(120)); viewModel.updateText(l) }))
             .foregroundColor(.white)
             .padding(10)
             .background(EditorPalette.surface)
             .clipShape(RoundedRectangle(cornerRadius: 8))
-          Button("Delete") {
+          Button(tr("Delete")) {
             viewModel.removeText(layerId)
             onClose()
           }
           .foregroundColor(EditorPalette.danger)
-          Button("Done", action: onClose).foregroundColor(EditorPalette.accent)
+          Button(tr("Done"), action: onClose).foregroundColor(EditorPalette.accent)
         }
         HStack(spacing: 6) {
           ForEach(TextTab.allCases, id: \.self) { t in
             Button { tab = t } label: {
-              Text(t.rawValue).font(.caption).fontWeight(.semibold)
+              Text(tr(t.rawValue)).font(.caption).fontWeight(.semibold)
                 .foregroundColor(t == tab ? EditorPalette.accent : .white)
                 .frame(maxWidth: .infinity).padding(.vertical, 7)
                 .background(t == tab ? EditorPalette.accent.opacity(0.25) : EditorPalette.surface)
@@ -407,7 +407,7 @@ private struct ColorTab: View {
           Button { target = i } label: {
             HStack(spacing: 6) {
               Circle().fill(swiftUIColor(i == 0 ? layer.color : layer.accentColor)).frame(width: 12, height: 12)
-              Text(i == 0 ? "Text" : "Effect colour").font(.caption)
+              Text(i == 0 ? tr("Text") : tr("Effect colour")).font(.caption)
                 .foregroundColor(i == target ? EditorPalette.accent : .white)
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
@@ -439,7 +439,7 @@ private struct ColorTab: View {
           })
       }
       .frame(height: 26)
-      LabeledSlider(title: "Opacity", value: layer.opacity, range: 0.1...1) {
+      LabeledSlider(title: tr("Opacity"), value: layer.opacity, range: 0.1...1) {
         var l = layer; l.opacity = $0; onChange(l)
       }
     }
@@ -452,10 +452,10 @@ private struct SizeTab: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
-      LabeledSlider(title: "Size", value: layer.sizeFrac, range: 0.025...0.2) {
+      LabeledSlider(title: tr("Size"), value: layer.sizeFrac, range: 0.025...0.2) {
         var l = layer; l.sizeFrac = $0; onChange(l)
       }
-      LabeledSlider(title: "Letter spacing", value: layer.letterSpacing, range: -0.05...0.6) {
+      LabeledSlider(title: tr("Letter spacing"), value: layer.letterSpacing, range: -0.05...0.6) {
         var l = layer; l.letterSpacing = $0; onChange(l)
       }
       HStack(spacing: 8) {
@@ -469,7 +469,7 @@ private struct SizeTab: View {
           }
         }
         Spacer()
-        Button("Straighten") {
+        Button(tr("Straighten")) {
           var l = layer; l.rotationDeg = 0; l.scale = 1; l.x = 0.5; onChange(l)
         }
         .font(.caption).foregroundColor(EditorPalette.accent)

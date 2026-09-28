@@ -80,7 +80,7 @@ data class TextLayer(
 enum class TextAlignment { LEFT, CENTER, RIGHT }
 
 /** The static look of the letters. [TextRenderer] implements each one. */
-enum class TextStyleEffect(val label: String) {
+enum class TextStyleEffect(private val labelEn: String) {
     NONE("Plain"),
     OUTLINE("Outline"),
     SHADOW("Shadow"),
@@ -106,11 +106,14 @@ enum class TextStyleEffect(val label: String) {
     FIRE("Fire"),
     ICE("Ice"),
     SPLIT("Split"),
-    CANDY("Candy"),
+    CANDY("Candy");
+
+    /** Shown in the editor's language ([tr]). */
+    val label: String get() = tr(labelEn)
 }
 
 /** How a caption leaves at its end. */
-enum class TextExit(val label: String) {
+enum class TextExit(private val labelEn: String) {
     NONE("None"),
     FADE("Fade"),
     SHRINK("Shrink"),
@@ -123,11 +126,14 @@ enum class TextExit(val label: String) {
     ERASE("Erase"),
     FALL("Fall"),
     SCATTER("Scatter"),
-    FLICKER_OUT("Flicker"),
+    FLICKER_OUT("Flicker");
+
+    /** Shown in the editor's language ([tr]). */
+    val label: String get() = tr(labelEn)
 }
 
 /** Motion: entrances (play once at the start) and loops (for the whole time on screen). */
-enum class TextAnimation(val label: String) {
+enum class TextAnimation(private val labelEn: String) {
     NONE("None"),
     FADE("Fade"),
     POP("Pop"),
@@ -147,7 +153,10 @@ enum class TextAnimation(val label: String) {
     PULSE("Pulse"),
     SWING("Swing"),
     FLICKER("Flicker"),
-    RAINBOW("Rainbow"),
+    RAINBOW("Rainbow");
+
+    /** Shown in the editor's language ([tr]). */
+    val label: String get() = tr(labelEn)
 }
 
 /**

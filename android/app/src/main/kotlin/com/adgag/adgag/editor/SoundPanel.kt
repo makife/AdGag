@@ -61,8 +61,8 @@ fun SoundPanel(viewModel: EditorViewModel, editingId: String?, onDismiss: () -> 
                 .padding(horizontal = AdGagSpacing.lg.dp),
             horizontalArrangement = Arrangement.spacedBy(AdGagSpacing.sm.dp),
         ) {
-            CategoryChip(label = "All", selected = category == null) { category = null }
-            store.categories.forEach { c -> CategoryChip(label = c, selected = category == c) { category = c } }
+            CategoryChip(label = tr("All"), selected = category == null) { category = null }
+            store.categories.forEach { c -> CategoryChip(label = tr(c), selected = category == c) { category = c } }
         }
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 104.dp),
@@ -88,13 +88,13 @@ fun SoundPanel(viewModel: EditorViewModel, editingId: String?, onDismiss: () -> 
                 ) {
                     Icon(
                         imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = "Listen",
+                        contentDescription = tr("Listen"),
                         tint = AdGagColors.OnSurfaceMuted,
                         modifier = Modifier.padding(start = 6.dp).size(16.dp),
                     )
                     Column(modifier = Modifier.weight(1f).padding(horizontal = 4.dp)) {
                         Text(
-                            text = def.label,
+                            text = tr(def.label),
                             color = AdGagColors.OnBackground,
                             style = MaterialTheme.typography.labelMedium,
                             maxLines = 1,
@@ -108,7 +108,7 @@ fun SoundPanel(viewModel: EditorViewModel, editingId: String?, onDismiss: () -> 
                     }
                     Icon(
                         imageVector = Icons.Filled.Add,
-                        contentDescription = if (editing != null) "Use this sound" else "Add",
+                        contentDescription = if (editing != null) tr("Use this sound") else tr("Add"),
                         tint = AdGagColors.OnBackground,
                         modifier = Modifier
                             .size(48.dp)
@@ -142,7 +142,7 @@ fun SoundPanelHeader(viewModel: EditorViewModel, editingId: String?, onDismiss: 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = if (editing != null) "Change sound" else "Sound FX",
+            text = if (editing != null) tr("Change sound") else tr("Sound FX"),
             color = AdGagColors.OnBackground,
             style = MaterialTheme.typography.titleMedium,
         )
@@ -152,11 +152,11 @@ fun SoundPanelHeader(viewModel: EditorViewModel, editingId: String?, onDismiss: 
                     viewModel.removeSound(editing.id)
                     onDismiss()
                 }) {
-                    Text(text = "Delete", color = AdGagColors.Danger, style = MaterialTheme.typography.labelLarge)
+                    Text(text = tr("Delete"), color = AdGagColors.Danger, style = MaterialTheme.typography.labelLarge)
                 }
             }
             TextButton(onClick = onDismiss) {
-                Text(text = "Done", color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
+                Text(text = tr("Done"), color = AdGagColors.Accent, style = MaterialTheme.typography.labelLarge)
             }
         }
     }
