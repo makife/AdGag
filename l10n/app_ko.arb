@@ -83,6 +83,7 @@
   "deleteFailed": "삭제하지 못했어요: {error}",
   "reportThanks": "고마워요. 확인해 볼게요.",
   "reportFailed": "신고를 보내지 못했어요: {error}",
+  "reportReasonChildSafety": "아동 안전",
   "reportReasonNudity": "나체 또는 성적인 콘텐츠",
   "reportReasonViolence": "폭력",
   "reportReasonHate": "혐오 또는 괴롭힘",

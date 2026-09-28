@@ -330,6 +330,8 @@ K("reportFailed", "Couldn't send report: {error}", "Şikayet gönderilemedi: {er
   "Não foi possível enviar a denúncia: {error}", "Meldung fehlgeschlagen: {error}", "Signalement impossible : {error}",
   "Impossibile inviare la segnalazione: {error}", "Не удалось отправить жалобу: {error}", "تعذّر إرسال البلاغ: {error}",
   "Gagal mengirim laporan: {error}", "報告を送信できませんでした: {error}", "신고를 보내지 못했어요: {error}")
+K("reportReasonChildSafety", "Child safety", "Çocuk güvenliği", "Seguridad infantil", "Segurança infantil", "Kinderschutz",
+  "Sécurité des enfants", "Sicurezza dei minori", "Безопасность детей", "سلامة الأطفال", "Keselamatan anak", "子どもの安全", "아동 안전")
 K("reportReasonNudity", "Nudity or sexual content", "Çıplaklık veya cinsel içerik", "Desnudos o contenido sexual", "Nudez ou conteúdo sexual",
   "Nacktheit oder sexuelle Inhalte", "Nudité ou contenu sexuel", "Nudità o contenuti sessuali", "Нагота или сексуальный контент",
   "عُري أو محتوى جنسي", "Ketelanjangan atau konten seksual", "ヌードや性的なコンテンツ", "나체 또는 성적인 콘텐츠")

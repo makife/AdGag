@@ -83,6 +83,7 @@
   "deleteFailed": "تعذّر الحذف: {error}",
   "reportThanks": "شكرًا، سنراجع ذلك.",
   "reportFailed": "تعذّر إرسال البلاغ: {error}",
+  "reportReasonChildSafety": "سلامة الأطفال",
   "reportReasonNudity": "عُري أو محتوى جنسي",
   "reportReasonViolence": "عنف",
   "reportReasonHate": "كراهية أو مضايقة",

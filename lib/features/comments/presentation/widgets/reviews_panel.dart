@@ -7,6 +7,8 @@ import "../../../../core/localization/generated/app_localizations.dart";
 import "../../../../core/supabase/supabase_providers.dart";
 import "../../../../core/theme/app_spacing.dart";
 import "../../../../shared/widgets/mini_avatar.dart";
+import "../../../moderation/domain/report_target_type.dart";
+import "../../../moderation/presentation/widgets/report_sheet.dart";
 import "../../domain/comment.dart";
 import "../providers/comments_controller.dart";
 
@@ -142,7 +144,20 @@ class _ReviewsPanelState extends ConsumerState<ReviewsPanel> {
                                   ref.read(commentsControllerProvider(widget.adId).notifier).deleteOwn(comment.id),
                                 ),
                               )
-                            : null,
+                            : currentUserId == null
+                                ? null
+                                : IconButton(
+                                    icon: const Icon(Icons.flag_outlined, size: 18),
+                                    tooltip: AppLocalizations.of(context).reportAd,
+                                    onPressed: () => unawaited(
+                                      showModalBottomSheet<void>(
+                                        context: context,
+                                        isScrollControlled: true,
+                                        builder: (BuildContext context) =>
+                                            ReportSheet(targetType: ReportTargetType.comment, targetId: comment.id),
+                                      ),
+                                    ),
+                                  ),
                       );
                     },
                   );

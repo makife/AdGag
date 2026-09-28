@@ -83,6 +83,7 @@
   "deleteFailed": "Impossibile eliminare: {error}",
   "reportThanks": "Grazie, daremo un'occhiata.",
   "reportFailed": "Impossibile inviare la segnalazione: {error}",
+  "reportReasonChildSafety": "Sicurezza dei minori",
   "reportReasonNudity": "Nudità o contenuti sessuali",
   "reportReasonViolence": "Violenza",
   "reportReasonHate": "Odio o molestie",

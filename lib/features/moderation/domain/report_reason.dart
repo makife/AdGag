@@ -1,5 +1,10 @@
-/// Mirrors the `report_reason` Postgres enum (section 30).
+import "../../../core/localization/generated/app_localizations.dart";
+
+/// Mirrors the `report_reason` Postgres enum (section 30). [childSafety] is
+/// first on purpose: Google Play's Child Safety Standards require in-app
+/// reporting of child safety concerns, and those reports get priority.
 enum ReportReason {
+  childSafety,
   nudity,
   violence,
   hateHarassment,
@@ -12,6 +17,7 @@ enum ReportReason {
 
   /// The exact enum label the database expects (snake_case).
   String get dbValue => switch (this) {
+        ReportReason.childSafety => "child_safety",
         ReportReason.nudity => "nudity",
         ReportReason.violence => "violence",
         ReportReason.hateHarassment => "hate_harassment",
@@ -23,18 +29,17 @@ enum ReportReason {
         ReportReason.other => "other",
       };
 
-  /// English label. The matching `reportReason*` keys already exist in
-  /// l10n/app_en.arb and app_tr.arb — swap this for an `AppLocalizations`
-  /// lookup when the report sheet is wired through localization.
-  String get label => switch (this) {
-        ReportReason.nudity => "Nudity or sexual content",
-        ReportReason.violence => "Violence",
-        ReportReason.hateHarassment => "Hate or harassment",
-        ReportReason.bullying => "Bullying",
-        ReportReason.dangerousActivity => "Dangerous activity",
-        ReportReason.spamScam => "Spam or scam",
-        ReportReason.copyright => "Copyright",
-        ReportReason.impersonation => "Impersonation",
-        ReportReason.other => "Other",
+  /// The reason as shown in the report sheet, in the app's language.
+  String label(AppLocalizations l10n) => switch (this) {
+        ReportReason.childSafety => l10n.reportReasonChildSafety,
+        ReportReason.nudity => l10n.reportReasonNudity,
+        ReportReason.violence => l10n.reportReasonViolence,
+        ReportReason.hateHarassment => l10n.reportReasonHate,
+        ReportReason.bullying => l10n.reportReasonBullying,
+        ReportReason.dangerousActivity => l10n.reportReasonDangerous,
+        ReportReason.spamScam => l10n.reportReasonSpam,
+        ReportReason.copyright => l10n.reportReasonCopyright,
+        ReportReason.impersonation => l10n.reportReasonImpersonation,
+        ReportReason.other => l10n.reportReasonOther,
       };
 }

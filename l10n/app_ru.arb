@@ -83,6 +83,7 @@
   "deleteFailed": "Не удалось удалить: {error}",
   "reportThanks": "Спасибо, мы проверим.",
   "reportFailed": "Не удалось отправить жалобу: {error}",
+  "reportReasonChildSafety": "Безопасность детей",
   "reportReasonNudity": "Нагота или сексуальный контент",
   "reportReasonViolence": "Насилие",
   "reportReasonHate": "Ненависть или домогательства",

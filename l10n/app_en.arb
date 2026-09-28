@@ -156,6 +156,7 @@
       }
     }
   },
+  "reportReasonChildSafety": "Child safety",
   "reportReasonNudity": "Nudity or sexual content",
   "reportReasonViolence": "Violence",
   "reportReasonHate": "Hate or harassment",

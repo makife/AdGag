@@ -83,6 +83,7 @@
   "deleteFailed": "Silinemedi: {error}",
   "reportThanks": "Teşekkürler, inceleyeceğiz.",
   "reportFailed": "Şikayet gönderilemedi: {error}",
+  "reportReasonChildSafety": "Çocuk güvenliği",
   "reportReasonNudity": "Çıplaklık veya cinsel içerik",
   "reportReasonViolence": "Şiddet",
   "reportReasonHate": "Nefret veya taciz",

@@ -5,10 +5,12 @@ import "package:adgag/features/moderation/domain/report_target_type.dart";
 
 void main() {
   group("ReportReason.dbValue", () {
-    // Mirrors the report_reason Postgres enum exactly (0012_reports_and_blocks.sql).
+    // Mirrors the report_reason Postgres enum exactly (0012_reports_and_blocks.sql
+    // + child_safety from 0020_child_safety_report_reason.sql).
     // A mismatch here would make every report fail with a Postgres enum
     // cast error, so this is worth pinning down explicitly.
     const Map<ReportReason, String> expected = <ReportReason, String>{
+      ReportReason.childSafety: "child_safety",
       ReportReason.nudity: "nudity",
       ReportReason.violence: "violence",
       ReportReason.hateHarassment: "hate_harassment",

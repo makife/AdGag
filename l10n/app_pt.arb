@@ -83,6 +83,7 @@
   "deleteFailed": "Não foi possível excluir: {error}",
   "reportThanks": "Obrigado, vamos analisar.",
   "reportFailed": "Não foi possível enviar a denúncia: {error}",
+  "reportReasonChildSafety": "Segurança infantil",
   "reportReasonNudity": "Nudez ou conteúdo sexual",
   "reportReasonViolence": "Violência",
   "reportReasonHate": "Ódio ou assédio",

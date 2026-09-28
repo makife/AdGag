@@ -8,7 +8,9 @@ import "../../../../core/localization/generated/app_localizations.dart";
 import "../../../../core/supabase/supabase_providers.dart";
 import "../../../../core/theme/app_spacing.dart";
 import "../../../feed/domain/ad.dart";
+import "../../../moderation/domain/report_target_type.dart";
 import "../../../moderation/presentation/providers/moderation_providers.dart";
+import "../../../moderation/presentation/widgets/report_sheet.dart";
 import "../../../social/presentation/providers/social_providers.dart";
 import "../../../subjects/presentation/screens/subject_ads_viewer_screen.dart";
 import "../../domain/public_profile.dart";
@@ -80,6 +82,18 @@ class _ProfileBody extends ConsumerWidget {
                         icon: const Icon(Icons.block_outlined),
                         tooltip: AppLocalizations.of(context).blockUser,
                         onPressed: () => unawaited(_block(context, ref)),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.flag_outlined),
+                        tooltip: AppLocalizations.of(context).reportAd,
+                        onPressed: () => unawaited(
+                          showModalBottomSheet<void>(
+                            context: context,
+                            isScrollControlled: true,
+                            builder: (BuildContext context) =>
+                                ReportSheet(targetType: ReportTargetType.user, targetId: profile.id),
+                          ),
+                        ),
                       ),
                     ],
                   ),

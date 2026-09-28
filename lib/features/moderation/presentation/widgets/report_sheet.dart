@@ -71,7 +71,7 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
             else
               ...ReportReason.values.map(
                 (ReportReason reason) => ListTile(
-                  title: Text(reason.label),
+                  title: Text(reason.label(AppLocalizations.of(context))),
                   onTap: () => unawaited(_submit(reason)),
                 ),
               ),

@@ -83,6 +83,7 @@
   "deleteFailed": "Löschen fehlgeschlagen: {error}",
   "reportThanks": "Danke – wir sehen es uns an.",
   "reportFailed": "Meldung fehlgeschlagen: {error}",
+  "reportReasonChildSafety": "Kinderschutz",
   "reportReasonNudity": "Nacktheit oder sexuelle Inhalte",
   "reportReasonViolence": "Gewalt",
   "reportReasonHate": "Hass oder Belästigung",

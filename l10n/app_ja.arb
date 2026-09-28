@@ -83,6 +83,7 @@
   "deleteFailed": "削除できませんでした: {error}",
   "reportThanks": "ありがとうございます。確認します。",
   "reportFailed": "報告を送信できませんでした: {error}",
+  "reportReasonChildSafety": "子どもの安全",
   "reportReasonNudity": "ヌードや性的なコンテンツ",
   "reportReasonViolence": "暴力",
   "reportReasonHate": "ヘイトや嫌がらせ",

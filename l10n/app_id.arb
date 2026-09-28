@@ -83,6 +83,7 @@
   "deleteFailed": "Gagal menghapus: {error}",
   "reportThanks": "Terima kasih, akan kami periksa.",
   "reportFailed": "Gagal mengirim laporan: {error}",
+  "reportReasonChildSafety": "Keselamatan anak",
   "reportReasonNudity": "Ketelanjangan atau konten seksual",
   "reportReasonViolence": "Kekerasan",
   "reportReasonHate": "Kebencian atau pelecehan",
