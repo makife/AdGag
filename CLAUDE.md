@@ -1444,22 +1444,30 @@ The ultimate product promise is:
 
 Repo: `C:\Users\LENOVO10OCT2020\Desktop\makifbilgisayar\AdGag`, brand name **AdGag** (codename `everything_is_an_ad` retired — the real name was decided). 14 commits, 124 `lib/` files, 14 test files (59 test cases), 17 SQL migrations, 2 Supabase Edge Functions. Full narrative detail for all of this lives in `README.md` (architecture, ER model, RLS plan, tech choices, and — most importantly — the "Verification log" entries, which are the authoritative record of what's actually been proven against real infrastructure vs. only written).
 
-## >>> RESUME HERE (last session ended 2026-09-27, commit 39bdef3) <<<
+## >>> RESUME HERE (last session ended 2026-09-28, version 0.1.4+5) <<<
 
-Everything is committed and pushed to `master` (github.com/makife/AdGag). Android debug APK built (`flutter build apk --debug --dart-define-from-file=env/dev.json`, kernel_blob check = 1); iOS only compiles in CI (simulator build + template XCTest green) — **no iOS code has ever run on a device or simulator UI.**
+Everything is committed and pushed to `master` (github.com/makife/AdGag). Current app version **0.1.4+5**; signed release AAB + APK built locally (`flutter build appbundle|apk --release --dart-define-from-file=env/dev.json`, config check `unzip -p … libapp.so | grep -c <project ref>`), copies on the owner's Desktop in "AdGag Play Store gorselleri". **Android CI now works** (secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ENV_DEV_JSON added 2026-09-28) and iOS CI (simulator build) is green on every commit since 57d2614. iOS has still never run on a device.
 
-**Done on 2026-09-27 (details in the dated entries below, newest first):**
-1. Feed: nav-bar double counting fixed, white seekable scrubber, live REVIEWS badge, mini avatars, settle-time page activation, reviews panel shrinks the video.
-2. iOS native editor ported to parity with Android (AVFoundation composition + custom compositor + Core Image Metal effects); iOS CI finally compiles real code.
-3. Text effects (both editors): 39 fonts (all with Turkish letters), 26 styles, 20 entrance/loop motions + 12 exit ("Out") effects, colour swatches + spectrum, size/spacing/alignment, drag/pinch/twist on the preview, timeline row; captions burned in by a composition-level overlay.
-4. Animated stickers (both): 43 Google Noto Animated Emoji (CC BY 4.0) as sprite sheets; "Stickers" tool next to "Text"; share the overlay timeline row with captions.
-5. Bottom panel with a grab bar (drag down = video grows) and slide-up panel transitions; Size/Color tabs scroll; animated sticker picker.
-6. Release-build bug: INTERNET permission added to the main Android manifest.
-7. GIPHY search built then REMOVED (production key is paid) — owner doesn't want paid services without asking.
+**Store state**: the owner is filling in Google Play Console. Live policy pages (Netlify, one site each):
+- Privacy policy: https://fanciful-medovik-d846a9.netlify.app/ (source `docs/privacy-policy/index.html`)
+- Child safety standards: https://prismatic-mooncake-f88276.netlify.app/ (`docs/child-safety/index.html`)
+- Terms of Service + Community Guidelines: https://loquacious-vacherin-e7bd8c.netlify.app/ (`docs/terms/index.html`, links the other two by these absolute URLs)
+Contact address on all pages: makifergan@gmail.com. Play listing images + 512px icon: `tool/store/make_store_images.py` (MOCKUPS — swap real screenshots in with `--screens DIR`).
 
-**Waiting on the owner's device test of the latest APK.** Top things to check: (a) exported Ad actually contains captions + stickers (Media3 composition-level `OverlayEffect` in Transformer has never run — if they're missing, move the overlay into each clip's effects with a per-clip time offset); (b) grab-bar collapse/expand and slide-up animation feel; (c) Size tab scrolling; (d) animated sticker picker performance on a mid-range phone; (e) export time with stickers on screen (overlay redraws every frame).
+**Version rule**: Play needs a higher versionCode for every upload — bump `pubspec.yaml` `version: x.y.z+N` before each release build (CI uses `github.run_number` as the build number instead; don't mix local and CI uploads without checking the last versionCode).
 
-**Open items / ideas not started:** an "Open source licenses" screen (`showLicensePage`) before store release; privacy policy / store data-safety forms must mention third-party processing (Supabase, Mux); Apple Developer account needed for TestFlight; the long-standing "no real video through Mux end-to-end" verification gap; push notifications not dispatched; Universal/App Links not hosted.
+**Still to do before launch**: in-app account deletion (Play requires it for apps with sign-up; today it's by email); Mux asset deletion when an Ad is deleted (privacy policy promises it within 30 days); sign-up age check (13+ promised in the policies); a licensed or CC0 music library is optional (user-picked music is the uploader's responsibility per the Terms); iOS needs an Apple Developer account for TestFlight.
+
+## Play policy pages, child-safety reporting, blocking that visibly works, feed releases decoders, Market previews (2026-09-28)
+
+- **Child safety (Play form)**: `docs/child-safety/index.html`; new report reason `child_safety` (migration `0020`, **applied live** and verified in `pg_enum`, first in the list); `ReportReason.label(l10n)` — the report sheet was showing English before. Reports now also possible on other people's profiles (flag button) and reviews (flag on non-own reviews); before only Ads were reportable.
+- **Terms of Service** (`docs/terms/index.html`): content license to AdGag, uploader responsible for music/footage they add, takedown process, repeat-infringer rule, community guidelines, Turkish law. Answer given to the owner: as a hosting provider (5651 / DSA / DMCA) AdGag isn't liable for user-added songs as long as it removes them on notice.
+- **Blocking** (`features/moderation/presentation/block_actions.dart`): confirm dialog → block → `FeedController.hideCreator` removes their Ads at once → snackbar with Undo. Public profile shows Block/Unblock by `isBlockedProvider` (hides Follow and the grid while blocked). Before, blocking worked server-side but nothing changed on screen, so it looked broken.
+- **Editor DECODER_INIT_FAILED after watching the feed** (device report): the feed only PAUSED its pooled players when another tab opened, and paused players keep their hardware decoders. `FeedScreen` now unmounts its cards and disposes the pool when the Home tab is left (`_playersReleased`), re-mounting on return. **Rule: anything that keeps video players alive behind the editor must release them, not pause them.**
+- **Market**: visible Fresh Ads / subject tiles play in turn (`_PreviewStrip`, one every 3s) using Mux animated WebP (`VideoService.animatedPreviewUrl`, `animated.webp?start=0&end=3&width=200&fps=10`, verified 200 image/webp) — images, so no video decoders.
+- **Account confirmed page** (`/welcome`, `AccountConfirmedScreen`): sign-up ending in "check your email" sets `pendingEmailConfirmationProvider` (shared_preferences); the router shows the page once after the confirmation link signs the user in.
+- Onboarding says "Sell it in 30 seconds" (all 12 languages). Profile grids end with bottom padding (CustomScrollView doesn't add the extendBody nav-bar inset like ListView does).
+- Analyze clean, 63/63 tests; release APK/AAB built with config. **Not device-tested yet**: block/undo flow, Market previews, the welcome page, the decoder fix.
 
 ## 12 languages app-wide incl. BOTH native editors; logo v2; sign-up confirmation; Play listing images (2026-09-28)
 
