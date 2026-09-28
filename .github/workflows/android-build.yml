@@ -1,0 +1,102 @@
+name: Android release build
+
+# Builds the signed Play Store bundle (.aab) plus an installable .apk and
+# attaches both to the run as artifacts ("Actions" tab -> the run ->
+# Artifacts). Runs on demand (Actions -> Android release build -> Run
+# workflow), for every version tag (v1.2.3), and for pushes to master that
+# touch the app.
+#
+# Needs these repository secrets (Settings -> Secrets and variables ->
+# Actions) — never commit the files themselves:
+#   ANDROID_KEYSTORE_BASE64  the upload keystore (android/adgag-upload.jks), base64
+#   ANDROID_KEYSTORE_PASSWORD  its password (store and key use the same one)
+#   ENV_DEV_JSON             the contents of env/dev.json (Supabase URL + publishable key)
+# Without ENV_DEV_JSON the build stops (an app built without it opens to a
+# blank white screen). Without the keystore it's signed with a throwaway
+# debug key — fine to install for testing, rejected by Play.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+    branches: [master, main]
+    paths:
+      - "android/**"
+      - "lib/**"
+      - "assets/**"
+      - "l10n/**"
+      - "third_party/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - ".github/workflows/android-build.yml"
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # Same version the app is developed with locally.
+          flutter-version: "3.47.5"
+          channel: stable
+          cache: true
+
+      - name: App config (env/dev.json)
+        env:
+          ENV_DEV_JSON: ${{ secrets.ENV_DEV_JSON }}
+        run: |
+          if [ -z "$ENV_DEV_JSON" ]; then
+            echo "::error::Missing the ENV_DEV_JSON secret — see the top of this workflow."
+            exit 1
+          fi
+          printf '%s' "$ENV_DEV_JSON" > env/dev.json
+
+      - name: Upload key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::warning::No upload key secrets — signing with the debug key (Play will reject this bundle)."
+            exit 0
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/adgag-upload.jks
+          {
+            echo "storeFile=adgag-upload.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=upload"
+            echo "keyPassword=$KEYSTORE_PASSWORD"
+          } > android/key.properties
+
+      - run: flutter pub get
+
+      # Play needs a higher versionCode for every upload: the run number
+      # always grows. (The version NAME still comes from pubspec.yaml.)
+      - name: Build app bundle
+        run: flutter build appbundle --release --dart-define-from-file=env/dev.json --build-number=${{ github.run_number }}
+
+      - name: Build APK
+        run: flutter build apk --release --dart-define-from-file=env/dev.json --build-number=${{ github.run_number }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: adgag-android-${{ github.run_number }}
+          path: |
+            build/app/outputs/bundle/release/app-release.aab
+            build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+
+      - name: Remove secrets from the runner
+        if: always()
+        run: rm -f android/adgag-upload.jks android/key.properties env/dev.json
