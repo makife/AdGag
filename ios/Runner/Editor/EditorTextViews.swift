@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // SwiftUI side of the captions — mirror of android/.../editor/TextEditor.kt:
 // the overlay over the preview video (drawn by the same TextRenderer as the
@@ -10,6 +11,13 @@ import SwiftUI
 /// resize, twist to rotate (two fingers also work on the selected caption
 /// anywhere on the video). Tapping empty video deselects, or toggles
 /// play/pause when nothing is selected.
+///
+/// Magnets (EditorSnapping below, mirror of Android's Snapping.kt): while
+/// dragging, the centre sticks to the video's middle lines and to other
+/// visible captions'/stickers' centres (guide lines drawn, light haptic);
+/// while twisting, the angle sticks to 0/90/180/270°. A caption's pinch
+/// changes its size (sizeFrac, the Size slider's value), not a separate
+/// scale the slider never saw.
 struct TextOverlayView: View {
   @ObservedObject var viewModel: EditorViewModel
   let onEdit: (String) -> Void
@@ -26,6 +34,7 @@ struct TextOverlayView: View {
   /// (scale, rotation) of the selected caption/sticker when a pinch / twist began.
   @State private var pinchStart: Double?
   @State private var rotateStart: Double?
+  @State private var guides = SnapGuides()
 
   var body: some View {
     GeometryReader { geo in
@@ -41,6 +50,7 @@ struct TextOverlayView: View {
           .onTapGesture { tapEmpty() }
         captionsCanvas(frame: frame)
           .frame(width: frame.width, height: frame.height)
+          .overlay(guideLines(frame: frame).allowsHitTesting(false))
           .contentShape(Rectangle())
           .gesture(dragGesture(frame: frame))
           .simultaneousGesture(pinchGesture)
@@ -109,6 +119,40 @@ struct TextOverlayView: View {
     }
   }
 
+  private func guideLines(frame: CGSize) -> some View {
+    Path { path in
+      if let gx = guides.x {
+        path.move(to: CGPoint(x: CGFloat(gx) * frame.width, y: 0))
+        path.addLine(to: CGPoint(x: CGFloat(gx) * frame.width, y: frame.height))
+      }
+      if let gy = guides.y {
+        path.move(to: CGPoint(x: 0, y: CGFloat(gy) * frame.height))
+        path.addLine(to: CGPoint(x: frame.width, y: CGFloat(gy) * frame.height))
+      }
+    }
+    .stroke(EditorPalette.mint, lineWidth: 1.5)
+  }
+
+  /// Sets the magnets now in effect; a light tick when one newly engages.
+  private func setGuides(_ next: SnapGuides) {
+    if next.engagedMore(than: guides) {
+      UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+    guides = next
+  }
+
+  /// Centres of the other captions/stickers visible now (magnet targets).
+  private func otherCentres(excluding id: String) -> [(Double, Double)] {
+    let tMs = viewModel.currentOutputMs()
+    let texts = viewModel.textLayers
+      .filter { $0.id != id && isShown($0.id, $0.startMs, $0.endMs, at: tMs) }
+      .map { ($0.x, $0.y) }
+    let stickers = viewModel.stickerLayers
+      .filter { $0.id != id && isShown($0.id, $0.startMs, $0.endMs, at: tMs) }
+      .map { ($0.x, $0.y) }
+    return texts + stickers
+  }
+
   private func tapEmpty() {
     if viewModel.selectedTextId != nil { viewModel.selectedTextId = nil } else { viewModel.togglePlayPause() }
   }
@@ -147,18 +191,28 @@ struct TextOverlayView: View {
         guard state.moved, pinchStart == nil, rotateStart == nil else { return }
         let dx = Double(value.translation.width / frame.width)
         let dy = Double(value.translation.height / frame.height)
+        let thresholdX = Double(EditorSnapping.positionThresholdPt / max(frame.width, 1))
+        let thresholdY = Double(EditorSnapping.positionThresholdPt / max(frame.height, 1))
+        // Snap the position the fingers alone would give (start + translation),
+        // so pulling past the threshold breaks free again.
+        func snapped(id: String, x: Double, y: Double) -> (Double, Double) {
+          let others = otherCentres(excluding: id)
+          let sx = EditorSnapping.axis(x, targets: [0.5] + others.map { $0.0 }, threshold: thresholdX)
+          let sy = EditorSnapping.axis(y, targets: [0.5] + others.map { $0.1 }, threshold: thresholdY)
+          setGuides(SnapGuides(x: sx.guide, y: sy.guide, angle: guides.angle))
+          return (min(max(sx.value, 0), 1), min(max(sy.value, 0), 1))
+        }
         if let start = state.start, var layer = viewModel.textLayers.first(where: { $0.id == start.id }) {
-          layer.x = min(max(start.x + dx, 0), 1)
-          layer.y = min(max(start.y + dy, 0), 1)
+          (layer.x, layer.y) = snapped(id: layer.id, x: start.x + dx, y: start.y + dy)
           viewModel.updateText(layer)
         } else if let start = state.startSticker,
                   var sticker = viewModel.stickerLayers.first(where: { $0.id == start.id }) {
-          sticker.x = min(max(start.x + dx, 0), 1)
-          sticker.y = min(max(start.y + dy, 0), 1)
+          (sticker.x, sticker.y) = snapped(id: sticker.id, x: start.x + dx, y: start.y + dy)
           viewModel.updateSticker(sticker)
         }
       }
       .onEnded { _ in
+        guides = SnapGuides()
         if let state = drag, !state.moved {
           if state.hitId == nil {
             tapEmpty()
@@ -176,9 +230,11 @@ struct TextOverlayView: View {
         guard let id = viewModel.selectedTextId else { return }
         drag?.moved = true
         if var layer = viewModel.textLayers.first(where: { $0.id == id }) {
-          let start = pinchStart ?? layer.scale
+          // The caption's whole size lives in sizeFrac (the Size slider's value).
+          let start = pinchStart ?? layer.sizeFrac * layer.scale
           if pinchStart == nil { pinchStart = start }
-          layer.scale = min(max(start * Double(value), 0.2), 8)
+          layer.sizeFrac = min(max(start * Double(value), EditorSnapping.minSizeFrac), EditorSnapping.maxSizeFrac)
+          layer.scale = 1
           viewModel.updateText(layer)
         } else if var sticker = viewModel.stickerLayers.first(where: { $0.id == id }) {
           let start = pinchStart ?? sticker.scale
@@ -198,16 +254,23 @@ struct TextOverlayView: View {
         if var layer = viewModel.textLayers.first(where: { $0.id == id }) {
           let start = rotateStart ?? layer.rotationDeg
           if rotateStart == nil { rotateStart = start }
-          layer.rotationDeg = start + angle.degrees
+          let snap = EditorSnapping.angle(start + angle.degrees)
+          setGuides(SnapGuides(x: guides.x, y: guides.y, angle: snap.snapped))
+          layer.rotationDeg = snap.deg
           viewModel.updateText(layer)
         } else if var sticker = viewModel.stickerLayers.first(where: { $0.id == id }) {
           let start = rotateStart ?? sticker.rotationDeg
           if rotateStart == nil { rotateStart = start }
-          sticker.rotationDeg = start + angle.degrees
+          let snap = EditorSnapping.angle(start + angle.degrees)
+          setGuides(SnapGuides(x: guides.x, y: guides.y, angle: snap.snapped))
+          sticker.rotationDeg = snap.deg
           viewModel.updateSticker(sticker)
         }
       }
-      .onEnded { _ in rotateStart = nil }
+      .onEnded { _ in
+        rotateStart = nil
+        guides = SnapGuides()
+      }
   }
 }
 
@@ -452,8 +515,11 @@ private struct SizeTab: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
-      LabeledSlider(title: tr("Size"), value: layer.sizeFrac, range: 0.025...0.2) {
-        var l = layer; l.sizeFrac = $0; onChange(l)
+      // The caption's whole size — a pinch changes the same value.
+      LabeledSlider(title: tr("Size"),
+                    value: min(max(layer.sizeFrac * layer.scale, EditorSnapping.minSizeFrac), EditorSnapping.maxSizeFrac),
+                    range: EditorSnapping.minSizeFrac...EditorSnapping.maxSizeFrac) {
+        var l = layer; l.sizeFrac = $0; l.scale = 1; onChange(l)
       }
       LabeledSlider(title: tr("Letter spacing"), value: layer.letterSpacing, range: -0.05...0.6) {
         var l = layer; l.letterSpacing = $0; onChange(l)
@@ -470,7 +536,7 @@ private struct SizeTab: View {
         }
         Spacer()
         Button(tr("Straighten")) {
-          var l = layer; l.rotationDeg = 0; l.scale = 1; l.x = 0.5; onChange(l)
+          var l = layer; l.rotationDeg = 0; l.sizeFrac = layer.sizeFrac * layer.scale; l.scale = 1; l.x = 0.5; onChange(l)
         }
         .font(.caption).foregroundColor(EditorPalette.accent)
       }
@@ -490,5 +556,47 @@ private struct LabeledSlider: View {
       Slider(value: Binding(get: { min(max(value, range.lowerBound), range.upperBound) }, set: onChange), in: range)
         .tint(EditorPalette.accent)
     }
+  }
+}
+
+// MARK: - Magnets
+
+/// Mirror of android/.../editor/Snapping.kt: pure snap math for moving and
+/// rotating captions/stickers. Callers pass the RAW value from the fingers
+/// and apply what comes back, so pulling past a threshold breaks free.
+enum EditorSnapping {
+  /// Degrees within which a rotation sticks to a multiple of 90°.
+  static let angleThresholdDeg: Double = 7
+  /// Points within which a centre sticks to a guide line.
+  static let positionThresholdPt: CGFloat = 10
+  /// Caption size (fraction of frame height): same range for pinch and the Size slider.
+  static let minSizeFrac: Double = 0.02
+  static let maxSizeFrac: Double = 0.4
+
+  static func angle(_ rawDeg: Double, threshold: Double = angleThresholdDeg) -> (deg: Double, snapped: Bool) {
+    let nearest = (rawDeg / 90).rounded() * 90
+    return abs(rawDeg - nearest) <= threshold ? (nearest, true) : (rawDeg, false)
+  }
+
+  static func axis(_ raw: Double, targets: [Double], threshold: Double) -> (value: Double, guide: Double?) {
+    var best: Double?
+    var bestDist = threshold
+    for t in targets where abs(raw - t) <= bestDist {
+      bestDist = abs(raw - t)
+      best = t
+    }
+    return (best ?? raw, best)
+  }
+}
+
+/// Magnets in effect during a gesture: guide lines (frame fractions) and whether the angle is snapped.
+struct SnapGuides: Equatable {
+  var x: Double? = nil
+  var y: Double? = nil
+  var angle = false
+
+  /// True when a magnet engaged that wasn't engaged before (one tick per engagement).
+  func engagedMore(than before: SnapGuides) -> Bool {
+    (x != nil && x != before.x) || (y != nil && y != before.y) || (angle && !before.angle)
   }
 }

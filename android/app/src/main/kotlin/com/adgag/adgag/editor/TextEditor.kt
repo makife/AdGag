@@ -66,7 +66,9 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import kotlin.math.max
@@ -89,6 +91,13 @@ private fun settledTimeMs(layer: TextLayer): Long {
  * move, pinch to resize, twist to rotate (two fingers also work on the
  * selected caption anywhere on the video). Tapping empty video
  * deselects, or toggles play/pause when nothing is selected.
+ *
+ * Magnets ([Snapping]): while dragging, the centre sticks to the video's
+ * middle lines and to other visible captions'/stickers' centres (guide
+ * lines are drawn, the phone ticks); while twisting, the angle sticks to
+ * 0/90/180/270°. A caption's pinch changes its SIZE (sizeFrac, the Size
+ * slider's value) — it used to change a separate scale the slider never
+ * saw (user report).
  */
 @UnstableApi
 @Composable
@@ -99,6 +108,9 @@ fun TextOverlayLayer(
     modifier: Modifier = Modifier,
 ) {
     val onEditUpdated by rememberUpdatedState(onEdit)
+    val haptics by rememberUpdatedState(LocalHapticFeedback.current)
+    // Guide lines of the current drag (frame fractions); null = none.
+    val guides = remember { mutableStateOf(SnapGuides()) }
     BoxWithConstraints(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         val density = LocalDensity.current
         val boxW = with(density) { maxWidth.toPx() }
@@ -119,7 +131,10 @@ fun TextOverlayLayer(
         Box(
             modifier = Modifier
                 .size(with(density) { fw.toDp() }, with(density) { fh.toDp() })
-                .drawBehind { drawCaptions(viewModel, frameGlobalMs.longValue) }
+                .drawBehind {
+                    drawCaptions(viewModel, frameGlobalMs.longValue)
+                    drawGuides(guides.value)
+                }
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
@@ -141,6 +156,11 @@ fun TextOverlayLayer(
                         var targetId = hit?.id
                         var moved = false
                         var travelled = Offset.Zero
+                        // The pose the fingers alone would give (no magnets),
+                        // so pulling past a threshold breaks free again.
+                        var raw: RawPose? = null
+                        var twisted = false
+                        val snapPx = Snapping.POSITION_THRESHOLD_DP * density.density
                         do {
                             val event = awaitPointerEvent()
                             val pressed = event.changes.count { it.pressed }
@@ -155,30 +175,29 @@ fun TextOverlayLayer(
                             val id = targetId
                             if (id != null) {
                                 if (moved) {
-                                    viewModel.textLayers.firstOrNull { it.id == id }?.let { layer ->
-                                        viewModel.updateText(
-                                            layer.copy(
-                                                x = (layer.x + pan.x / w).coerceIn(0f, 1f),
-                                                y = (layer.y + pan.y / h).coerceIn(0f, 1f),
-                                                scale = (layer.scale * zoom).coerceIn(0.2f, 8f),
-                                                rotationDeg = layer.rotationDeg + rotation,
-                                            ),
-                                        )
-                                    }
-                                    viewModel.stickerLayers.firstOrNull { it.id == id }?.let { layer ->
-                                        viewModel.updateSticker(
-                                            layer.copy(
-                                                x = (layer.x + pan.x / w).coerceIn(0f, 1f),
-                                                y = (layer.y + pan.y / h).coerceIn(0f, 1f),
-                                                scale = (layer.scale * zoom).coerceIn(0.2f, 8f),
-                                                rotationDeg = layer.rotationDeg + rotation,
-                                            ),
-                                        )
+                                    if (rotation != 0f) twisted = true
+                                    val start = raw ?: rawPoseOf(viewModel, id)
+                                    if (start != null) {
+                                        val r = start.moved(pan.x / w, pan.y / h, rotation, zoom)
+                                        raw = r
+                                        val others = viewModel.textLayers.filter { it.id != id && shown(it.id, it.startMs, it.endMs) }
+                                            .map { it.x to it.y } +
+                                            viewModel.stickerLayers.filter { it.id != id && shown(it.id, it.startMs, it.endMs) }
+                                                .map { it.x to it.y }
+                                        val sx = Snapping.axis(r.x, listOf(0.5f) + others.map { it.first }, snapPx / w)
+                                        val sy = Snapping.axis(r.y, listOf(0.5f) + others.map { it.second }, snapPx / h)
+                                        // Angle magnet only while twisting — a plain move keeps a slight tilt.
+                                        val sa = if (twisted) Snapping.angle(r.rotationDeg) else Snapping.Angle(r.rotationDeg, false)
+                                        val next = SnapGuides(sx.guide, sy.guide, sa.snapped)
+                                        if (next.engagedMore(guides.value)) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        guides.value = next
+                                        applyPose(viewModel, id, sx.value.coerceIn(0f, 1f), sy.value.coerceIn(0f, 1f), sa.deg, r.size)
                                     }
                                 }
                                 event.changes.forEach { if (it.positionChanged()) it.consume() }
                             }
                         } while (event.changes.any { it.pressed })
+                        guides.value = SnapGuides()
                         if (!moved) {
                             when {
                                 hit == null ->
@@ -193,6 +212,52 @@ fun TextOverlayLayer(
 }
 
 private data class HitOverlay(val id: String)
+
+/**
+ * Where a caption/sticker would be from the fingers alone. [size] is the
+ * caption's effective size (sizeFrac × scale) or the sticker's scale.
+ */
+private data class RawPose(val x: Float, val y: Float, val rotationDeg: Float, val size: Float, val isText: Boolean) {
+    fun moved(dx: Float, dy: Float, dRotation: Float, zoom: Float): RawPose {
+        val grown = size * zoom
+        return copy(
+            x = x + dx,
+            y = y + dy,
+            rotationDeg = rotationDeg + dRotation,
+            size = if (isText) grown.coerceIn(Snapping.MIN_SIZE_FRAC, Snapping.MAX_SIZE_FRAC) else grown.coerceIn(0.2f, 8f),
+        )
+    }
+}
+
+@UnstableApi
+private fun rawPoseOf(viewModel: EditorViewModel, id: String): RawPose? =
+    viewModel.textLayers.firstOrNull { it.id == id }?.let { RawPose(it.x, it.y, it.rotationDeg, it.sizeFrac * it.scale, true) }
+        ?: viewModel.stickerLayers.firstOrNull { it.id == id }?.let { RawPose(it.x, it.y, it.rotationDeg, it.scale, false) }
+
+/** A caption keeps scale 1: its whole size lives in sizeFrac, the Size slider's value. */
+@UnstableApi
+private fun applyPose(viewModel: EditorViewModel, id: String, x: Float, y: Float, rotationDeg: Float, size: Float) {
+    viewModel.textLayers.firstOrNull { it.id == id }?.let {
+        viewModel.updateText(it.copy(x = x, y = y, rotationDeg = rotationDeg, sizeFrac = size, scale = 1f))
+    }
+    viewModel.stickerLayers.firstOrNull { it.id == id }?.let {
+        viewModel.updateSticker(it.copy(x = x, y = y, rotationDeg = rotationDeg, scale = size))
+    }
+}
+
+/** Active magnets of a drag: guide lines at frame fractions, and whether the angle is snapped. */
+private data class SnapGuides(val x: Float? = null, val y: Float? = null, val angle: Boolean = false) {
+    /** True when a magnet engaged that wasn't engaged before (one tick per engagement). */
+    fun engagedMore(before: SnapGuides): Boolean =
+        (x != null && x != before.x) || (y != null && y != before.y) || (angle && !before.angle)
+}
+
+private fun DrawScope.drawGuides(g: SnapGuides) {
+    val color = Color(0xFF3EE6A8) // brand mint
+    val stroke = 1.5.dp.toPx()
+    g.x?.let { drawLine(color, Offset(it * size.width, 0f), Offset(it * size.width, size.height), stroke) }
+    g.y?.let { drawLine(color, Offset(0f, it * size.height), Offset(size.width, it * size.height), stroke) }
+}
 
 private val selectionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
     style = Paint.Style.STROKE
@@ -569,7 +634,12 @@ private fun SpectrumBar(onPick: (Int) -> Unit) {
 @Composable
 private fun SizeTab(layer: TextLayer, onChange: (TextLayer) -> Unit) {
     Column {
-        LabeledSlider(tr("Size"), layer.sizeFrac, 0.025f..0.2f) { onChange(layer.copy(sizeFrac = it)) }
+        // Shows the caption's whole size (a pinch changes the same value).
+        LabeledSlider(
+            tr("Size"),
+            (layer.sizeFrac * layer.scale).coerceIn(Snapping.MIN_SIZE_FRAC, Snapping.MAX_SIZE_FRAC),
+            Snapping.MIN_SIZE_FRAC..Snapping.MAX_SIZE_FRAC,
+        ) { onChange(layer.copy(sizeFrac = it, scale = 1f)) }
         LabeledSlider(tr("Letter spacing"), layer.letterSpacing, -0.05f..0.6f) { onChange(layer.copy(letterSpacing = it)) }
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = AdGagSpacing.lg.dp),
@@ -593,7 +663,7 @@ private fun SizeTab(layer: TextLayer, onChange: (TextLayer) -> Unit) {
                 }
             }
             Spacer(modifier = Modifier.weight(1f))
-            TextButton(onClick = { onChange(layer.copy(rotationDeg = 0f, scale = 1f, x = 0.5f)) }) {
+            TextButton(onClick = { onChange(layer.copy(rotationDeg = 0f, sizeFrac = layer.sizeFrac * layer.scale, scale = 1f, x = 0.5f)) }) {
                 Text(text = tr("Straighten"), color = AdGagColors.Accent, style = MaterialTheme.typography.labelMedium)
             }
         }

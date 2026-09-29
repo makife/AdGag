@@ -1444,7 +1444,7 @@ The ultimate product promise is:
 
 Repo: `C:\Users\LENOVO10OCT2020\Desktop\makifbilgisayar\AdGag`, brand name **AdGag** (codename `everything_is_an_ad` retired — the real name was decided). 14 commits, 124 `lib/` files, 14 test files (59 test cases), 17 SQL migrations, 2 Supabase Edge Functions. Full narrative detail for all of this lives in `README.md` (architecture, ER model, RLS plan, tech choices, and — most importantly — the "Verification log" entries, which are the authoritative record of what's actually been proven against real infrastructure vs. only written).
 
-## >>> RESUME HERE (last session ended 2026-09-29, version 0.1.8+9) <<<
+## >>> RESUME HERE (last session ended 2026-09-29, version 0.1.9+10) <<<
 
 Everything is committed and pushed to `master` (github.com/makife/AdGag). Current app version **0.1.4+5**; signed release AAB + APK built locally (`flutter build appbundle|apk --release --dart-define-from-file=env/dev.json`, config check `unzip -p … libapp.so | grep -c <project ref>`), copies on the owner's Desktop in "AdGag Play Store gorselleri". **Android CI now works** (secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ENV_DEV_JSON added 2026-09-28) and iOS CI (simulator build) is green on every commit since 57d2614. iOS has still never run on a device.
 
@@ -1457,6 +1457,13 @@ Contact address on all pages: makifergan@gmail.com. Play listing images + 512px 
 **Version rule**: Play needs a higher versionCode for every upload — bump `pubspec.yaml` `version: x.y.z+N` before each release build (CI uses `github.run_number` as the build number instead; don't mix local and CI uploads without checking the last versionCode).
 
 **Still to do before launch**: (the 2026-09-29 round below built account deletion, Mux deletion and the age check — its migration/functions are LIVE); a licensed or CC0 music library is optional (user-picked music is the uploader's responsibility per the Terms); iOS needs an Apple Developer account for TestFlight.
+
+## Editor magnets + caption size unified (2026-09-29, 0.1.9+10)
+
+User request: a twisted caption was hard to get straight again; wanted snapping to the video's centre and between captions; pinching a caption didn't move the Size slider.
+- `Snapping.kt` (Android) / `EditorSnapping` + `SnapGuides` at the end of `EditorTextViews.swift` (iOS — put in an existing file so project.pbxproj didn't need editing): pure math; the gesture code keeps the RAW pose from the fingers (Android `RawPose`, iOS start+translation) and applies the snapped one, so pulling past the threshold breaks free. Rotation sticks to multiples of 90° within 7° — ONLY while twisting (a plain move keeps a slight tilt). While dragging, the centre sticks to x/y = 0.5 and to other VISIBLE captions'/stickers' centres within 10dp/pt; mint guide lines are drawn; one haptic tick when a magnet engages (`engagedMore`).
+- **Size**: pinching a caption now changes `sizeFrac` (scale folded in and kept at 1); the Size slider shows `sizeFrac × scale`, both limited to 0.02–0.4 of frame height (was 0.025–0.2 slider / scale 0.2–8). Renderer effects scale with text size, so folding is visually identical. "Straighten" folds scale into sizeFrac instead of dropping it. Stickers still use `scale`.
+- Android release build compiled; iOS only via CI. **Not device-tested** — check: the snap threshold feel, the tick, guides with several captions.
 
 ## Following feed, review replies, @mentions, AD THIS chain; counters fixed for hard deletes (2026-09-29, 0.1.8+9)
 
