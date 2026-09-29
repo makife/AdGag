@@ -215,5 +215,21 @@
   "ageGateBody": "Profilinde gösterilmez ve saklanmaz.",
   "ageGatePick": "Doğum tarihini seç",
   "ageGateTooYoungTitle": "Üzgünüz, henüz kayıt olamazsın",
-  "ageGateTooYoungBody": "AdGag'i kullanmak için en az 13 yaşında olmalısın."
+  "ageGateTooYoungBody": "AdGag'i kullanmak için en az 13 yaşında olmalısın.",
+  "feedForYou": "Senin İçin",
+  "feedFollowing": "Takip Ettiklerin",
+  "feedFollowingEmptyTitle": "Takip ettiklerinden henüz bir şey yok",
+  "feedFollowingEmptyBody": "Reklamlarını beğendiğin kişileri takip et — yeni reklamları burada görünür.",
+  "feedFollowingDiscover": "MARKET'te keşfet",
+  "reviewsReply": "Yanıtla",
+  "reviewsReplyHint": "Yanıt yaz…",
+  "reviewsReplyingTo": "{name} kullanıcısına yanıt",
+  "reviewsViewReplies": "{count} yanıtı gör",
+  "reviewsHideReplies": "Yanıtları gizle",
+  "activityReviewReply": "{actor} yorumuna yanıt verdi.",
+  "activityMention": "{actor} bir yorumda senden bahsetti.",
+  "adThisChainTitle": "AD THIS ile yapılanlar",
+  "adThisChainEmpty": "Henüz kimse kendi versiyonunu yapmadı.",
+  "adThisChainCount": "{count} kişi kendi versiyonunu yaptı",
+  "adThisInspiredBy": "{name} reklamından esinlendi"
 }

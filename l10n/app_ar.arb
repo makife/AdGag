@@ -215,5 +215,21 @@
   "ageGateBody": "لن يظهر في ملفك الشخصي ولن يُحفظ.",
   "ageGatePick": "اختر تاريخ ميلادك",
   "ageGateTooYoungTitle": "عذرًا، لا يمكنك التسجيل بعد",
-  "ageGateTooYoungBody": "يجب أن يكون عمرك 13 عامًا على الأقل لاستخدام AdGag."
+  "ageGateTooYoungBody": "يجب أن يكون عمرك 13 عامًا على الأقل لاستخدام AdGag.",
+  "feedForYou": "لك",
+  "feedFollowing": "المتابَعون",
+  "feedFollowingEmptyTitle": "لا شيء بعد ممن تتابعهم",
+  "feedFollowingEmptyBody": "تابع صنّاع الإعلانات التي تعجبك — ستظهر إعلاناتهم الجديدة هنا.",
+  "feedFollowingDiscover": "اكتشف في MARKET",
+  "reviewsReply": "رد",
+  "reviewsReplyHint": "اكتب ردًا…",
+  "reviewsReplyingTo": "الرد على {name}",
+  "reviewsViewReplies": "عرض {count} ردود",
+  "reviewsHideReplies": "إخفاء الردود",
+  "activityReviewReply": "ردّ {actor} على تعليقك.",
+  "activityMention": "أشار إليك {actor} في تعليق.",
+  "adThisChainTitle": "صُنعت بـ AD THIS",
+  "adThisChainEmpty": "لم يصنع أحد نسخته بعد.",
+  "adThisChainCount": "صنع {count} نسختهم",
+  "adThisInspiredBy": "مستوحى من {name}"
 }

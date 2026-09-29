@@ -215,5 +215,21 @@
   "ageGateBody": "Tidak akan ditampilkan di profilmu atau disimpan.",
   "ageGatePick": "Pilih tanggal lahirmu",
   "ageGateTooYoungTitle": "Maaf, kamu belum bisa mendaftar",
-  "ageGateTooYoungBody": "Kamu harus berusia minimal 13 tahun untuk memakai AdGag."
+  "ageGateTooYoungBody": "Kamu harus berusia minimal 13 tahun untuk memakai AdGag.",
+  "feedForYou": "Untukmu",
+  "feedFollowing": "Mengikuti",
+  "feedFollowingEmptyTitle": "Belum ada apa pun dari yang kamu ikuti",
+  "feedFollowingEmptyBody": "Ikuti kreator yang iklannya kamu suka — iklan baru mereka muncul di sini.",
+  "feedFollowingDiscover": "Temukan di MARKET",
+  "reviewsReply": "Balas",
+  "reviewsReplyHint": "Tulis balasan…",
+  "reviewsReplyingTo": "Membalas {name}",
+  "reviewsViewReplies": "Lihat {count} balasan",
+  "reviewsHideReplies": "Sembunyikan balasan",
+  "activityReviewReply": "{actor} membalas ulasanmu.",
+  "activityMention": "{actor} menyebutmu di ulasan.",
+  "adThisChainTitle": "Dibuat dengan AD THIS",
+  "adThisChainEmpty": "Belum ada yang membuat versinya sendiri.",
+  "adThisChainCount": "{count} membuat versinya sendiri",
+  "adThisInspiredBy": "Terinspirasi dari {name}"
 }

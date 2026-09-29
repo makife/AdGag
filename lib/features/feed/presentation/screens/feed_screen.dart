@@ -5,11 +5,14 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../../../core/localization/generated/app_localizations.dart";
 
 import "../../../../core/router/app_shell.dart";
+import "../../../../core/router/route_paths.dart";
 import "../../../../core/theme/app_colors.dart";
+import "../../../../core/theme/app_spacing.dart";
 import "../../../../core/video/video_controller_pool.dart";
 import "../../../../core/video/video_providers.dart";
 import "../../../../core/widgets/coming_soon_view.dart";
 import "../../domain/ad.dart";
+import "../../domain/feed_repository.dart";
 import "../providers/feed_controller.dart";
 import "../providers/reviews_panel_provider.dart";
 import "../widgets/ad_video_card.dart";
@@ -26,7 +29,9 @@ class FeedScreen extends ConsumerStatefulWidget {
 }
 
 class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObserver {
-  final PageController _pageController = PageController();
+  /// Replaced (not reused) when the feed kind switches, so the new feed
+  /// starts at its first Ad instead of a restored page index.
+  PageController _pageController = PageController();
   final VideoControllerPool _pool = VideoControllerPool();
   int _activeIndex = 0;
 
@@ -161,10 +166,56 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
       }
     });
 
+    // "For You" <-> "Following": the controller refetches by itself (it
+    // watches feedKindProvider); here the pager and players start over.
+    ref.listen(feedKindProvider, (FeedKind? previous, FeedKind next) {
+      if (previous == next) {
+        return;
+      }
+      _pool.pauseAll();
+      _pool.evictAllExcept(const <String>{});
+      final PageController old = _pageController;
+      setState(() {
+        _pageController = PageController();
+        _activeIndex = 0;
+        _pendingIndex = null;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+      ref.read(openReviewsAdIdProvider.notifier).state = null;
+    });
+
+    final FeedKind kind = ref.watch(feedKindProvider);
+    final bool reviewsOpen = ref.watch(openReviewsAdIdProvider) != null;
+
     return Scaffold(
       backgroundColor: AppColors.darkBackground,
       resizeToAvoidBottomInset: false, // see AdVideoCard: the reviews panel handles the keyboard
-      body: feedAsync.when(
+      body: Stack(
+        children: <Widget>[
+          Positioned.fill(child: _feedBody(context, feedAsync, kind)),
+          if (!reviewsOpen)
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + AppSpacing.xs,
+              left: 72, // clear of the mute button on the right, kept symmetric
+              right: 72,
+              child: _FeedTabs(
+                selected: kind,
+                onSelect: (FeedKind k) {
+                  if (k == kind) {
+                    unawaited(_refresh()); // tapping the current tab again: back to a fresh top
+                  } else {
+                    ref.read(feedKindProvider.notifier).state = k;
+                  }
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _feedBody(BuildContext context, AsyncValue<FeedState> feedAsync, FeedKind kind) {
+    return feedAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (Object error, StackTrace stackTrace) => Center(
           child: Padding(
@@ -187,10 +238,12 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: SizedBox(
                     height: constraints.maxHeight,
-                    child: ComingSoonView(
-                      title: AppLocalizations.of(context).feedEmptyTitle,
-                      phaseNote: AppLocalizations.of(context).feedEmptyBody,
-                    ),
+                    child: kind == FeedKind.following
+                        ? _FollowingEmpty(onDiscover: () => context.goTo(RoutePaths.market))
+                        : ComingSoonView(
+                            title: AppLocalizations.of(context).feedEmptyTitle,
+                            phaseNote: AppLocalizations.of(context).feedEmptyBody,
+                          ),
                   ),
                 ),
               ),
@@ -261,6 +314,107 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
             ),
           );
         },
+      );
+  }
+}
+
+/// "For You | Following" at the top of the feed: white text with a shadow
+/// so it reads over any frame; the selected one is bold and underlined.
+class _FeedTabs extends StatelessWidget {
+  const _FeedTabs({required this.selected, required this.onSelect});
+
+  final FeedKind selected;
+  final ValueChanged<FeedKind> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    Widget tab(FeedKind kind, String label) {
+      final bool isSelected = kind == selected;
+      return Semantics(
+        selected: isSelected,
+        button: true,
+        child: InkWell(
+          onTap: () => onSelect(kind),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.white70,
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                      fontSize: 15,
+                      shadows: const <Shadow>[Shadow(color: Colors.black54, blurRadius: 6)],
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: isSelected ? 22 : 0,
+                    height: 2.5,
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: <Widget>[
+        Flexible(child: tab(FeedKind.forYou, l10n.feedForYou)),
+        const SizedBox(width: AppSpacing.sm),
+        Flexible(child: tab(FeedKind.following, l10n.feedFollowing)),
+      ],
+    );
+  }
+}
+
+/// Following feed with nothing in it: nobody followed yet, or they haven't
+/// posted. Points to MARKET to find people.
+class _FollowingEmpty extends StatelessWidget {
+  const _FollowingEmpty({required this.onDiscover});
+
+  final VoidCallback onDiscover;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xxl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Icon(Icons.group_outlined, size: 56, color: Colors.white70),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              l10n.feedFollowingEmptyTitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              l10n.feedFollowingEmptyBody,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            FilledButton(onPressed: onDiscover, child: Text(l10n.feedFollowingDiscover)),
+          ],
+        ),
       ),
     );
   }

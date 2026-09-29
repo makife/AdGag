@@ -9,10 +9,12 @@ final class CommentsRepositoryImpl implements CommentsRepository {
 
   final supa.SupabaseClient _client;
 
+  static const String _select = "*, profiles(username, avatar_url)";
+
   @override
   Future<List<Comment>> fetchPage({required String adId, DateTime? before, int limit = 20}) async {
     supa.PostgrestFilterBuilder<List<Map<String, dynamic>>> query =
-        _client.from("comments").select("*, profiles(username, avatar_url)").eq("ad_id", adId);
+        _client.from("comments").select(_select).eq("ad_id", adId).isFilter("parent_id", null);
 
     if (before != null) {
       query = query.lt("created_at", before.toIso8601String());
@@ -23,20 +25,28 @@ final class CommentsRepositoryImpl implements CommentsRepository {
   }
 
   @override
-  Future<Comment> create({required String adId, required String body}) async {
+  Future<List<Comment>> fetchReplies(String parentId, {int limit = 50}) async {
+    final List<Map<String, dynamic>> rows = await _client
+        .from("comments")
+        .select(_select)
+        .eq("parent_id", parentId)
+        .order("created_at", ascending: true)
+        .limit(limit);
+    return rows.map(Comment.fromRow).toList(growable: false);
+  }
+
+  @override
+  Future<Comment> create({required String adId, required String body, String? parentId}) async {
     try {
       final Map<String, dynamic> row = await _client.rpc<Map<String, dynamic>>(
         "create_comment",
-        params: <String, dynamic>{"p_ad_id": adId, "p_body": body},
+        params: <String, dynamic>{"p_ad_id": adId, "p_body": body, "p_parent_id": parentId},
       );
       // The RPC returns the bare comments row — no profile embed — which
       // made a freshly posted review show "@unknown" until a reload. Re-read
       // it with the author's username/avatar; fall back to the bare row.
-      final Map<String, dynamic>? withAuthor = await _client
-          .from("comments")
-          .select("*, profiles(username, avatar_url)")
-          .eq("id", row["id"] as String)
-          .maybeSingle();
+      final Map<String, dynamic>? withAuthor =
+          await _client.from("comments").select(_select).eq("id", row["id"] as String).maybeSingle();
       return Comment.fromRow(withAuthor ?? row);
     } on supa.PostgrestException catch (e) {
       throw app_error.ValidationException(e.message, e);

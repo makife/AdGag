@@ -215,5 +215,21 @@
   "ageGateBody": "プロフィールには表示されず、保存もされません。",
   "ageGatePick": "生年月日を選択",
   "ageGateTooYoungTitle": "申し訳ありませんが、まだ登録できません",
-  "ageGateTooYoungBody": "AdGagを利用するには13歳以上である必要があります。"
+  "ageGateTooYoungBody": "AdGagを利用するには13歳以上である必要があります。",
+  "feedForYou": "おすすめ",
+  "feedFollowing": "フォロー中",
+  "feedFollowingEmptyTitle": "フォロー中の人の投稿はまだありません",
+  "feedFollowingEmptyBody": "好きな広告のクリエイターをフォローすると、新しい広告がここに表示されます。",
+  "feedFollowingDiscover": "MARKETで探す",
+  "reviewsReply": "返信",
+  "reviewsReplyHint": "返信を書く…",
+  "reviewsReplyingTo": "{name}さんに返信",
+  "reviewsViewReplies": "{count}件の返信を表示",
+  "reviewsHideReplies": "返信を非表示",
+  "activityReviewReply": "{actor}さんがあなたのレビューに返信しました。",
+  "activityMention": "{actor}さんがレビューであなたをメンションしました。",
+  "adThisChainTitle": "AD THISで作られた広告",
+  "adThisChainEmpty": "まだ誰も自分のバージョンを作っていません。",
+  "adThisChainCount": "{count}人が自分のバージョンを作成",
+  "adThisInspiredBy": "{name}さんの広告から"
 }

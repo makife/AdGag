@@ -215,5 +215,21 @@
   "ageGateBody": "Es wird weder auf deinem Profil angezeigt noch gespeichert.",
   "ageGatePick": "Geburtsdatum auswählen",
   "ageGateTooYoungTitle": "Du kannst dich leider noch nicht registrieren",
-  "ageGateTooYoungBody": "Du musst mindestens 13 Jahre alt sein, um AdGag zu nutzen."
+  "ageGateTooYoungBody": "Du musst mindestens 13 Jahre alt sein, um AdGag zu nutzen.",
+  "feedForYou": "Für dich",
+  "feedFollowing": "Folge ich",
+  "feedFollowingEmptyTitle": "Noch nichts von Leuten, denen du folgst",
+  "feedFollowingEmptyBody": "Folge Leuten, deren Werbungen du magst — ihre neuen Werbungen erscheinen hier.",
+  "feedFollowingDiscover": "Im MARKET entdecken",
+  "reviewsReply": "Antworten",
+  "reviewsReplyHint": "Antwort schreiben…",
+  "reviewsReplyingTo": "Antwort an {name}",
+  "reviewsViewReplies": "{count} Antworten ansehen",
+  "reviewsHideReplies": "Antworten ausblenden",
+  "activityReviewReply": "{actor} hat auf deine Bewertung geantwortet.",
+  "activityMention": "{actor} hat dich in einer Bewertung erwähnt.",
+  "adThisChainTitle": "Mit AD THIS gemacht",
+  "adThisChainEmpty": "Noch hat niemand eine eigene Version gemacht.",
+  "adThisChainCount": "{count} haben eine eigene Version gemacht",
+  "adThisInspiredBy": "Inspiriert von {name}"
 }

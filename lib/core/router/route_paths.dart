@@ -46,6 +46,10 @@ abstract final class RoutePaths {
   /// needs before an external tap actually opens the app.
   static const String adDetail = "/ad/:adId";
   static String adDetailOf(String adId) => "/ad/$adId";
+
+  /// Ads made with AD THIS from one Ad.
+  static const String adThisChain = "/ad/:adId/ad-this";
+  static String adThisChainOf(String adId) => "/ad/$adId/ad-this";
 }
 
 extension AppNavigation on BuildContext {

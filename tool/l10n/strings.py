@@ -19,6 +19,12 @@ LANGUAGE_NAMES = {
 }
 
 PLACEHOLDERS = {
+    "reviewsReplyingTo": {"name": "String"},
+    "reviewsViewReplies": {"count": "String"},
+    "activityReviewReply": {"actor": "String"},
+    "activityMention": {"actor": "String"},
+    "adThisChainCount": {"count": "String"},
+    "adThisInspiredBy": {"name": "String"},
     "accountDeleteConfirmHint": {"username": "String"},
     "accountDeleteFailed": {"error": "String"},
     "actionSoldCount": {"count": "String"},
@@ -740,3 +746,71 @@ K("ageGateTooYoungBody", "You need to be at least 13 years old to use AdGag.", "
   "Devi avere almeno 13 anni per usare AdGag.", "Чтобы пользоваться AdGag, вам должно быть не меньше 13 лет.",
   "يجب أن يكون عمرك 13 عامًا على الأقل لاستخدام AdGag.", "Kamu harus berusia minimal 13 tahun untuk memakai AdGag.",
   "AdGagを利用するには13歳以上である必要があります。", "AdGag를 사용하려면 만 13세 이상이어야 해요.")
+
+# --- Home feed: For You / Following ---
+K("feedForYou", "For You", "Senin İçin", "Para ti", "Para você", "Für dich", "Pour toi", "Per te", "Для вас", "لك",
+  "Untukmu", "おすすめ", "추천")
+K("feedFollowing", "Following", "Takip Ettiklerin", "Siguiendo", "Seguindo", "Folge ich", "Abonnements", "Seguiti", "Подписки",
+  "المتابَعون", "Mengikuti", "フォロー中", "팔로잉")
+K("feedFollowingEmptyTitle", "Nothing from people you follow yet", "Takip ettiklerinden henüz bir şey yok",
+  "Aún no hay nada de quienes sigues", "Ainda não há nada de quem você segue", "Noch nichts von Leuten, denen du folgst",
+  "Rien encore de tes abonnements", "Ancora niente da chi segui", "От ваших подписок пока ничего нет",
+  "لا شيء بعد ممن تتابعهم", "Belum ada apa pun dari yang kamu ikuti", "フォロー中の人の投稿はまだありません",
+  "팔로우한 사람의 광고가 아직 없어요")
+K("feedFollowingEmptyBody", "Follow creators whose Ads you like — their new Ads show up here.",
+  "Reklamlarını beğendiğin kişileri takip et — yeni reklamları burada görünür.",
+  "Sigue a creadores cuyos anuncios te gusten: sus anuncios nuevos aparecen aquí.",
+  "Siga criadores de anúncios que você curte — os novos aparecem aqui.",
+  "Folge Leuten, deren Werbungen du magst — ihre neuen Werbungen erscheinen hier.",
+  "Abonne-toi aux créateurs dont tu aimes les pubs : leurs nouvelles pubs apparaissent ici.",
+  "Segui chi crea pubblicità che ti piacciono: le nuove compaiono qui.",
+  "Подпишитесь на авторов, чья реклама вам нравится, — их новая реклама появится здесь.",
+  "تابع صنّاع الإعلانات التي تعجبك — ستظهر إعلاناتهم الجديدة هنا.",
+  "Ikuti kreator yang iklannya kamu suka — iklan baru mereka muncul di sini.",
+  "好きな広告のクリエイターをフォローすると、新しい広告がここに表示されます。",
+  "마음에 드는 광고의 크리에이터를 팔로우하면 새 광고가 여기에 나와요.")
+K("feedFollowingDiscover", "Discover in MARKET", "MARKET'te keşfet", "Descubrir en MARKET", "Descobrir no MARKET", "Im MARKET entdecken",
+  "Découvrir dans MARKET", "Scopri nel MARKET", "Найти в MARKET", "اكتشف في MARKET", "Temukan di MARKET", "MARKETで探す",
+  "MARKET에서 찾아보기")
+
+# --- REVIEWS: replies ---
+K("reviewsReply", "Reply", "Yanıtla", "Responder", "Responder", "Antworten", "Répondre", "Rispondi", "Ответить", "رد", "Balas",
+  "返信", "답글")
+K("reviewsReplyHint", "Write a reply…", "Yanıt yaz…", "Escribe una respuesta…", "Escreva uma resposta…", "Antwort schreiben…",
+  "Écris une réponse…", "Scrivi una risposta…", "Напишите ответ…", "اكتب ردًا…", "Tulis balasan…", "返信を書く…", "답글 달기…")
+K("reviewsReplyingTo", "Replying to {name}", "{name} kullanıcısına yanıt", "Respondiendo a {name}", "Respondendo a {name}",
+  "Antwort an {name}", "Réponse à {name}", "Rispondi a {name}", "Ответ для {name}", "الرد على {name}", "Membalas {name}",
+  "{name}さんに返信", "{name}님에게 답글")
+K("reviewsViewReplies", "View {count} replies", "{count} yanıtı gör", "Ver {count} respuestas", "Ver {count} respostas",
+  "{count} Antworten ansehen", "Voir {count} réponses", "Vedi {count} risposte", "Показать ответы ({count})", "عرض {count} ردود",
+  "Lihat {count} balasan", "{count}件の返信を表示", "답글 {count}개 보기")
+K("reviewsHideReplies", "Hide replies", "Yanıtları gizle", "Ocultar respuestas", "Ocultar respostas", "Antworten ausblenden",
+  "Masquer les réponses", "Nascondi risposte", "Скрыть ответы", "إخفاء الردود", "Sembunyikan balasan", "返信を非表示",
+  "답글 숨기기")
+
+# --- Notifications: reply / mention ---
+K("activityReviewReply", "{actor} replied to your review.", "{actor} yorumuna yanıt verdi.", "{actor} respondió a tu reseña.",
+  "{actor} respondeu à sua avaliação.", "{actor} hat auf deine Bewertung geantwortet.", "{actor} a répondu à ton avis.",
+  "{actor} ha risposto alla tua recensione.", "{actor} ответил на ваш отзыв.", "ردّ {actor} على تعليقك.",
+  "{actor} membalas ulasanmu.", "{actor}さんがあなたのレビューに返信しました。", "{actor}님이 내 리뷰에 답글을 남겼어요.")
+K("activityMention", "{actor} mentioned you in a review.", "{actor} bir yorumda senden bahsetti.", "{actor} te mencionó en una reseña.",
+  "{actor} mencionou você em uma avaliação.", "{actor} hat dich in einer Bewertung erwähnt.", "{actor} t'a mentionné dans un avis.",
+  "{actor} ti ha menzionato in una recensione.", "{actor} упомянул вас в отзыве.", "أشار إليك {actor} في تعليق.",
+  "{actor} menyebutmu di ulasan.", "{actor}さんがレビューであなたをメンションしました。", "{actor}님이 리뷰에서 나를 언급했어요.")
+
+# --- AD THIS chain ---
+K("adThisChainTitle", "Made with AD THIS", "AD THIS ile yapılanlar", "Hechos con AD THIS", "Feitos com AD THIS",
+  "Mit AD THIS gemacht", "Faites avec AD THIS", "Fatte con AD THIS", "Сделано через AD THIS", "صُنعت بـ AD THIS",
+  "Dibuat dengan AD THIS", "AD THISで作られた広告", "AD THIS로 만든 광고")
+K("adThisChainEmpty", "No one has made their own version yet.", "Henüz kimse kendi versiyonunu yapmadı.",
+  "Nadie ha hecho su versión todavía.", "Ninguém fez sua versão ainda.", "Noch hat niemand eine eigene Version gemacht.",
+  "Personne n'a encore fait sa version.", "Nessuno ha ancora fatto la sua versione.", "Пока никто не сделал свою версию.",
+  "لم يصنع أحد نسخته بعد.", "Belum ada yang membuat versinya sendiri.", "まだ誰も自分のバージョンを作っていません。",
+  "아직 아무도 자기 버전을 만들지 않았어요.")
+K("adThisChainCount", "{count} made their own version", "{count} kişi kendi versiyonunu yaptı", "{count} hicieron su versión",
+  "{count} fizeram sua versão", "{count} haben eine eigene Version gemacht", "{count} ont fait leur version",
+  "{count} hanno fatto la loro versione", "Своих версий: {count}", "صنع {count} نسختهم", "{count} membuat versinya sendiri",
+  "{count}人が自分のバージョンを作成", "{count}명이 자기 버전을 만들었어요")
+K("adThisInspiredBy", "Inspired by {name}", "{name} reklamından esinlendi", "Inspirado en {name}", "Inspirado em {name}",
+  "Inspiriert von {name}", "Inspiré par {name}", "Ispirato a {name}", "По мотивам {name}", "مستوحى من {name}",
+  "Terinspirasi dari {name}", "{name}さんの広告から", "{name}님 광고에서 영감")

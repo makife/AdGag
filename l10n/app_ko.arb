@@ -215,5 +215,21 @@
   "ageGateBody": "프로필에 표시되지 않고 저장되지도 않아요.",
   "ageGatePick": "생년월일 선택",
   "ageGateTooYoungTitle": "죄송해요, 아직 가입할 수 없어요",
-  "ageGateTooYoungBody": "AdGag를 사용하려면 만 13세 이상이어야 해요."
+  "ageGateTooYoungBody": "AdGag를 사용하려면 만 13세 이상이어야 해요.",
+  "feedForYou": "추천",
+  "feedFollowing": "팔로잉",
+  "feedFollowingEmptyTitle": "팔로우한 사람의 광고가 아직 없어요",
+  "feedFollowingEmptyBody": "마음에 드는 광고의 크리에이터를 팔로우하면 새 광고가 여기에 나와요.",
+  "feedFollowingDiscover": "MARKET에서 찾아보기",
+  "reviewsReply": "답글",
+  "reviewsReplyHint": "답글 달기…",
+  "reviewsReplyingTo": "{name}님에게 답글",
+  "reviewsViewReplies": "답글 {count}개 보기",
+  "reviewsHideReplies": "답글 숨기기",
+  "activityReviewReply": "{actor}님이 내 리뷰에 답글을 남겼어요.",
+  "activityMention": "{actor}님이 리뷰에서 나를 언급했어요.",
+  "adThisChainTitle": "AD THIS로 만든 광고",
+  "adThisChainEmpty": "아직 아무도 자기 버전을 만들지 않았어요.",
+  "adThisChainCount": "{count}명이 자기 버전을 만들었어요",
+  "adThisInspiredBy": "{name}님 광고에서 영감"
 }

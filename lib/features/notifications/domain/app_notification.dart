@@ -3,13 +3,20 @@
 enum NotificationType {
   newFollower,
   newReview,
-  adThis;
+  adThis,
+  reviewReply,
+  mention;
 
-  static NotificationType fromDb(String value) => switch (value) {
+  /// Null for a type this build doesn't know (added server-side later) —
+  /// the list skips it instead of failing as a whole. (It used to throw,
+  /// which would have broken the whole list for older builds.)
+  static NotificationType? fromDb(String value) => switch (value) {
         "new_follower" => NotificationType.newFollower,
         "new_review" => NotificationType.newReview,
         "ad_this" => NotificationType.adThis,
-        _ => throw ArgumentError("Unknown notification_type: $value"),
+        "review_reply" => NotificationType.reviewReply,
+        "mention" => NotificationType.mention,
+        _ => null,
       };
 }
 
@@ -24,11 +31,16 @@ final class AppNotification {
     this.readAt,
   });
 
-  factory AppNotification.fromRow(Map<String, dynamic> row) {
+  /// Null when the row's type is unknown to this build.
+  static AppNotification? tryFromRow(Map<String, dynamic> row) {
+    final NotificationType? type = NotificationType.fromDb(row["type"] as String);
+    if (type == null) {
+      return null;
+    }
     final Map<String, dynamic>? actorEmbed = row["profiles"] as Map<String, dynamic>?;
     return AppNotification(
       id: row["id"] as String,
-      type: NotificationType.fromDb(row["type"] as String),
+      type: type,
       createdAt: DateTime.parse(row["created_at"] as String),
       payload: (row["payload"] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{},
       actorId: row["actor_id"] as String?,

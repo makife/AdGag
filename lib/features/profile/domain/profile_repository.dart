@@ -10,6 +10,11 @@ abstract interface class ProfileRepository {
   /// same accepted-simplification note as SubjectRepository.fetchAdsForSubject.
   Future<List<Ad>> fetchAdsByUser(String userId, {int limit = 30});
 
+  /// @mention suggestions while typing a review: usernames starting with
+  /// [prefix] (already lower-case, username characters only), people the
+  /// viewer follows first.
+  Future<List<PublicProfile>> suggestMentions(String prefix, {int limit = 6});
+
   /// Updates the signed-in user's own display name/bio (CLAUDE.md section
   /// 13/24). Column-level grants on `profiles` (0002_profiles_and_auth_trigger.sql)
   /// already restrict this to `display_name`/`avatar_url`/`bio` server-side —

@@ -428,5 +428,63 @@
   "ageGateBody": "It won't be shown on your profile or stored.",
   "ageGatePick": "Select your birth date",
   "ageGateTooYoungTitle": "Sorry, you can't sign up yet",
-  "ageGateTooYoungBody": "You need to be at least 13 years old to use AdGag."
+  "ageGateTooYoungBody": "You need to be at least 13 years old to use AdGag.",
+  "feedForYou": "For You",
+  "feedFollowing": "Following",
+  "feedFollowingEmptyTitle": "Nothing from people you follow yet",
+  "feedFollowingEmptyBody": "Follow creators whose Ads you like — their new Ads show up here.",
+  "feedFollowingDiscover": "Discover in MARKET",
+  "reviewsReply": "Reply",
+  "reviewsReplyHint": "Write a reply…",
+  "reviewsReplyingTo": "Replying to {name}",
+  "@reviewsReplyingTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewsViewReplies": "View {count} replies",
+  "@reviewsViewReplies": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewsHideReplies": "Hide replies",
+  "activityReviewReply": "{actor} replied to your review.",
+  "@activityReviewReply": {
+    "placeholders": {
+      "actor": {
+        "type": "String"
+      }
+    }
+  },
+  "activityMention": "{actor} mentioned you in a review.",
+  "@activityMention": {
+    "placeholders": {
+      "actor": {
+        "type": "String"
+      }
+    }
+  },
+  "adThisChainTitle": "Made with AD THIS",
+  "adThisChainEmpty": "No one has made their own version yet.",
+  "adThisChainCount": "{count} made their own version",
+  "@adThisChainCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "adThisInspiredBy": "Inspired by {name}",
+  "@adThisInspiredBy": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }

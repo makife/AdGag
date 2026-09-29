@@ -1,6 +1,7 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/ad.dart";
+import "../../domain/feed_repository.dart";
 import "feed_providers.dart";
 import "sold_providers.dart";
 
@@ -20,6 +21,10 @@ final class FeedState {
   }
 }
 
+/// The Home tab's selected feed ("For You" / "Following"). The feed
+/// controller watches it, so switching refetches from the first page.
+final StateProvider<FeedKind> feedKindProvider = StateProvider<FeedKind>((ref) => FeedKind.forYou);
+
 /// Drives the feed screen: initial page load, "load more" as the user
 /// nears the end of the current page, and pull-to-refresh. Page-fetching
 /// logic itself lives in [FeedRepository] — this just sequences calls to
@@ -27,7 +32,7 @@ final class FeedState {
 final class FeedController extends AsyncNotifier<FeedState> {
   @override
   Future<FeedState> build() async {
-    final page = await ref.read(feedRepositoryProvider).fetchPage();
+    final page = await ref.read(feedRepositoryProvider).fetchPage(kind: ref.watch(feedKindProvider));
     return FeedState(ads: page.ads, nextCursor: page.nextCursor, isLoadingMore: false);
   }
 
@@ -37,9 +42,13 @@ final class FeedController extends AsyncNotifier<FeedState> {
       return;
     }
 
+    final FeedKind kind = ref.read(feedKindProvider);
     state = AsyncData<FeedState>(current.copyWith(isLoadingMore: true));
     try {
-      final page = await ref.read(feedRepositoryProvider).fetchPage(cursor: current.nextCursor);
+      final page = await ref.read(feedRepositoryProvider).fetchPage(kind: kind, cursor: current.nextCursor);
+      if (ref.read(feedKindProvider) != kind) {
+        return; // switched feeds meanwhile: this page belongs to the other one
+      }
       final FeedState latest = state.value ?? current;
       state = AsyncData<FeedState>(
         FeedState(
@@ -72,7 +81,11 @@ final class FeedController extends AsyncNotifier<FeedState> {
   }
 
   Future<void> refresh() async {
-    final page = await ref.read(feedRepositoryProvider).fetchPage();
+    final FeedKind kind = ref.read(feedKindProvider);
+    final page = await ref.read(feedRepositoryProvider).fetchPage(kind: kind);
+    if (ref.read(feedKindProvider) != kind) {
+      return;
+    }
     // Fresh counts include the viewer's own SOLDs and shares: start the
     // local adjustments over.
     ref.invalidate(soldBaselineProvider);

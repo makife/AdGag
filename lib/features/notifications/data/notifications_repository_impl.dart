@@ -15,7 +15,7 @@ final class NotificationsRepositoryImpl implements NotificationsRepository {
         .select("*, profiles!notifications_actor_id_fkey(username)")
         .order("created_at", ascending: false)
         .limit(limit);
-    return rows.map(AppNotification.fromRow).toList(growable: false);
+    return rows.map(AppNotification.tryFromRow).whereType<AppNotification>().toList(growable: false);
   }
 
   @override

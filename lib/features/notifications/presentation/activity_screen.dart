@@ -76,6 +76,8 @@ class ActivityScreen extends ConsumerWidget {
         NotificationType.newFollower => Icons.person_add_alt,
         NotificationType.newReview => Icons.chat_bubble_outline,
         NotificationType.adThis => Icons.bolt,
+        NotificationType.reviewReply => Icons.reply,
+        NotificationType.mention => Icons.alternate_email,
       };
 
   String _textFor(BuildContext context, AppNotification notification) {
@@ -86,6 +88,8 @@ class ActivityScreen extends ConsumerWidget {
       NotificationType.newFollower => AppLocalizations.of(context).activityNewFollower(actor),
       NotificationType.newReview => AppLocalizations.of(context).activityNewReview(actor),
       NotificationType.adThis => AppLocalizations.of(context).activityAdThis(actor),
+      NotificationType.reviewReply => AppLocalizations.of(context).activityReviewReply(actor),
+      NotificationType.mention => AppLocalizations.of(context).activityMention(actor),
     };
   }
 

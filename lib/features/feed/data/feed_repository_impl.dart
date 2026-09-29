@@ -18,13 +18,18 @@ final class FeedRepositoryImpl implements FeedRepository {
   final supa.SupabaseClient _client;
 
   @override
-  Future<FeedPage> fetchPage({String? cursor, int limit = 10}) async {
+  Future<FeedPage> fetchPage({FeedKind kind = FeedKind.forYou, String? cursor, int limit = 10}) async {
     final _Cursor? decoded = cursor == null ? null : _Cursor.decode(cursor);
 
     // Fetch one extra row to know whether a next page exists without a
     // separate COUNT query (same trick as the pre-ranking implementation).
+    // Both RPCs return the same row shape and keyset cursor (for Following,
+    // rank_score is the publish time) — see 0022_following_feed_replies_mentions.sql.
     final List<Map<String, dynamic>> rows = await _client.rpc<List<dynamic>>(
-      "get_feed_page",
+      switch (kind) {
+        FeedKind.forYou => "get_feed_page",
+        FeedKind.following => "get_following_feed_page",
+      },
       params: <String, dynamic>{
         "p_cursor_score": decoded?.score,
         "p_cursor_id": decoded?.id,
@@ -79,6 +84,18 @@ final class FeedRepositoryImpl implements FeedRepository {
         .eq("status", "ready")
         .maybeSingle();
     return row == null ? null : Ad.fromRow(row);
+  }
+
+  @override
+  Future<List<Ad>> fetchAdThisChildren(String adId, {int limit = 60}) async {
+    final List<Map<String, dynamic>> rows = await _client
+        .from("ads")
+        .select("*, ad_subjects(display_name), profiles!ads_user_id_fkey(username, avatar_url)")
+        .eq("inspired_by_ad_id", adId)
+        .eq("status", "ready")
+        .order("published_at", ascending: false)
+        .limit(limit);
+    return rows.map(Ad.fromRow).toList(growable: false);
   }
 }
 

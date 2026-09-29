@@ -7,9 +7,14 @@ import "comment.dart";
 /// are lower-stakes than the main feed, so the rare edge case of two
 /// comments sharing a millisecond isn't worth the extra complexity here.
 abstract interface class CommentsRepository {
+  /// Top-level reviews of [adId], newest first.
   Future<List<Comment>> fetchPage({required String adId, DateTime? before, int limit = 20});
 
-  Future<Comment> create({required String adId, required String body});
+  /// Replies to one top-level review, oldest first (reads as a conversation).
+  Future<List<Comment>> fetchReplies(String parentId, {int limit = 50});
+
+  /// [parentId] set = a reply to that top-level review.
+  Future<Comment> create({required String adId, required String body, String? parentId});
 
   Future<void> deleteOwn(String commentId);
 }

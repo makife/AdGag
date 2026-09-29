@@ -7,24 +7,49 @@ const int _pageSize = 20;
 
 /// Reviews posted (+) / deleted (-) this session per Ad, added to the
 /// feed's server-side comment_count so the REVIEWS badge updates at once
-/// (the feed data isn't refetched after posting).
+/// (the feed data isn't refetched after posting). Replies count too, like
+/// the server's comment_count.
 final StateProviderFamily<int, String> commentCountDeltaProvider =
     StateProvider.family<int, String>((ref, String adId) => 0);
 
 final class CommentsState {
-  const CommentsState({required this.comments, required this.hasMore, this.isLoadingMore = false});
+  const CommentsState({
+    required this.comments,
+    required this.hasMore,
+    this.isLoadingMore = false,
+    this.replies = const <String, List<Comment>>{},
+    this.loadingReplies = const <String>{},
+  });
 
+  /// Top-level reviews, newest first.
   final List<Comment> comments;
   final bool hasMore;
   final bool isLoadingMore;
 
-  CommentsState copyWith({List<Comment>? comments, bool? hasMore, bool? isLoadingMore}) {
+  /// Loaded (= expanded) replies by top-level review id, oldest first.
+  final Map<String, List<Comment>> replies;
+  final Set<String> loadingReplies;
+
+  CommentsState copyWith({
+    List<Comment>? comments,
+    bool? hasMore,
+    bool? isLoadingMore,
+    Map<String, List<Comment>>? replies,
+    Set<String>? loadingReplies,
+  }) {
     return CommentsState(
       comments: comments ?? this.comments,
       hasMore: hasMore ?? this.hasMore,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      replies: replies ?? this.replies,
+      loadingReplies: loadingReplies ?? this.loadingReplies,
     );
   }
+
+  /// [comments] with [parentId]'s reply count changed by [delta].
+  List<Comment> _bumpReplyCount(String parentId, int delta) => comments
+      .map((Comment c) => c.id == parentId ? c.withReplyCount(c.replyCount + delta) : c)
+      .toList(growable: false);
 }
 
 /// REVIEWS list + posting for one Ad (CLAUDE.md section 8), keyed by adId.
@@ -45,31 +70,94 @@ final class CommentsController extends FamilyAsyncNotifier<CommentsState, String
         await ref.read(commentsRepositoryProvider).fetchPage(adId: arg, before: current.comments.last.createdAt);
     final CommentsState latest = state.value ?? current;
     state = AsyncData<CommentsState>(
-      CommentsState(
-        comments: <Comment>[...latest.comments, ...more],
-        hasMore: more.length >= _pageSize,
-        isLoadingMore: false,
-      ),
+      latest.copyWith(comments: <Comment>[...latest.comments, ...more], hasMore: more.length >= _pageSize, isLoadingMore: false),
     );
   }
 
-  Future<void> post(String body) async {
-    final Comment comment = await ref.read(commentsRepositoryProvider).create(adId: arg, body: body);
+  /// Expands [parentId]'s replies (fetches them).
+  Future<void> loadReplies(String parentId) async {
+    final CommentsState? current = state.valueOrNull;
+    if (current == null || current.loadingReplies.contains(parentId)) {
+      return;
+    }
+    state = AsyncData<CommentsState>(current.copyWith(loadingReplies: <String>{...current.loadingReplies, parentId}));
+    try {
+      final List<Comment> replies = await ref.read(commentsRepositoryProvider).fetchReplies(parentId);
+      final CommentsState latest = state.value ?? current;
+      state = AsyncData<CommentsState>(
+        latest.copyWith(
+          replies: <String, List<Comment>>{...latest.replies, parentId: replies},
+          loadingReplies: latest.loadingReplies.difference(<String>{parentId}),
+        ),
+      );
+    } catch (_) {
+      final CommentsState latest = state.value ?? current;
+      state = AsyncData<CommentsState>(
+        latest.copyWith(loadingReplies: latest.loadingReplies.difference(<String>{parentId})),
+      );
+      rethrow;
+    }
+  }
+
+  void hideReplies(String parentId) {
+    final CommentsState? current = state.valueOrNull;
+    if (current == null) {
+      return;
+    }
+    state = AsyncData<CommentsState>(
+      current.copyWith(replies: Map<String, List<Comment>>.of(current.replies)..remove(parentId)),
+    );
+  }
+
+  /// Posts a review, or a reply when [parentId] is set (the reply shows
+  /// under its review, which is expanded).
+  Future<void> post(String body, {String? parentId}) async {
+    final Comment comment =
+        await ref.read(commentsRepositoryProvider).create(adId: arg, body: body, parentId: parentId);
     final CommentsState? current = state.valueOrNull;
     if (current != null) {
-      state = AsyncData<CommentsState>(current.copyWith(comments: <Comment>[comment, ...current.comments]));
+      if (parentId == null) {
+        state = AsyncData<CommentsState>(current.copyWith(comments: <Comment>[comment, ...current.comments]));
+      } else {
+        state = AsyncData<CommentsState>(
+          current.copyWith(
+            comments: current._bumpReplyCount(parentId, 1),
+            replies: <String, List<Comment>>{
+              ...current.replies,
+              parentId: <Comment>[...?current.replies[parentId], comment],
+            },
+          ),
+        );
+      }
     }
     ref.read(commentCountDeltaProvider(arg).notifier).state++;
   }
 
-  Future<void> deleteOwn(String commentId) async {
-    await ref.read(commentsRepositoryProvider).deleteOwn(commentId);
+  Future<void> deleteOwn(Comment comment) async {
+    await ref.read(commentsRepositoryProvider).deleteOwn(comment.id);
     ref.read(commentCountDeltaProvider(arg).notifier).state--;
     final CommentsState? current = state.valueOrNull;
-    if (current != null) {
+    if (current == null) {
+      return;
+    }
+    final String? parentId = comment.parentId;
+    if (parentId == null) {
       state = AsyncData<CommentsState>(
         current.copyWith(
-          comments: current.comments.where((Comment c) => c.id != commentId).toList(growable: false),
+          comments: current.comments.where((Comment c) => c.id != comment.id).toList(growable: false),
+          replies: Map<String, List<Comment>>.of(current.replies)..remove(comment.id),
+        ),
+      );
+    } else {
+      state = AsyncData<CommentsState>(
+        current.copyWith(
+          comments: current._bumpReplyCount(parentId, -1),
+          replies: <String, List<Comment>>{
+            ...current.replies,
+            parentId: (current.replies[parentId] ?? const <Comment>[])
+                .where((Comment c) => c.id != comment.id)
+                .toList(growable: false),
+          },
         ),
       );
     }

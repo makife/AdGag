@@ -7,15 +7,19 @@ import "package:video_player/video_player.dart";
 
 import "../../../../core/analytics/ad_event_type.dart";
 import "../../../../core/analytics/analytics_providers.dart";
+import "../../../../core/localization/generated/app_localizations.dart";
+import "../../../../core/router/route_paths.dart";
 import "../../../../core/theme/app_colors.dart";
 import "../../../../core/theme/app_spacing.dart";
 import "../../../../core/video/video_controller_pool.dart";
 import "../../../../core/video/video_providers.dart";
 import "../../../../core/video/video_service.dart";
+import "../../../../shared/widgets/count_label.dart";
 import "../../../../shared/widgets/creator_header.dart";
 import "../../../../shared/widgets/subject_badge.dart";
 import "../../../comments/presentation/widgets/reviews_panel.dart";
 import "../../domain/ad.dart";
+import "../providers/feed_providers.dart";
 import "../providers/reviews_panel_provider.dart";
 import "feed_action_rail.dart";
 
@@ -542,7 +546,73 @@ class _Overlay extends StatelessWidget {
           const SizedBox(height: AppSpacing.xs),
           Text(ad.caption!, style: const TextStyle(color: Colors.white)),
         ],
+        // The AD THIS chain (CLAUDE.md section 9): where this Ad came from,
+        // and how many Ads came from it.
+        if (ad.inspiredByAdId != null) _InspiredByLine(originAdId: ad.inspiredByAdId!),
+        if (ad.adThisCount > 0)
+          _ChainLink(
+            icon: Icons.bolt,
+            text: AppLocalizations.of(context).adThisChainCount(CountLabel.format(ad.adThisCount)),
+            onTap: () => unawaited(context.pushTo(RoutePaths.adThisChainOf(ad.id))),
+          ),
       ],
+    );
+  }
+}
+
+/// "Inspired by @x" — shown once the origin Ad is known (it may be
+/// deleted, then nothing shows). One small cached lookup per origin.
+class _InspiredByLine extends ConsumerWidget {
+  const _InspiredByLine({required this.originAdId});
+
+  final String originAdId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final Ad? origin = ref.watch(adByIdProvider(originAdId)).valueOrNull;
+    if (origin == null || origin.creatorUsername == null) {
+      return const SizedBox.shrink();
+    }
+    return _ChainLink(
+      icon: Icons.subdirectory_arrow_right,
+      text: AppLocalizations.of(context).adThisInspiredBy("@${origin.creatorUsername}"),
+      onTap: () => unawaited(context.pushTo(RoutePaths.adDetailOf(originAdId))),
+    );
+  }
+}
+
+/// One tappable, shadowed line in the Ad overlay (48dp tall target).
+class _ChainLink extends StatelessWidget {
+  const _ChainLink({required this.icon, required this.text, required this.onTap});
+
+  final IconData icon;
+  final String text;
+  final VoidCallback onTap;
+
+  static const List<Shadow> _shadow = <Shadow>[Shadow(color: Colors.black87, blurRadius: 6)];
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 40),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(icon, size: 16, color: AppColors.brandMint, shadows: _shadow),
+            const SizedBox(width: AppSpacing.xs),
+            Flexible(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, shadows: _shadow),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -32,6 +32,40 @@ final class ProfileRepositoryImpl implements ProfileRepository {
   }
 
   @override
+  Future<List<PublicProfile>> suggestMentions(String prefix, {int limit = 6}) async {
+    if (!RegExp(r"^[a-z0-9_]{1,20}$").hasMatch(prefix)) {
+      return const <PublicProfile>[];
+    }
+    // "_" is a LIKE wildcard; usernames may contain it.
+    final String pattern = "${prefix.replaceAll("_", r"\_")}%";
+    const String columns = "id, username, display_name, avatar_url";
+    final String? me = _client.auth.currentUser?.id;
+
+    final List<PublicProfile> followed = <PublicProfile>[];
+    if (me != null) {
+      final List<Map<String, dynamic>> rows = await _client
+          .from("follows")
+          .select("profiles!follows_following_id_fkey!inner($columns)")
+          .eq("follower_id", me)
+          .ilike("profiles.username", pattern)
+          .limit(limit);
+      followed.addAll(
+        rows.map((Map<String, dynamic> r) => r["profiles"]).whereType<Map<String, dynamic>>().map(PublicProfile.fromRow),
+      );
+    }
+    if (followed.length >= limit) {
+      return followed;
+    }
+    final List<Map<String, dynamic>> others =
+        await _client.from("profiles").select(columns).ilike("username", pattern).order("username").limit(limit);
+    final Set<String> seen = <String>{for (final PublicProfile p in followed) p.id, if (me != null) me};
+    return <PublicProfile>[
+      ...followed,
+      ...others.map(PublicProfile.fromRow).where((PublicProfile p) => seen.add(p.id)),
+    ].take(limit).toList(growable: false);
+  }
+
+  @override
   Future<void> updateProfile({String? displayName, String? bio, String? avatarUrl}) async {
     final String? userId = _client.auth.currentUser?.id;
     if (userId == null) {

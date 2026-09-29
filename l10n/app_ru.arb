@@ -215,5 +215,21 @@
   "ageGateBody": "Она не будет показана в профиле и не сохраняется.",
   "ageGatePick": "Выберите дату рождения",
   "ageGateTooYoungTitle": "Извините, вы пока не можете зарегистрироваться",
-  "ageGateTooYoungBody": "Чтобы пользоваться AdGag, вам должно быть не меньше 13 лет."
+  "ageGateTooYoungBody": "Чтобы пользоваться AdGag, вам должно быть не меньше 13 лет.",
+  "feedForYou": "Для вас",
+  "feedFollowing": "Подписки",
+  "feedFollowingEmptyTitle": "От ваших подписок пока ничего нет",
+  "feedFollowingEmptyBody": "Подпишитесь на авторов, чья реклама вам нравится, — их новая реклама появится здесь.",
+  "feedFollowingDiscover": "Найти в MARKET",
+  "reviewsReply": "Ответить",
+  "reviewsReplyHint": "Напишите ответ…",
+  "reviewsReplyingTo": "Ответ для {name}",
+  "reviewsViewReplies": "Показать ответы ({count})",
+  "reviewsHideReplies": "Скрыть ответы",
+  "activityReviewReply": "{actor} ответил на ваш отзыв.",
+  "activityMention": "{actor} упомянул вас в отзыве.",
+  "adThisChainTitle": "Сделано через AD THIS",
+  "adThisChainEmpty": "Пока никто не сделал свою версию.",
+  "adThisChainCount": "Своих версий: {count}",
+  "adThisInspiredBy": "По мотивам {name}"
 }
