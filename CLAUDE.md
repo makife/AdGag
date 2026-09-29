@@ -1456,7 +1456,7 @@ Contact address on all pages: makifergan@gmail.com. Play listing images + 512px 
 
 **Version rule**: Play needs a higher versionCode for every upload — bump `pubspec.yaml` `version: x.y.z+N` before each release build (CI uses `github.run_number` as the build number instead; don't mix local and CI uploads without checking the last versionCode).
 
-**Still to do before launch**: (the 2026-09-29 round below built account deletion, Mux deletion and the age check — check that its migration/functions are LIVE before a release build); a licensed or CC0 music library is optional (user-picked music is the uploader's responsibility per the Terms); iOS needs an Apple Developer account for TestFlight.
+**Still to do before launch**: (the 2026-09-29 round below built account deletion, Mux deletion and the age check — its migration/functions are LIVE); a licensed or CC0 music library is optional (user-picked music is the uploader's responsibility per the Terms); iOS needs an Apple Developer account for TestFlight.
 
 ## Account deletion, Mux video deletion, sign-up age screen, follower stats, slide the trim window (2026-09-29)
 
@@ -1470,7 +1470,8 @@ Contact address on all pages: makifergan@gmail.com. Play listing images + 512px 
 - **Follower stats**: `PublicProfile.followersCount/followingCount` from the new columns; both profile screens show Ads / Followers / Following (`ProfileStat`, tappable) — own profile moves SOLD/views to a line under the username; the public profile gained an avatar. New `FollowListScreen` (`/u/:username/follows[?tab=following]`, two tabs; the embed must name `follows_follower_id_fkey`/`follows_following_id_fkey`). `FollowController.toggle` invalidates profiles + lists after success. The old per-request COUNT(*) methods were removed.
 - **Editor trim row (both platforms)**: a drag starting in the middle of the kept part slides the whole window (same length, clamped to the source); edges still trim; outside still scrubs; a tap still scrubs (iOS: a body "drag" under 4pt is treated as a tap). No rebuild when the values didn't change. Speed ranges follow via `setClipTrim`'s existing remap.
 - **Web**: `docs/delete-account/index.html` (TR/EN) — the account-deletion URL Play asks for; needs its own Netlify site like the others. Privacy policy now describes in-app deletion, and its email placeholders are filled in; the `[GELİŞTİRİCİ ADI / ŞİRKET UNVANI]` / `[DEVELOPER / COMPANY NAME]` placeholders are still there for the owner.
-- analyze clean, 67/67 tests. **Not device-tested**; nothing here has run against live Supabase yet unless the deploy note below says so.
+- analyze clean, 67/67 tests. **Not device-tested**; no real video has been deleted at Mux yet (the test Ad was a draft without an asset).
+- **LIVE (2026-09-29)**: 0021 applied (`supabase db push`), `delete-ad` + `delete-account` deployed (v1), `mux-webhook` redeployed (v2) — with a user-supplied access token used only as a transient env var. Verified: columns + trigger exist, counters match a fresh COUNT (0 mismatches), anon/authenticated can't execute the trigger function or UPDATE the counters. Live smoke test with two throwaway users (all 16 checks passed, cleaned up, 0 leftover): follow → counts 1/1; client counter write → 403; followers-list embed works; delete-ad refuses another user's Ad (404) and deletes own (status deleted); delete-account needs `confirm` (400), rejects anon (401), deletes (profile, Ads, auth user gone; the other user's follower count back to 0).
 
 ## Play policy pages, child-safety reporting, blocking that visibly works, feed releases decoders, Market previews (2026-09-28)
 
