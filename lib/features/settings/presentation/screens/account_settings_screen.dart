@@ -10,13 +10,59 @@ import "../../../auth/presentation/providers/auth_providers.dart";
 /// Settings > Account: the private account details (email is never shown
 /// anywhere public — CLAUDE.md section 45), password change, and account
 /// deletion (Google Play / App Store require an in-app path).
-class AccountSettingsScreen extends ConsumerWidget {
+class AccountSettingsScreen extends ConsumerStatefulWidget {
   const AccountSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AccountSettingsScreen> createState() => _AccountSettingsScreenState();
+}
+
+class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
+  bool _deleting = false;
+
+  /// The confirmation dialog only says yes/no and is CLOSED before anything
+  /// happens. Deleting signs the user out, and the router's auth redirect
+  /// then replaces every page with onboarding — so nothing may navigate
+  /// (pop) after that. Popping the dialog afterwards used to pop onboarding
+  /// itself and leave a black screen (device report).
+  Future<void> _deleteAccount() async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _DeleteAccountDialog(),
+    );
+    if (!(confirmed ?? false) || !mounted) {
+      return;
+    }
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    // The root messenger outlives this screen, so the message still shows
+    // on onboarding.
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    setState(() => _deleting = true);
+    try {
+      await ref.read(authRepositoryProvider).deleteAccount();
+      messenger.showSnackBar(SnackBar(content: Text(l10n.accountDeleted)));
+    } catch (e) {
+      if (mounted) {
+        setState(() => _deleting = false);
+      }
+      messenger.showSnackBar(SnackBar(content: Text(l10n.accountDeleteFailed("$e"))));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final String email = ref.watch(currentAppUserProvider).valueOrNull?.email ?? "";
+
+    if (_deleting) {
+      return PopScope(
+        canPop: false,
+        child: Scaffold(
+          appBar: AppBar(title: Text(l10n.settingsAccount), automaticallyImplyLeading: false),
+          body: const Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.settingsAccount)),
@@ -46,9 +92,7 @@ class AccountSettingsScreen extends ConsumerWidget {
             leading: Icon(Icons.delete_forever_outlined, color: Theme.of(context).colorScheme.error),
             title: Text(l10n.accountDelete, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             subtitle: Text(l10n.accountDeleteSubtitle),
-            onTap: () => unawaited(
-              showDialog<void>(context: context, builder: (_) => const _DeleteAccountDialog()),
-            ),
+            onTap: () => unawaited(_deleteAccount()),
           ),
         ],
       ),
@@ -155,8 +199,9 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
   }
 }
 
-/// Permanent account deletion. The user types their username to confirm —
-/// a deliberate step for something that can't be undone.
+/// Confirms permanent account deletion: the user types their username —
+/// a deliberate step for something that can't be undone. Returns true on
+/// confirm; the deletion itself runs on [AccountSettingsScreen].
 class _DeleteAccountDialog extends ConsumerStatefulWidget {
   const _DeleteAccountDialog();
 
@@ -166,8 +211,6 @@ class _DeleteAccountDialog extends ConsumerStatefulWidget {
 
 class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
   final TextEditingController _confirm = TextEditingController();
-  bool _deleting = false;
-  String? _error;
 
   @override
   void initState() {
@@ -179,29 +222,6 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
   void dispose() {
     _confirm.dispose();
     super.dispose();
-  }
-
-  Future<void> _delete() async {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    final NavigatorState navigator = Navigator.of(context);
-    setState(() {
-      _deleting = true;
-      _error = null;
-    });
-    try {
-      await ref.read(authRepositoryProvider).deleteAccount();
-      // Signed out now: the router's auth redirect leaves Settings.
-      navigator.pop();
-      messenger.showSnackBar(SnackBar(content: Text(l10n.accountDeleted)));
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _deleting = false;
-          _error = l10n.accountDeleteFailed("$e");
-        });
-      }
-    }
   }
 
   @override
@@ -222,28 +242,21 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
             const SizedBox(height: AppSpacing.lg),
             TextField(
               controller: _confirm,
-              enabled: !_deleting,
               autocorrect: false,
               decoration: InputDecoration(labelText: l10n.accountDeleteConfirmHint(username)),
             ),
-            if (_error != null) ...<Widget>[
-              const SizedBox(height: AppSpacing.sm),
-              Text(_error!, style: TextStyle(color: danger)),
-            ],
           ],
         ),
       ),
       actions: <Widget>[
         TextButton(
-          onPressed: _deleting ? null : () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(context).pop(false),
           child: Text(l10n.genericCancel),
         ),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: danger, foregroundColor: Theme.of(context).colorScheme.onError),
-          onPressed: confirmed && !_deleting ? () => unawaited(_delete()) : null,
-          child: _deleting
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : Text(l10n.accountDeleteButton),
+          onPressed: confirmed ? () => Navigator.of(context).pop(true) : null,
+          child: Text(l10n.accountDeleteButton),
         ),
       ],
     );
