@@ -100,7 +100,7 @@ K("onboardingSlogan", "The social network where everything is an ad.", "Her şey
 # ---------------------------------------------------------------- navigation
 K("navHome", "Home", "Ana Sayfa", "Inicio", "Início", "Start", "Accueil", "Home", "Главная", "الرئيسية", "Beranda", "ホーム", "홈")
 K("navMarket", "Market", "Pazar", "Mercado", "Mercado", "Markt", "Marché", "Mercato", "Рынок", "السوق", "Pasar", "マーケット", "마켓")
-K("navActivity", "Activity", "Aktivite", "Actividad", "Atividade", "Aktivität", "Activité", "Attività", "Активность", "النشاط", "Aktivitas", "アクティビティ", "활동")
+K("navActivity", "Notifications", "Bildirimler", "Notificaciones", "Notificações", "Mitteilungen", "Notifications", "Notifiche", "Уведомления", "الإشعارات", "Notifikasi", "お知らせ", "알림")
 K("navProfile", "Profile", "Profil", "Perfil", "Perfil", "Profil", "Profil", "Profilo", "Профиль", "الملف الشخصي", "Profil", "プロフィール", "프로필")
 
 # ---------------------------------------------------------------- common

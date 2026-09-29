@@ -54,7 +54,9 @@ class AppShell extends ConsumerWidget {
     _TabSpec(icon: Icons.home_outlined, selectedIcon: Icons.home, label: _TabLabel.home),
     _TabSpec(icon: Icons.storefront_outlined, selectedIcon: Icons.storefront, label: _TabLabel.market),
     _TabSpec(icon: null, selectedIcon: null, label: _TabLabel.ad), // central branded action
-    _TabSpec(icon: Icons.bolt_outlined, selectedIcon: Icons.bolt, label: _TabLabel.activity),
+    // Bell, not a bolt: the bolt is AD THIS on every Ad, and the same icon
+    // here made people think this tab was AD THIS (user report).
+    _TabSpec(icon: Icons.notifications_outlined, selectedIcon: Icons.notifications, label: _TabLabel.activity),
     _TabSpec(icon: Icons.person_outline, selectedIcon: Icons.person, label: _TabLabel.profile),
   ];
 

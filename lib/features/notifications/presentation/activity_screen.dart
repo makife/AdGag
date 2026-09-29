@@ -33,30 +33,39 @@ class ActivityScreen extends ConsumerWidget {
               phaseNote: AppLocalizations.of(context).activityEmptyBody,
             );
           }
-          return ListView.builder(
-            itemCount: notifications.length,
-            itemBuilder: (BuildContext context, int index) {
-              final AppNotification notification = notifications[index];
-              return ListTile(
-                tileColor: notification.isUnread ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.06) : null,
-                leading: Icon(_iconFor(notification.type)),
-                title: Text(_textFor(context, notification)),
-                subtitle: Text(_relativeTime(context, notification.createdAt)),
-                onTap: () {
-                  if (notification.isUnread) {
-                    unawaited(
-                      ref.read(notificationsRepositoryProvider).markRead(notification.id),
-                    );
-                  }
-                  final String? adId = notification.adId;
-                  if (adId != null) {
-                    context.goTo(RoutePaths.adDetailOf(adId));
-                  } else if (notification.actorUsername != null) {
-                    context.goTo(RoutePaths.userProfileOf(notification.actorUsername!));
-                  }
-                },
-              );
-            },
+          return RefreshIndicator(
+            onRefresh: () => ref.refresh(recentNotificationsProvider.future),
+            child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: notifications.length,
+              itemBuilder: (BuildContext context, int index) {
+                final AppNotification notification = notifications[index];
+                return ListTile(
+                  tileColor: notification.isUnread ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.06) : null,
+                  leading: Icon(_iconFor(notification.type)),
+                  title: Text(_textFor(context, notification)),
+                  subtitle: Text(_relativeTime(context, notification.createdAt)),
+                  onTap: () {
+                    if (notification.isUnread) {
+                      unawaited(
+                        ref
+                            .read(notificationsRepositoryProvider)
+                            .markRead(notification.id)
+                            .then((_) => ref.invalidate(recentNotificationsProvider)),
+                      );
+                    }
+                    // PUSH, not go: go replaced the whole stack, so the device
+                    // back button left the app (user report).
+                    final String? adId = notification.adId;
+                    if (adId != null) {
+                      unawaited(context.pushTo(RoutePaths.adDetailOf(adId)));
+                    } else if (notification.actorUsername != null) {
+                      unawaited(context.pushTo(RoutePaths.userProfileOf(notification.actorUsername!)));
+                    }
+                  },
+                );
+              },
+            ),
           );
         },
       ),
