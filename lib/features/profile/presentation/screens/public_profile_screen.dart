@@ -5,8 +5,10 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../../../core/localization/generated/app_localizations.dart";
 
+import "../../../../core/router/route_paths.dart";
 import "../../../../core/supabase/supabase_providers.dart";
 import "../../../../core/theme/app_spacing.dart";
+import "../../../../shared/widgets/mini_avatar.dart";
 import "../../../feed/domain/ad.dart";
 import "../../../moderation/domain/report_target_type.dart";
 import "../../../moderation/presentation/block_actions.dart";
@@ -16,6 +18,7 @@ import "../../../social/presentation/providers/social_providers.dart";
 import "../../../subjects/presentation/screens/subject_ads_viewer_screen.dart";
 import "../../domain/public_profile.dart";
 import "../providers/profile_providers.dart";
+import "../widgets/profile_stat.dart";
 
 /// Another user's PROFILE (CLAUDE.md section 13) — reached from search or
 /// a creator's @username tap. The signed-in user's own profile still uses
@@ -69,6 +72,42 @@ class _ProfileBody extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    MiniAvatar(avatarUrl: profile.avatarUrl, username: profile.username, size: 72),
+                    const SizedBox(width: AppSpacing.lg),
+                    Expanded(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: <Widget>[
+                          Flexible(
+                            child: ProfileStat(
+                              label: AppLocalizations.of(context).statAds,
+                              value: blocked ? 0 : (adsAsync.valueOrNull?.length ?? 0),
+                            ),
+                          ),
+                          Flexible(
+                            child: ProfileStat(
+                              label: AppLocalizations.of(context).statFollowers,
+                              value: profile.followersCount,
+                              onTap: () => unawaited(context.pushTo(RoutePaths.userFollowsOf(profile.username))),
+                            ),
+                          ),
+                          Flexible(
+                            child: ProfileStat(
+                              label: AppLocalizations.of(context).statFollowing,
+                              value: profile.followingCount,
+                              onTap: () => unawaited(
+                                context.pushTo(RoutePaths.userFollowsOf(profile.username, following: true)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
                 Text(
                   profile.displayName ?? profile.username,
                   style: Theme.of(context).textTheme.headlineSmall,

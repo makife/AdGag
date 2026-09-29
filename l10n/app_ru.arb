@@ -198,5 +198,22 @@
   "authConfirmedTitle": "Аккаунт подтверждён!",
   "authConfirmedBody": "Добро пожаловать в AdGag. Выбери что угодно и продай это.",
   "authConfirmedStart": "Поехали",
-  "authResend": "Отправить письмо ещё раз"
+  "authResend": "Отправить письмо ещё раз",
+  "statFollowers": "Подписчики",
+  "statFollowing": "Подписки",
+  "followersEmpty": "Подписчиков пока нет.",
+  "followingEmpty": "Пока ни на кого не подписан.",
+  "accountDelete": "Удалить аккаунт",
+  "accountDeleteSubtitle": "Навсегда удалить аккаунт и вашу рекламу",
+  "accountDeleteTitle": "Удалить аккаунт?",
+  "accountDeleteBody": "Аккаунт, ваша реклама с видео, отзывы, SOLD и подписки будут удалены навсегда. Это нельзя отменить.",
+  "accountDeleteConfirmHint": "Введите {username} для подтверждения",
+  "accountDeleteButton": "Удалить навсегда",
+  "accountDeleted": "Аккаунт удалён.",
+  "accountDeleteFailed": "Не удалось удалить аккаунт: {error}",
+  "ageGateTitle": "Когда у вас день рождения?",
+  "ageGateBody": "Она не будет показана в профиле и не сохраняется.",
+  "ageGatePick": "Выберите дату рождения",
+  "ageGateTooYoungTitle": "Извините, вы пока не можете зарегистрироваться",
+  "ageGateTooYoungBody": "Чтобы пользоваться AdGag, вам должно быть не меньше 13 лет."
 }

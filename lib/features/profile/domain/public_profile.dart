@@ -8,6 +8,8 @@ final class PublicProfile {
     this.displayName,
     this.bio,
     this.avatarUrl,
+    this.followersCount = 0,
+    this.followingCount = 0,
   });
 
   factory PublicProfile.fromRow(Map<String, dynamic> row) {
@@ -17,6 +19,10 @@ final class PublicProfile {
       displayName: row["display_name"] as String?,
       bio: row["bio"] as String?,
       avatarUrl: row["avatar_url"] as String?,
+      // Server-maintained counters (0021_follow_counts_and_asset_cleanup.sql);
+      // absent when a query selects only some columns.
+      followersCount: (row["followers_count"] as num?)?.toInt() ?? 0,
+      followingCount: (row["following_count"] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -25,4 +31,6 @@ final class PublicProfile {
   final String? displayName;
   final String? bio;
   final String? avatarUrl;
+  final int followersCount;
+  final int followingCount;
 }

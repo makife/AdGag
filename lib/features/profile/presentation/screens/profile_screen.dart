@@ -11,8 +11,10 @@ import "../../../auth/domain/app_user.dart";
 import "../../../auth/presentation/providers/auth_providers.dart";
 import "../../../feed/domain/ad.dart";
 import "../../../subjects/presentation/screens/subject_ads_viewer_screen.dart";
+import "../../../../shared/widgets/count_label.dart";
 import "../../domain/public_profile.dart";
 import "../providers/profile_providers.dart";
+import "../widgets/profile_stat.dart";
 
 /// PROFILE (CLAUDE.md section 13): own Ads grid, SOLD/views stats, Edit
 /// profile, and the menu icon into Settings (where sign-out lives). The
@@ -80,9 +82,10 @@ class _ProfileBody extends ConsumerWidget {
                     ),
                     const SizedBox(width: AppSpacing.lg),
                     Expanded(
-                      child: adsAsync.maybeWhen(
-                        data: (List<Ad> ads) => _StatsRow(ads: ads),
-                        orElse: () => const SizedBox.shrink(),
+                      child: _StatsRow(
+                        username: user.username,
+                        ads: adsAsync.valueOrNull,
+                        profile: profile,
                       ),
                     ),
                   ],
@@ -91,6 +94,10 @@ class _ProfileBody extends ConsumerWidget {
                 Text(user.displayName, style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: AppSpacing.xs),
                 Text("@${user.username}", style: Theme.of(context).textTheme.bodyMedium),
+                if (adsAsync.valueOrNull case final List<Ad> ads when ads.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: AppSpacing.xs),
+                  _EngagementLine(ads: ads),
+                ],
                 if (profile?.bio != null && profile!.bio!.isNotEmpty) ...<Widget>[
                   const SizedBox(height: AppSpacing.sm),
                   Text(profile.bio!),
@@ -161,46 +168,59 @@ class _ProfileBody extends ConsumerWidget {
   }
 }
 
-/// Ads / SOLD / Views (CLAUDE.md section 13). Summed from the same page of
-/// Ads the grid below already fetched — correct for the common case, but
-/// not a true account-wide total once a creator has more Ads than
-/// [ProfileRepository.fetchAdsByUser]'s limit (30). Good enough for MVP;
-/// an accurate total at scale needs a maintained counter on `profiles`
-/// (CLAUDE.md section 58), not an extra query here.
+/// Ads / Followers / Following (CLAUDE.md section 13) next to the avatar;
+/// the follow counts open their lists. Follow counts are the profile's
+/// server-maintained counters. The Ads count is the fetched page's length —
+/// exact up to [ProfileRepository.fetchAdsByUser]'s limit (30).
 class _StatsRow extends StatelessWidget {
-  const _StatsRow({required this.ads});
+  const _StatsRow({required this.username, required this.ads, required this.profile});
 
-  final List<Ad> ads;
+  final String username;
+  final List<Ad>? ads;
+  final PublicProfile? profile;
 
   @override
   Widget build(BuildContext context) {
-    final int soldTotal = ads.fold(0, (int sum, Ad ad) => sum + ad.soldCount);
-    final int viewTotal = ads.fold(0, (int sum, Ad ad) => sum + ad.viewCount);
-
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: <Widget>[
-        _Stat(label: AppLocalizations.of(context).statAds, value: ads.length),
-        _Stat(label: AppLocalizations.of(context).actionSold, value: soldTotal),
-        _Stat(label: AppLocalizations.of(context).statViews, value: viewTotal),
+        Flexible(child: ProfileStat(label: l10n.statAds, value: ads?.length ?? 0)),
+        Flexible(
+          child: ProfileStat(
+            label: l10n.statFollowers,
+            value: profile?.followersCount ?? 0,
+            onTap: () => unawaited(context.pushTo(RoutePaths.userFollowsOf(username))),
+          ),
+        ),
+        Flexible(
+          child: ProfileStat(
+            label: l10n.statFollowing,
+            value: profile?.followingCount ?? 0,
+            onTap: () => unawaited(context.pushTo(RoutePaths.userFollowsOf(username, following: true))),
+          ),
+        ),
       ],
     );
   }
 }
 
-class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value});
+/// "12.8K SOLD · 40K views", summed from the same page of Ads the grid
+/// fetched — not an account-wide total past 30 Ads (a maintained counter on
+/// `profiles` is the fix at scale, CLAUDE.md section 58).
+class _EngagementLine extends StatelessWidget {
+  const _EngagementLine({required this.ads});
 
-  final String label;
-  final int value;
+  final List<Ad> ads;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: <Widget>[
-        Text("$value", style: Theme.of(context).textTheme.titleMedium),
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
-      ],
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final int soldTotal = ads.fold(0, (int sum, Ad ad) => sum + ad.soldCount);
+    final int viewTotal = ads.fold(0, (int sum, Ad ad) => sum + ad.viewCount);
+    return Text(
+      "${CountLabel.format(soldTotal)} ${l10n.actionSold} · ${CountLabel.format(viewTotal)} ${l10n.statViews}",
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
     );
   }
 }

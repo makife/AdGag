@@ -75,3 +75,22 @@ final class PendingEmailConfirmationController extends Notifier<bool> {
 
 final NotifierProvider<PendingEmailConfirmationController, bool> pendingEmailConfirmationProvider =
     NotifierProvider<PendingEmailConfirmationController, bool>(PendingEmailConfirmationController.new);
+
+/// Set on this device once the sign-up age screen gets a birth date under
+/// AgeGate.minimumAge (13). Sign-up then stays closed here, so going back and
+/// picking another date doesn't get around it (the usual "neutral age
+/// screen" practice). The birth date itself is never stored or sent.
+final class AgeGateBlockedController extends Notifier<bool> {
+  static const String _key = "age_gate_blocked";
+
+  @override
+  bool build() => ref.watch(sharedPreferencesProvider).getBool(_key) ?? false;
+
+  Future<void> block() async {
+    state = true;
+    await ref.read(sharedPreferencesProvider).setBool(_key, true);
+  }
+}
+
+final NotifierProvider<AgeGateBlockedController, bool> ageGateBlockedProvider =
+    NotifierProvider<AgeGateBlockedController, bool>(AgeGateBlockedController.new);

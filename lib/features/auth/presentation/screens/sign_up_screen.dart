@@ -8,6 +8,7 @@ import "../../../../core/preferences/app_preferences.dart";
 import "../../../../core/router/route_paths.dart";
 import "../../../../core/theme/app_colors.dart";
 import "../../../../core/theme/app_spacing.dart";
+import "../../../../core/utils/age_gate.dart";
 import "../../../../core/utils/username_validator.dart";
 import "../../domain/auth_repository.dart";
 import "../auth_error_message.dart";
@@ -30,6 +31,11 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+
+  /// Age screen (first step): the picked birth date, and whether it passed.
+  /// Kept only in memory for this screen — never stored or sent.
+  DateTime? _birthDate;
+  bool _ageConfirmed = false;
 
   /// Set once the confirmation email went out.
   String? _confirmationSentTo;
@@ -67,6 +73,33 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(AppLocalizations.of(context).authEmailTaken)),
         );
+    }
+  }
+
+  Future<void> _pickBirthDate() async {
+    final DateTime now = DateTime.now();
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _birthDate ?? DateTime(now.year - 18, now.month, now.day),
+      firstDate: DateTime(now.year - 120),
+      lastDate: now,
+      initialEntryMode: DatePickerEntryMode.calendarOnly,
+      initialDatePickerMode: DatePickerMode.year,
+    );
+    if (picked != null && mounted) {
+      setState(() => _birthDate = picked);
+    }
+  }
+
+  void _confirmAge() {
+    final DateTime? birthDate = _birthDate;
+    if (birthDate == null) {
+      return;
+    }
+    if (AgeGate.isOldEnough(birthDate, DateTime.now())) {
+      setState(() => _ageConfirmed = true);
+    } else {
+      unawaited(ref.read(ageGateBlockedProvider.notifier).block());
     }
   }
 
@@ -110,9 +143,66 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.xl),
-          child: sentTo != null ? _checkEmail(context, l10n, sentTo) : _form(context, l10n, state),
+          child: sentTo != null
+              ? _checkEmail(context, l10n, sentTo)
+              : ref.watch(ageGateBlockedProvider)
+                  ? _tooYoung(context, l10n)
+                  : !_ageConfirmed
+                      ? _ageStep(context, l10n)
+                      : _form(context, l10n, state),
         ),
       ),
+    );
+  }
+
+  Widget _ageStep(BuildContext context, AppLocalizations l10n) {
+    final DateTime? birthDate = _birthDate;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(l10n.ageGateTitle, style: Theme.of(context).textTheme.headlineLarge),
+        const SizedBox(height: AppSpacing.md),
+        Text(l10n.ageGateBody, style: Theme.of(context).textTheme.bodyLarge),
+        const SizedBox(height: AppSpacing.xxl),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.cake_outlined),
+          label: Text(
+            birthDate == null
+                ? l10n.ageGatePick
+                : MaterialLocalizations.of(context).formatMediumDate(birthDate),
+          ),
+          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+          onPressed: () => unawaited(_pickBirthDate()),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            onPressed: birthDate == null ? null : _confirmAge,
+            child: Text(l10n.genericNext),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        Center(
+          child: TextButton(
+            onPressed: () => context.pushReplacementTo(RoutePaths.signIn),
+            child: Text(l10n.authHaveAccount),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _tooYoung(BuildContext context, AppLocalizations l10n) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Icon(Icons.info_outline, size: 56, color: AppColors.brandTurquoise),
+        const SizedBox(height: AppSpacing.lg),
+        Text(l10n.ageGateTooYoungTitle, style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: AppSpacing.md),
+        Text(l10n.ageGateTooYoungBody, style: Theme.of(context).textTheme.bodyLarge),
+      ],
     );
   }
 

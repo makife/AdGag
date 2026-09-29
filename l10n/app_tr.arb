@@ -198,5 +198,22 @@
   "authConfirmedTitle": "Hesabın onaylandı!",
   "authConfirmedBody": "AdGag'e hoş geldin. Bir şey seç ve sat.",
   "authConfirmedStart": "Başlayalım",
-  "authResend": "E-postayı tekrar gönder"
+  "authResend": "E-postayı tekrar gönder",
+  "statFollowers": "Takipçi",
+  "statFollowing": "Takip",
+  "followersEmpty": "Henüz takipçi yok.",
+  "followingEmpty": "Henüz kimse takip edilmiyor.",
+  "accountDelete": "Hesabı sil",
+  "accountDeleteSubtitle": "Hesabını ve reklamlarını kalıcı olarak sil",
+  "accountDeleteTitle": "Hesabın silinsin mi?",
+  "accountDeleteBody": "Hesabın, reklamların ve videoları, yorumların, SOLD'ların ve takiplerin kalıcı olarak silinir. Bu işlem geri alınamaz.",
+  "accountDeleteConfirmHint": "Onaylamak için {username} yaz",
+  "accountDeleteButton": "Kalıcı olarak sil",
+  "accountDeleted": "Hesabın silindi.",
+  "accountDeleteFailed": "Hesap silinemedi: {error}",
+  "ageGateTitle": "Doğum günün ne zaman?",
+  "ageGateBody": "Profilinde gösterilmez ve saklanmaz.",
+  "ageGatePick": "Doğum tarihini seç",
+  "ageGateTooYoungTitle": "Üzgünüz, henüz kayıt olamazsın",
+  "ageGateTooYoungBody": "AdGag'i kullanmak için en az 13 yaşında olmalısın."
 }

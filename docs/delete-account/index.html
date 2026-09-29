@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AdGag Hesap Silme / Delete Your Account</title>
+<meta name="description" content="AdGag hesabınızı ve verilerinizi nasıl silersiniz. How to delete your AdGag account and data.">
+<style>
+  :root {
+    --bg: #F6FAFA;
+    --text: #0F1F1E;
+    --muted: #4E6462;
+    --line: #D6E4E2;
+    --accent: #0E8F8A;
+    --accent-soft: #DDF3F1;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #071110;
+      --text: #E7F2F1;
+      --muted: #94ABA8;
+      --line: #1C2E2C;
+      --accent: #16C5C0;
+      --accent-soft: #0E2624;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 64px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+  .brand { font-weight: 800; font-size: 20px; letter-spacing: -0.01em; }
+  .brand span { color: var(--accent); }
+  .lang { display: flex; gap: 6px; }
+  .lang button {
+    font: 600 14px/1 inherit; font-family: inherit; padding: 8px 14px; border-radius: 99px;
+    border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .lang button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .lang button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  h1 { font-size: clamp(26px, 5vw, 34px); line-height: 1.2; margin: 24px 0 6px; text-wrap: balance; }
+  .meta { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
+  h2 { font-size: 19px; margin: 34px 0 8px; padding-top: 18px; border-top: 1px solid var(--line); }
+  p, li { max-width: 68ch; }
+  ul, ol { padding-left: 1.2em; }
+  li { margin: 4px 0; }
+  .summary { background: var(--accent-soft); border-radius: 14px; padding: 16px 20px; margin: 8px 0 8px; }
+  a { color: var(--accent); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">Ad<span>Gag</span></div>
+    <div class="lang" role="group" aria-label="Dil / Language">
+      <button type="button" id="btn-tr" data-lang="tr" aria-pressed="true">Türkçe</button>
+      <button type="button" id="btn-en" data-lang="en" aria-pressed="false">English</button>
+    </div>
+  </header>
+
+  <!-- ============================== TÜRKÇE ============================== -->
+  <main id="tr" lang="tr">
+    <h1>AdGag hesabını silme</h1>
+    <p class="meta">Son güncelleme: 29 Eylül 2026</p>
+
+    <div class="summary">
+      <p><strong>Hesabını istediğin zaman, uygulamanın içinden hemen silebilirsin.</strong> Silme işlemi kalıcıdır ve geri alınamaz.</p>
+    </div>
+
+    <h2>1. Uygulamadan silme (önerilen)</h2>
+    <ol>
+      <li>AdGag uygulamasını aç ve giriş yap.</li>
+      <li><strong>Profil</strong> sekmesinde sağ üstteki menü simgesine dokun ve <strong>Ayarlar</strong>'a gir.</li>
+      <li><strong>Hesap</strong> → <strong>Hesabı sil</strong>'e dokun.</li>
+      <li>Onaylamak için kullanıcı adını yaz ve <strong>Kalıcı olarak sil</strong>'e dokun.</li>
+    </ol>
+    <p>Hesabın ve aşağıdaki veriler o anda silinir.</p>
+
+    <h2>2. Uygulamaya erişemiyorsan</h2>
+    <p>Hesabınla ilişkili e-posta adresinden <a href="mailto:makifergan@gmail.com?subject=Hesab%C4%B1m%C4%B1%20sil">makifergan@gmail.com</a> adresine “Hesabımı sil” konulu bir e-posta gönder ve kullanıcı adını belirt. Talebini en geç 30 gün içinde sonuçlandırırız.</p>
+
+    <h2>3. Silinen veriler</h2>
+    <ul>
+      <li>Hesabın ve profilin (kullanıcı adı, görünen ad, biyografi, profil fotoğrafı)</li>
+      <li>Reklamların ve video dosyaları (video sağlayıcımızdan da silinir)</li>
+      <li>Yorumların, SOLD işaretlemelerin, takip ettiğin ve seni takip eden hesap bağlantıları</li>
+      <li>Engellediğin hesaplar, yaptığın şikayetler, bildirimlerin ve cihaz bildirim anahtarların</li>
+    </ul>
+
+    <h2>4. Saklanabilecek veriler</h2>
+    <ul>
+      <li>İzleme istatistikleri, hesabınla bağlantısı koparılarak anonim olarak saklanabilir.</li>
+      <li>Yedeklerdeki kopyalar makul bir süre içinde (en fazla 30 gün) silinir.</li>
+      <li>Yasal bir yükümlülük gerektirdiğinde (örneğin yetkili makamların talebi), ilgili kayıtlar yalnızca gereken süre boyunca saklanır.</li>
+    </ul>
+    <p>Ayrıntılar için <a href="https://fanciful-medovik-d846a9.netlify.app/">Gizlilik Politikası</a>'na bakabilirsin.</p>
+  </main>
+
+  <!-- ============================== ENGLISH ============================== -->
+  <main id="en" lang="en" hidden>
+    <h1>Delete your AdGag account</h1>
+    <p class="meta">Last updated: 29 September 2026</p>
+
+    <div class="summary">
+      <p><strong>You can delete your account at any time, right inside the app.</strong> Deletion is permanent and can't be undone.</p>
+    </div>
+
+    <h2>1. Delete in the app (recommended)</h2>
+    <ol>
+      <li>Open the AdGag app and sign in.</li>
+      <li>On the <strong>Profile</strong> tab, tap the menu icon in the top right and open <strong>Settings</strong>.</li>
+      <li>Tap <strong>Account</strong> → <strong>Delete account</strong>.</li>
+      <li>Type your username to confirm and tap <strong>Delete permanently</strong>.</li>
+    </ol>
+    <p>Your account and the data below are deleted right away.</p>
+
+    <h2>2. If you can't use the app</h2>
+    <p>Email <a href="mailto:makifergan@gmail.com?subject=Delete%20my%20account">makifergan@gmail.com</a> from the address linked to your account with the subject “Delete my account” and include your username. We complete these requests within 30 days.</p>
+
+    <h2>3. What is deleted</h2>
+    <ul>
+      <li>Your account and profile (username, display name, bio, profile photo)</li>
+      <li>Your Ads and their video files (also deleted at our video provider)</li>
+      <li>Your reviews, SOLDs, and who you follow and who follows you</li>
+      <li>Accounts you blocked, reports you made, your notifications and device notification tokens</li>
+    </ul>
+
+    <h2>4. What may be kept</h2>
+    <ul>
+      <li>Viewing statistics may be kept anonymously, with the link to your account removed.</li>
+      <li>Copies in backups are deleted within a reasonable time (at most 30 days).</li>
+      <li>Where a legal obligation requires it (for example, a request from the competent authorities), the relevant records are kept only as long as needed.</li>
+    </ul>
+    <p>See the <a href="https://fanciful-medovik-d846a9.netlify.app/">Privacy Policy</a> for details.</p>
+  </main>
+</div>
+<script>
+  (function () {
+    var tr = document.getElementById("tr"), en = document.getElementById("en");
+    var bTr = document.getElementById("btn-tr"), bEn = document.getElementById("btn-en");
+    function show(lang) {
+      var isTr = lang === "tr";
+      tr.hidden = !isTr; en.hidden = isTr;
+      bTr.setAttribute("aria-pressed", String(isTr));
+      bEn.setAttribute("aria-pressed", String(!isTr));
+      document.documentElement.lang = lang;
+      document.title = isTr ? "AdGag Hesap Silme" : "Delete your AdGag account";
+    }
+    var fromHash = (location.hash || "").replace("#", "");
+    var initial = fromHash === "en" || fromHash === "tr" ? fromHash
+      : ((navigator.language || "").toLowerCase().indexOf("tr") === 0 ? "tr" : "en");
+    show(initial);
+    bTr.addEventListener("click", function () { show("tr"); });
+    bEn.addEventListener("click", function () { show("en"); });
+  })();
+</script>
+</body>
+</html>

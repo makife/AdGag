@@ -19,6 +19,8 @@ LANGUAGE_NAMES = {
 }
 
 PLACEHOLDERS = {
+    "accountDeleteConfirmHint": {"username": "String"},
+    "accountDeleteFailed": {"error": "String"},
     "actionSoldCount": {"count": "String"},
     "dailyAdParticipants": {"count": "String"},
     "subjectAdCount": {"count": "String"},
@@ -662,3 +664,79 @@ K("authConfirmedStart", "Let's go", "Başlayalım", "¡Vamos!", "Vamos lá", "Lo
 K("authResend", "Resend email", "E-postayı tekrar gönder", "Reenviar email", "Reenviar e-mail", "E-Mail erneut senden",
   "Renvoyer l'e-mail", "Invia di nuovo l'email", "Отправить письмо ещё раз", "إعادة إرسال البريد", "Kirim ulang email",
   "メールを再送信", "이메일 다시 보내기")
+
+# --- Follow stats (profiles) ---
+K("statFollowers", "Followers", "Takipçi", "Seguidores", "Seguidores", "Follower", "Abonnés", "Follower", "Подписчики", "المتابعون",
+  "Pengikut", "フォロワー", "팔로워")
+K("statFollowing", "Following", "Takip", "Siguiendo", "Seguindo", "Gefolgt", "Abonnements", "Seguiti", "Подписки", "يتابع",
+  "Mengikuti", "フォロー中", "팔로잉")
+K("followersEmpty", "No followers yet.", "Henüz takipçi yok.", "Aún no hay seguidores.", "Ainda não há seguidores.",
+  "Noch keine Follower.", "Pas encore d'abonnés.", "Ancora nessun follower.", "Подписчиков пока нет.", "لا يوجد متابعون بعد.",
+  "Belum ada pengikut.", "まだフォロワーはいません。", "아직 팔로워가 없어요.")
+K("followingEmpty", "Not following anyone yet.", "Henüz kimse takip edilmiyor.", "Aún no sigue a nadie.", "Ainda não segue ninguém.",
+  "Folgt noch niemandem.", "Ne suit encore personne.", "Non segue ancora nessuno.", "Пока ни на кого не подписан.",
+  "لا يتابع أحدًا بعد.", "Belum mengikuti siapa pun.", "まだ誰もフォローしていません。", "아직 아무도 팔로우하지 않아요.")
+
+# --- Account deletion (Settings > Account) ---
+K("accountDelete", "Delete account", "Hesabı sil", "Eliminar cuenta", "Excluir conta", "Konto löschen", "Supprimer le compte",
+  "Elimina account", "Удалить аккаунт", "حذف الحساب", "Hapus akun", "アカウントを削除", "계정 삭제")
+K("accountDeleteSubtitle", "Permanently delete your account and your Ads", "Hesabını ve reklamlarını kalıcı olarak sil",
+  "Elimina para siempre tu cuenta y tus anuncios", "Exclua permanentemente sua conta e seus anúncios",
+  "Dein Konto und deine Werbungen endgültig löschen", "Supprimer définitivement ton compte et tes pubs",
+  "Elimina per sempre il tuo account e le tue pubblicità", "Навсегда удалить аккаунт и вашу рекламу",
+  "احذف حسابك وإعلاناتك نهائيًا", "Hapus akun dan iklanmu secara permanen", "アカウントと広告を完全に削除します",
+  "계정과 광고를 영구적으로 삭제해요")
+K("accountDeleteTitle", "Delete your account?", "Hesabın silinsin mi?", "¿Eliminar tu cuenta?", "Excluir sua conta?",
+  "Konto löschen?", "Supprimer ton compte ?", "Eliminare il tuo account?", "Удалить аккаунт?", "حذف حسابك؟", "Hapus akunmu?",
+  "アカウントを削除しますか？", "계정을 삭제할까요?")
+K("accountDeleteBody",
+  "This permanently deletes your account, your Ads and their videos, your reviews, SOLDs and follows. It can't be undone.",
+  "Hesabın, reklamların ve videoları, yorumların, SOLD'ların ve takiplerin kalıcı olarak silinir. Bu işlem geri alınamaz.",
+  "Esto elimina para siempre tu cuenta, tus anuncios y sus videos, tus reseñas, SOLD y seguimientos. No se puede deshacer.",
+  "Isso exclui permanentemente sua conta, seus anúncios e vídeos, suas avaliações, SOLDs e seguidos. Não pode ser desfeito.",
+  "Dein Konto, deine Werbungen samt Videos, Bewertungen, SOLDs und Follows werden endgültig gelöscht. Das kann nicht rückgängig gemacht werden.",
+  "Ton compte, tes pubs et leurs vidéos, tes avis, tes SOLD et tes abonnements seront supprimés définitivement. C'est irréversible.",
+  "Il tuo account, le tue pubblicità e i relativi video, le recensioni, i SOLD e i follow verranno eliminati per sempre. Non si può annullare.",
+  "Аккаунт, ваша реклама с видео, отзывы, SOLD и подписки будут удалены навсегда. Это нельзя отменить.",
+  "سيؤدي هذا إلى حذف حسابك وإعلاناتك ومقاطعها ومراجعاتك وSOLD والمتابعات نهائيًا. لا يمكن التراجع عن ذلك.",
+  "Ini menghapus akun, iklan beserta videonya, ulasan, SOLD, dan ikutanmu secara permanen. Tidak bisa dibatalkan.",
+  "アカウント、広告とその動画、レビュー、SOLD、フォローが完全に削除されます。元に戻せません。",
+  "계정, 광고와 영상, 리뷰, SOLD, 팔로우가 영구적으로 삭제돼요. 되돌릴 수 없어요.")
+K("accountDeleteConfirmHint", "Type {username} to confirm", "Onaylamak için {username} yaz", "Escribe {username} para confirmar",
+  "Digite {username} para confirmar", "Zur Bestätigung {username} eingeben", "Tape {username} pour confirmer",
+  "Scrivi {username} per confermare", "Введите {username} для подтверждения", "اكتب {username} للتأكيد",
+  "Ketik {username} untuk konfirmasi", "確認のため {username} と入力", "확인하려면 {username} 입력")
+K("accountDeleteButton", "Delete permanently", "Kalıcı olarak sil", "Eliminar para siempre", "Excluir permanentemente",
+  "Endgültig löschen", "Supprimer définitivement", "Elimina per sempre", "Удалить навсегда", "حذف نهائي", "Hapus permanen",
+  "完全に削除", "영구 삭제")
+K("accountDeleted", "Your account was deleted.", "Hesabın silindi.", "Tu cuenta fue eliminada.", "Sua conta foi excluída.",
+  "Dein Konto wurde gelöscht.", "Ton compte a été supprimé.", "Il tuo account è stato eliminato.", "Аккаунт удалён.",
+  "تم حذف حسابك.", "Akunmu telah dihapus.", "アカウントを削除しました。", "계정이 삭제됐어요.")
+K("accountDeleteFailed", "Couldn't delete your account: {error}", "Hesap silinemedi: {error}", "No se pudo eliminar tu cuenta: {error}",
+  "Não foi possível excluir sua conta: {error}", "Konto konnte nicht gelöscht werden: {error}",
+  "Impossible de supprimer ton compte : {error}", "Impossibile eliminare l'account: {error}", "Не удалось удалить аккаунт: {error}",
+  "تعذّر حذف حسابك: {error}", "Gagal menghapus akun: {error}", "アカウントを削除できませんでした: {error}", "계정을 삭제하지 못했어요: {error}")
+
+# --- Sign-up age screen (neutral: never hints at the cut-off) ---
+K("ageGateTitle", "When's your birthday?", "Doğum günün ne zaman?", "¿Cuándo es tu cumpleaños?", "Quando é seu aniversário?",
+  "Wann hast du Geburtstag?", "Quelle est ta date de naissance ?", "Quando sei nato?", "Когда у вас день рождения?",
+  "متى عيد ميلادك؟", "Kapan ulang tahunmu?", "誕生日はいつですか？", "생일이 언제예요?")
+K("ageGateBody", "It won't be shown on your profile or stored.", "Profilinde gösterilmez ve saklanmaz.",
+  "No se mostrará en tu perfil ni se guardará.", "Não será exibido no seu perfil nem armazenado.",
+  "Es wird weder auf deinem Profil angezeigt noch gespeichert.", "Elle ne sera ni affichée sur ton profil ni conservée.",
+  "Non sarà mostrata sul profilo né salvata.", "Она не будет показана в профиле и не сохраняется.",
+  "لن يظهر في ملفك الشخصي ولن يُحفظ.", "Tidak akan ditampilkan di profilmu atau disimpan.",
+  "プロフィールには表示されず、保存もされません。", "프로필에 표시되지 않고 저장되지도 않아요.")
+K("ageGatePick", "Select your birth date", "Doğum tarihini seç", "Selecciona tu fecha de nacimiento", "Selecione sua data de nascimento",
+  "Geburtsdatum auswählen", "Choisis ta date de naissance", "Seleziona la data di nascita", "Выберите дату рождения",
+  "اختر تاريخ ميلادك", "Pilih tanggal lahirmu", "生年月日を選択", "생년월일 선택")
+K("ageGateTooYoungTitle", "Sorry, you can't sign up yet", "Üzgünüz, henüz kayıt olamazsın", "Lo sentimos, aún no puedes registrarte",
+  "Desculpe, você ainda não pode se cadastrar", "Du kannst dich leider noch nicht registrieren",
+  "Désolé, tu ne peux pas encore t'inscrire", "Spiacenti, non puoi ancora registrarti", "Извините, вы пока не можете зарегистрироваться",
+  "عذرًا، لا يمكنك التسجيل بعد", "Maaf, kamu belum bisa mendaftar", "申し訳ありませんが、まだ登録できません", "죄송해요, 아직 가입할 수 없어요")
+K("ageGateTooYoungBody", "You need to be at least 13 years old to use AdGag.", "AdGag'i kullanmak için en az 13 yaşında olmalısın.",
+  "Necesitas tener al menos 13 años para usar AdGag.", "Você precisa ter pelo menos 13 anos para usar o AdGag.",
+  "Du musst mindestens 13 Jahre alt sein, um AdGag zu nutzen.", "Tu dois avoir au moins 13 ans pour utiliser AdGag.",
+  "Devi avere almeno 13 anni per usare AdGag.", "Чтобы пользоваться AdGag, вам должно быть не меньше 13 лет.",
+  "يجب أن يكون عمرك 13 عامًا على الأقل لاستخدام AdGag.", "Kamu harus berusia minimal 13 tahun untuk memakai AdGag.",
+  "AdGagを利用するには13歳以上である必要があります。", "AdGag를 사용하려면 만 13세 이상이어야 해요.")

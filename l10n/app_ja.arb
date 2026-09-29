@@ -198,5 +198,22 @@
   "authConfirmedTitle": "アカウントが確認されました！",
   "authConfirmedBody": "AdGagへようこそ。何かを選んで売り込もう。",
   "authConfirmedStart": "はじめる",
-  "authResend": "メールを再送信"
+  "authResend": "メールを再送信",
+  "statFollowers": "フォロワー",
+  "statFollowing": "フォロー中",
+  "followersEmpty": "まだフォロワーはいません。",
+  "followingEmpty": "まだ誰もフォローしていません。",
+  "accountDelete": "アカウントを削除",
+  "accountDeleteSubtitle": "アカウントと広告を完全に削除します",
+  "accountDeleteTitle": "アカウントを削除しますか？",
+  "accountDeleteBody": "アカウント、広告とその動画、レビュー、SOLD、フォローが完全に削除されます。元に戻せません。",
+  "accountDeleteConfirmHint": "確認のため {username} と入力",
+  "accountDeleteButton": "完全に削除",
+  "accountDeleted": "アカウントを削除しました。",
+  "accountDeleteFailed": "アカウントを削除できませんでした: {error}",
+  "ageGateTitle": "誕生日はいつですか？",
+  "ageGateBody": "プロフィールには表示されず、保存もされません。",
+  "ageGatePick": "生年月日を選択",
+  "ageGateTooYoungTitle": "申し訳ありませんが、まだ登録できません",
+  "ageGateTooYoungBody": "AdGagを利用するには13歳以上である必要があります。"
 }

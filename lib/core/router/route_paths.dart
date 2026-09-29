@@ -27,6 +27,11 @@ abstract final class RoutePaths {
   static const String userProfile = "/u/:username";
   static String userProfileOf(String username) => "/u/$username";
 
+  /// Followers / Following lists; `?tab=following` opens the second tab.
+  static const String userFollows = "/u/:username/follows";
+  static String userFollowsOf(String username, {bool following = false}) =>
+      "/u/$username/follows${following ? '?tab=following' : ''}";
+
   static const String editProfile = "/profile/edit";
 
   static const String settings = "/settings";

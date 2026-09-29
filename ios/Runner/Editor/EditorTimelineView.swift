@@ -309,13 +309,15 @@ private struct TrimRowView: View {
       }
       .frame(width: width, height: rowHeight, alignment: .topLeading)
       .contentShape(Rectangle())
-      // ONE gesture for the row: near an edge = that trim edge, else scrub.
-      // Separate handle hit boxes overlapped on a long source (the kept 30s
-      // is a few dozen points wide) and the trim couldn't be grabbed.
+      // ONE gesture for the row: near an edge = that trim edge, the middle
+      // of the kept part = slide the whole window (same length, other
+      // footage), outside it = scrub. Separate handle hit boxes overlapped on
+      // a long source (the kept 30s is a few dozen points wide) and the trim
+      // couldn't be grabbed. A tap (no movement) on the middle still scrubs.
       .gesture(DragGesture(minimumDistance: 0)
         .onChanged { value in
           if target == nil {
-            target = pickDragTarget(value.startLocation.x, start: msToX(start), end: msToX(end), bodyMoves: false)
+            target = pickDragTarget(value.startLocation.x, start: msToX(start), end: msToX(end), bodyMoves: true)
             origin = (start, end)
           }
           let o = origin ?? (start, end)
@@ -328,20 +330,35 @@ private struct TrimRowView: View {
             let lower = o.0 + EditorLimits.minTrimGapMs
             let upper = max(min(sourceMs, o.0 + maxKept), lower)
             liveEnd = min(max(o.1 + dxToMs(value.translation.width), lower), upper)
+          case .body:
+            let length = o.1 - o.0
+            let newStart = min(max(o.0 + dxToMs(value.translation.width), 0), max(sourceMs - length, 0))
+            liveStart = newStart
+            liveEnd = newStart + length
           default:
             scrub(value.location.x)
           }
         }
-        .onEnded { _ in
-          let t = target
+        .onEnded { value in
+          var t = target
           target = nil
           origin = nil
-          if t == .start || t == .end {
+          if t == .body && abs(value.translation.width) < 4 {
+            // A tap, not a slide: scrub like anywhere else on the row.
+            liveStart = nil
+            liveEnd = nil
+            t = DragTarget.none
+            scrub(value.location.x)
+          }
+          if t == .start || t == .end || t == .body {
             let s = liveStart ?? clip.trimStartMs
             let e = liveEnd ?? clip.trimEndMs
             liveStart = nil
             liveEnd = nil
-            viewModel.setClipTrim(index: index, startMs: s, endMs: e)
+            // No rebuild when nothing changed (e.g. sliding a window that already spans the whole source).
+            if s != clip.trimStartMs || e != clip.trimEndMs {
+              viewModel.setClipTrim(index: index, startMs: s, endMs: e)
+            }
           }
         })
     }

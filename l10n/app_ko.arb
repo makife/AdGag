@@ -198,5 +198,22 @@
   "authConfirmedTitle": "계정이 확인됐어요!",
   "authConfirmedBody": "AdGag에 오신 걸 환영해요. 무엇이든 골라서 팔아 보세요.",
   "authConfirmedStart": "시작하기",
-  "authResend": "이메일 다시 보내기"
+  "authResend": "이메일 다시 보내기",
+  "statFollowers": "팔로워",
+  "statFollowing": "팔로잉",
+  "followersEmpty": "아직 팔로워가 없어요.",
+  "followingEmpty": "아직 아무도 팔로우하지 않아요.",
+  "accountDelete": "계정 삭제",
+  "accountDeleteSubtitle": "계정과 광고를 영구적으로 삭제해요",
+  "accountDeleteTitle": "계정을 삭제할까요?",
+  "accountDeleteBody": "계정, 광고와 영상, 리뷰, SOLD, 팔로우가 영구적으로 삭제돼요. 되돌릴 수 없어요.",
+  "accountDeleteConfirmHint": "확인하려면 {username} 입력",
+  "accountDeleteButton": "영구 삭제",
+  "accountDeleted": "계정이 삭제됐어요.",
+  "accountDeleteFailed": "계정을 삭제하지 못했어요: {error}",
+  "ageGateTitle": "생일이 언제예요?",
+  "ageGateBody": "프로필에 표시되지 않고 저장되지도 않아요.",
+  "ageGatePick": "생년월일 선택",
+  "ageGateTooYoungTitle": "죄송해요, 아직 가입할 수 없어요",
+  "ageGateTooYoungBody": "AdGag를 사용하려면 만 13세 이상이어야 해요."
 }

@@ -152,6 +152,23 @@ final class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<void> deleteAccount() async {
+    try {
+      await _client.functions.invoke("delete-account", body: <String, dynamic>{"confirm": "DELETE"});
+    } on supa.FunctionException catch (e) {
+      _log.severe("delete-account failed: HTTP ${e.status} ${e.details}", e);
+      throw app_error.UnknownException("ACCOUNT_DELETE_FAILED [HTTP ${e.status}]", e);
+    }
+    // The session's user no longer exists; drop it locally. A failure here
+    // (the server already rejects the token) must not undo the result.
+    try {
+      await _client.auth.signOut(scope: supa.SignOutScope.local);
+    } catch (e) {
+      _log.warning("local sign-out after account deletion failed", e);
+    }
+  }
+
+  @override
   Future<bool> isUsernameAvailable(String username) async {
     final List<dynamic> rows = await _client.from("profiles").select("id").eq("username", username).limit(1);
     return rows.isEmpty;

@@ -18,6 +18,7 @@
 // Webhooks > your endpoint > Signing secret).
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { deleteMuxAsset } from "../_shared/mux.ts";
 
 const SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
 
@@ -122,6 +123,9 @@ async function handleEvent(adminClient: any, payload: MuxWebhookPayload): Promis
         .eq("id", adId)
         .in("status", ["uploading", "processing"]);
 
+      if (!error && data.id && (await deleteIfAdGone(adminClient, adId, data.id))) {
+        return;
+      }
       if (error) {
         // Most likely the duration_range CHECK (video outside the 1.5-31s
         // product constraint slipped past client-side trimming/validation).
@@ -149,6 +153,7 @@ async function handleEvent(adminClient: any, payload: MuxWebhookPayload): Promis
         .update({ status: "processing", video_asset_id: data.id })
         .eq("id", adId)
         .eq("status", "uploading");
+      if (data.id) await deleteIfAdGone(adminClient, adId, data.id);
       return;
     }
 
@@ -158,7 +163,11 @@ async function handleEvent(adminClient: any, payload: MuxWebhookPayload): Promis
       if (!data.id) return;
       await adminClient
         .from("ads")
-        .update({ status: "deleted", deleted_at: new Date().toISOString() })
+        .update({
+          status: "deleted",
+          deleted_at: new Date().toISOString(),
+          video_asset_deleted_at: new Date().toISOString(),
+        })
         .eq("video_asset_id", data.id);
       return;
     }
@@ -167,6 +176,29 @@ async function handleEvent(adminClient: any, payload: MuxWebhookPayload): Promis
       // Unhandled event types are expected (Mux sends many); no-op.
       return;
   }
+}
+
+// An asset for an Ad that was deleted before Mux reported it (deleted while
+// uploading/processing, so delete-ad had no asset id yet), or whose account
+// is gone: delete it at Mux so the privacy policy's "videos are deleted"
+// holds for these too. Returns true when the asset was handled this way.
+// deno-lint-ignore no-explicit-any
+async function deleteIfAdGone(adminClient: any, adId: string, assetId: string): Promise<boolean> {
+  const { data: ad, error } = await adminClient
+    .from("ads")
+    .select("status")
+    .eq("id", adId)
+    .maybeSingle();
+  if (error) return false;
+  if (ad && ad.status !== "deleted") return false;
+  const gone = await deleteMuxAsset(assetId);
+  if (ad) {
+    await adminClient
+      .from("ads")
+      .update({ video_asset_id: assetId, video_asset_deleted_at: gone ? new Date().toISOString() : null })
+      .eq("id", adId);
+  }
+  return true;
 }
 
 async function verifyMuxSignature(

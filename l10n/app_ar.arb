@@ -198,5 +198,22 @@
   "authConfirmedTitle": "تم تأكيد حسابك!",
   "authConfirmedBody": "مرحباً بك في AdGag. اختر أي شيء وبِعه.",
   "authConfirmedStart": "هيا بنا",
-  "authResend": "إعادة إرسال البريد"
+  "authResend": "إعادة إرسال البريد",
+  "statFollowers": "المتابعون",
+  "statFollowing": "يتابع",
+  "followersEmpty": "لا يوجد متابعون بعد.",
+  "followingEmpty": "لا يتابع أحدًا بعد.",
+  "accountDelete": "حذف الحساب",
+  "accountDeleteSubtitle": "احذف حسابك وإعلاناتك نهائيًا",
+  "accountDeleteTitle": "حذف حسابك؟",
+  "accountDeleteBody": "سيؤدي هذا إلى حذف حسابك وإعلاناتك ومقاطعها ومراجعاتك وSOLD والمتابعات نهائيًا. لا يمكن التراجع عن ذلك.",
+  "accountDeleteConfirmHint": "اكتب {username} للتأكيد",
+  "accountDeleteButton": "حذف نهائي",
+  "accountDeleted": "تم حذف حسابك.",
+  "accountDeleteFailed": "تعذّر حذف حسابك: {error}",
+  "ageGateTitle": "متى عيد ميلادك؟",
+  "ageGateBody": "لن يظهر في ملفك الشخصي ولن يُحفظ.",
+  "ageGatePick": "اختر تاريخ ميلادك",
+  "ageGateTooYoungTitle": "عذرًا، لا يمكنك التسجيل بعد",
+  "ageGateTooYoungBody": "يجب أن يكون عمرك 13 عامًا على الأقل لاستخدام AdGag."
 }

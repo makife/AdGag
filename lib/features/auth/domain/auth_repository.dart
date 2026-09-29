@@ -50,6 +50,12 @@ abstract interface class AuthRepository {
   /// account (for an OAuth-only account this adds email+password sign-in).
   Future<void> changePassword(String newPassword);
 
+  /// Settings > Account > Delete account (store requirement). Permanently
+  /// deletes the signed-in account server-side (delete-account Edge
+  /// Function: videos at Mux, avatar, then the auth user, which cascades to
+  /// every row keyed by the profile), then signs out locally.
+  Future<void> deleteAccount();
+
   /// True if [username] is available. Server-validated at insert time too
   /// (unique constraint) — this is a UX convenience, not the source of
   /// truth (section 24: "Do not trust client-side validation alone").

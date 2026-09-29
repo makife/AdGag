@@ -567,12 +567,14 @@ private fun TrimRow(viewModel: EditorViewModel, index: Int, clip: EditorClip, de
         })
         // ONE gesture layer for the whole row; what a drag moves is decided
         // where it starts (pickDragTarget): near an edge = that trim edge,
-        // anywhere else = scrub. Separate handle hit boxes overlapped on a
-        // long source, where the kept 30s is a few dozen px wide — the trim
-        // "couldn't be done" (user report).
+        // the middle of the kept part = slide the whole window (same length,
+        // other footage), outside it = scrub. Separate handle hit boxes
+        // overlapped on a long source, where the kept 30s is a few dozen px
+        // wide — the trim "couldn't be done" (user report). A tap anywhere
+        // still scrubs (detectTapGestures below).
         val zonePx = with(density) { EdgeZoneDp.dp.toPx() }
         val startDrag by rememberUpdatedState({ x: Float ->
-            pickDragTarget(x, msToPx(localStart), msToPx(localEnd), zonePx, bodyMoves = false)
+            pickDragTarget(x, msToPx(localStart), msToPx(localEnd), zonePx, bodyMoves = true)
         })
         val drag by rememberUpdatedState({ target: DragTarget, x: Float, deltaPx: Float ->
             when (target) {
@@ -586,11 +588,19 @@ private fun TrimRow(viewModel: EditorViewModel, index: Int, clip: EditorClip, de
                     val upper = minOf(sourceMs, localStart + maxKeptMs).coerceAtLeast(lower)
                     localEnd = (localEnd + pxDeltaToMsDelta(deltaPx)).coerceIn(lower, upper)
                 }
+                DragTarget.BODY -> {
+                    val length = localEnd - localStart
+                    localStart = (localStart + pxDeltaToMsDelta(deltaPx)).coerceIn(0L, (sourceMs - length).coerceAtLeast(0L))
+                    localEnd = localStart + length
+                }
                 else -> scrub(x)
             }
         })
         val endDrag by rememberUpdatedState({ target: DragTarget ->
-            if (target == DragTarget.START || target == DragTarget.END) viewModel.setClipTrim(index, localStart, localEnd)
+            // No rebuild when nothing changed (e.g. sliding a window that already spans the whole source).
+            if (target != DragTarget.NONE && (localStart != clip.trimStartMs || localEnd != clip.trimEndMs)) {
+                viewModel.setClipTrim(index, localStart, localEnd)
+            }
         })
         Box(
             modifier = Modifier

@@ -51,10 +51,14 @@ final class DraftAdRepositoryImpl implements DraftAdRepository {
 
   @override
   Future<void> deleteAd(String adId) async {
+    // delete-ad hides the Ad (delete_own_ad, with our JWT) and then deletes
+    // its video at Mux — the privacy policy promises the video goes too.
     try {
-      await _client.rpc<dynamic>("delete_own_ad", params: <String, dynamic>{"p_ad_id": adId});
-    } on supa.PostgrestException catch (e) {
-      throw app_error.ValidationException(e.message, e);
+      await _client.functions.invoke("delete-ad", body: <String, dynamic>{"adId": adId});
+    } on supa.FunctionException catch (e) {
+      final Object? details = e.details;
+      final String? detail = details is Map && details["detail"] is String ? details["detail"] as String : null;
+      throw app_error.ValidationException(detail ?? "AD_DELETE_FAILED [HTTP ${e.status}]", e);
     }
   }
 

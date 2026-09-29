@@ -198,5 +198,22 @@
   "authConfirmedTitle": "Ton compte est confirmé !",
   "authConfirmedBody": "Bienvenue sur AdGag. Choisis quelque chose et vends-le.",
   "authConfirmedStart": "C'est parti",
-  "authResend": "Renvoyer l'e-mail"
+  "authResend": "Renvoyer l'e-mail",
+  "statFollowers": "Abonnés",
+  "statFollowing": "Abonnements",
+  "followersEmpty": "Pas encore d'abonnés.",
+  "followingEmpty": "Ne suit encore personne.",
+  "accountDelete": "Supprimer le compte",
+  "accountDeleteSubtitle": "Supprimer définitivement ton compte et tes pubs",
+  "accountDeleteTitle": "Supprimer ton compte ?",
+  "accountDeleteBody": "Ton compte, tes pubs et leurs vidéos, tes avis, tes SOLD et tes abonnements seront supprimés définitivement. C'est irréversible.",
+  "accountDeleteConfirmHint": "Tape {username} pour confirmer",
+  "accountDeleteButton": "Supprimer définitivement",
+  "accountDeleted": "Ton compte a été supprimé.",
+  "accountDeleteFailed": "Impossible de supprimer ton compte : {error}",
+  "ageGateTitle": "Quelle est ta date de naissance ?",
+  "ageGateBody": "Elle ne sera ni affichée sur ton profil ni conservée.",
+  "ageGatePick": "Choisis ta date de naissance",
+  "ageGateTooYoungTitle": "Désolé, tu ne peux pas encore t'inscrire",
+  "ageGateTooYoungBody": "Tu dois avoir au moins 13 ans pour utiliser AdGag."
 }

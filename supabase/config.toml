@@ -16,3 +16,12 @@ verify_jwt = true
 # for this endpoint is the Mux-Signature HMAC check inside index.ts —
 # see the large comment at the top of that file before changing this.
 verify_jwt = false
+
+[functions.delete-ad]
+# Caller's JWT required; the function deletes only the caller's own Ad
+# (delete_own_ad runs with the caller's JWT).
+verify_jwt = true
+
+[functions.delete-account]
+# Caller's JWT required; deletes only the caller's own account.
+verify_jwt = true

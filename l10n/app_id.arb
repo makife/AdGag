@@ -198,5 +198,22 @@
   "authConfirmedTitle": "Akunmu sudah dikonfirmasi!",
   "authConfirmedBody": "Selamat datang di AdGag. Pilih sesuatu dan jual.",
   "authConfirmedStart": "Ayo mulai",
-  "authResend": "Kirim ulang email"
+  "authResend": "Kirim ulang email",
+  "statFollowers": "Pengikut",
+  "statFollowing": "Mengikuti",
+  "followersEmpty": "Belum ada pengikut.",
+  "followingEmpty": "Belum mengikuti siapa pun.",
+  "accountDelete": "Hapus akun",
+  "accountDeleteSubtitle": "Hapus akun dan iklanmu secara permanen",
+  "accountDeleteTitle": "Hapus akunmu?",
+  "accountDeleteBody": "Ini menghapus akun, iklan beserta videonya, ulasan, SOLD, dan ikutanmu secara permanen. Tidak bisa dibatalkan.",
+  "accountDeleteConfirmHint": "Ketik {username} untuk konfirmasi",
+  "accountDeleteButton": "Hapus permanen",
+  "accountDeleted": "Akunmu telah dihapus.",
+  "accountDeleteFailed": "Gagal menghapus akun: {error}",
+  "ageGateTitle": "Kapan ulang tahunmu?",
+  "ageGateBody": "Tidak akan ditampilkan di profilmu atau disimpan.",
+  "ageGatePick": "Pilih tanggal lahirmu",
+  "ageGateTooYoungTitle": "Maaf, kamu belum bisa mendaftar",
+  "ageGateTooYoungBody": "Kamu harus berusia minimal 13 tahun untuk memakai AdGag."
 }

@@ -1,6 +1,7 @@
 import "package:supabase_flutter/supabase_flutter.dart" as supa;
 
 import "../../../core/error/app_exception.dart" as app_error;
+import "../../profile/domain/public_profile.dart";
 import "../domain/follow_repository.dart";
 
 final class FollowRepositoryImpl implements FollowRepository {
@@ -52,22 +53,31 @@ final class FollowRepositoryImpl implements FollowRepository {
   }
 
   @override
-  Future<int> followerCount(String userId) async {
-    final response = await _client
-        .from("follows")
-        .select()
-        .eq("following_id", userId)
-        .count(supa.CountOption.exact);
-    return response.count;
-  }
+  Future<List<PublicProfile>> fetchFollowers(String userId, {int limit = 100}) =>
+      _fetchSide(matchColumn: "following_id", embedFk: "follows_follower_id_fkey", userId: userId, limit: limit);
 
   @override
-  Future<int> followingCount(String userId) async {
-    final response = await _client
+  Future<List<PublicProfile>> fetchFollowing(String userId, {int limit = 100}) =>
+      _fetchSide(matchColumn: "follower_id", embedFk: "follows_following_id_fkey", userId: userId, limit: limit);
+
+  /// `follows` has two FKs to `profiles`, so the embed must name which one
+  /// (the PGRST201 lesson in CLAUDE.md).
+  Future<List<PublicProfile>> _fetchSide({
+    required String matchColumn,
+    required String embedFk,
+    required String userId,
+    required int limit,
+  }) async {
+    final List<Map<String, dynamic>> rows = await _client
         .from("follows")
-        .select()
-        .eq("follower_id", userId)
-        .count(supa.CountOption.exact);
-    return response.count;
+        .select("profiles!$embedFk(id, username, display_name, avatar_url, bio)")
+        .eq(matchColumn, userId)
+        .order("created_at", ascending: false)
+        .limit(limit);
+    return rows
+        .map((Map<String, dynamic> row) => row["profiles"])
+        .whereType<Map<String, dynamic>>()
+        .map(PublicProfile.fromRow)
+        .toList(growable: false);
   }
 }

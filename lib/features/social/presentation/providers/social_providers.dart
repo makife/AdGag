@@ -1,6 +1,8 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../../core/supabase/supabase_providers.dart";
+import "../../../profile/domain/public_profile.dart";
+import "../../../profile/presentation/providers/profile_providers.dart";
 import "../../data/follow_repository_impl.dart";
 import "../../domain/follow_repository.dart";
 
@@ -12,12 +14,14 @@ final FutureProviderFamily<bool, String> isFollowingProvider = FutureProvider.fa
   (ref, userId) => ref.watch(followRepositoryProvider).isFollowing(userId),
 );
 
-final FutureProviderFamily<int, String> followerCountProvider = FutureProvider.family<int, String>(
-  (ref, userId) => ref.watch(followRepositoryProvider).followerCount(userId),
+final AutoDisposeFutureProviderFamily<List<PublicProfile>, String> followersProvider =
+    FutureProvider.autoDispose.family<List<PublicProfile>, String>(
+  (ref, userId) => ref.watch(followRepositoryProvider).fetchFollowers(userId),
 );
 
-final FutureProviderFamily<int, String> followingCountProvider = FutureProvider.family<int, String>(
-  (ref, userId) => ref.watch(followRepositoryProvider).followingCount(userId),
+final AutoDisposeFutureProviderFamily<List<PublicProfile>, String> followingProvider =
+    FutureProvider.autoDispose.family<List<PublicProfile>, String>(
+  (ref, userId) => ref.watch(followRepositoryProvider).fetchFollowing(userId),
 );
 
 /// Optimistic follow/unfollow toggle, keyed by the target user's id.
@@ -43,6 +47,12 @@ final class FollowController extends FamilyAsyncNotifier<bool, String> {
       state = AsyncData<bool>(previous);
       rethrow;
     }
+    // Both sides' counters changed server-side (follows trigger) and the
+    // lists too: refetch whatever profile/list is on screen.
+    ref
+      ..invalidate(profileByUsernameProvider)
+      ..invalidate(followersProvider)
+      ..invalidate(followingProvider);
   }
 }
 

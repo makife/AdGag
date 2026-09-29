@@ -397,5 +397,36 @@
   "authConfirmedTitle": "Your account is confirmed!",
   "authConfirmedBody": "Welcome to AdGag. Pick something and sell it.",
   "authConfirmedStart": "Let's go",
-  "authResend": "Resend email"
+  "authResend": "Resend email",
+  "statFollowers": "Followers",
+  "statFollowing": "Following",
+  "followersEmpty": "No followers yet.",
+  "followingEmpty": "Not following anyone yet.",
+  "accountDelete": "Delete account",
+  "accountDeleteSubtitle": "Permanently delete your account and your Ads",
+  "accountDeleteTitle": "Delete your account?",
+  "accountDeleteBody": "This permanently deletes your account, your Ads and their videos, your reviews, SOLDs and follows. It can't be undone.",
+  "accountDeleteConfirmHint": "Type {username} to confirm",
+  "@accountDeleteConfirmHint": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "accountDeleteButton": "Delete permanently",
+  "accountDeleted": "Your account was deleted.",
+  "accountDeleteFailed": "Couldn't delete your account: {error}",
+  "@accountDeleteFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ageGateTitle": "When's your birthday?",
+  "ageGateBody": "It won't be shown on your profile or stored.",
+  "ageGatePick": "Select your birth date",
+  "ageGateTooYoungTitle": "Sorry, you can't sign up yet",
+  "ageGateTooYoungBody": "You need to be at least 13 years old to use AdGag."
 }

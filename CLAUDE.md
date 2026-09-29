@@ -1444,7 +1444,7 @@ The ultimate product promise is:
 
 Repo: `C:\Users\LENOVO10OCT2020\Desktop\makifbilgisayar\AdGag`, brand name **AdGag** (codename `everything_is_an_ad` retired — the real name was decided). 14 commits, 124 `lib/` files, 14 test files (59 test cases), 17 SQL migrations, 2 Supabase Edge Functions. Full narrative detail for all of this lives in `README.md` (architecture, ER model, RLS plan, tech choices, and — most importantly — the "Verification log" entries, which are the authoritative record of what's actually been proven against real infrastructure vs. only written).
 
-## >>> RESUME HERE (last session ended 2026-09-28, version 0.1.4+5) <<<
+## >>> RESUME HERE (last session ended 2026-09-29, version 0.1.5+6) <<<
 
 Everything is committed and pushed to `master` (github.com/makife/AdGag). Current app version **0.1.4+5**; signed release AAB + APK built locally (`flutter build appbundle|apk --release --dart-define-from-file=env/dev.json`, config check `unzip -p … libapp.so | grep -c <project ref>`), copies on the owner's Desktop in "AdGag Play Store gorselleri". **Android CI now works** (secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ENV_DEV_JSON added 2026-09-28) and iOS CI (simulator build) is green on every commit since 57d2614. iOS has still never run on a device.
 
@@ -1456,7 +1456,21 @@ Contact address on all pages: makifergan@gmail.com. Play listing images + 512px 
 
 **Version rule**: Play needs a higher versionCode for every upload — bump `pubspec.yaml` `version: x.y.z+N` before each release build (CI uses `github.run_number` as the build number instead; don't mix local and CI uploads without checking the last versionCode).
 
-**Still to do before launch**: in-app account deletion (Play requires it for apps with sign-up; today it's by email); Mux asset deletion when an Ad is deleted (privacy policy promises it within 30 days); sign-up age check (13+ promised in the policies); a licensed or CC0 music library is optional (user-picked music is the uploader's responsibility per the Terms); iOS needs an Apple Developer account for TestFlight.
+**Still to do before launch**: (the 2026-09-29 round below built account deletion, Mux deletion and the age check — check that its migration/functions are LIVE before a release build); a licensed or CC0 music library is optional (user-picked music is the uploader's responsibility per the Terms); iOS needs an Apple Developer account for TestFlight.
+
+## Account deletion, Mux video deletion, sign-up age screen, follower stats, slide the trim window (2026-09-29)
+
+- **Migration `0021_follow_counts_and_asset_cleanup.sql`**: `profiles.followers_count/following_count` kept by a trigger on `follows` (insert/delete — so follow, unfollow, block and cascades all keep them right; backfilled), EXECUTE revoked from PUBLIC on the trigger function; `ads.video_asset_deleted_at` + a partial index for pending Mux cleanups.
+- **Edge Functions** (`supabase/functions/_shared/mux.ts` = `deleteMuxAsset` (204/404 = gone) + `cleanUpDeletedAdAssets`):
+  - `delete-ad`: calls `delete_own_ad` WITH THE CALLER'S JWT (same ownership check), then deletes the Mux asset(s) of the caller's deleted Ads still pending (retries earlier failures). The app's `DraftAdRepositoryImpl.deleteAd` now calls this function instead of the RPC — **so the function must be deployed before a build with this change ships, or deleting Ads breaks.**
+  - `delete-account`: body `{"confirm":"DELETE"}`; deletes the caller's Mux assets, their `avatars/{uid}/*` files, then `auth.admin.deleteUser` (cascades via the FKs). Failed Mux deletions are logged with ids for manual cleanup.
+  - `mux-webhook`: an asset arriving (created/ready) for an Ad that is deleted or gone is deleted at Mux (`deleteIfAdGone`) — covers Ads deleted mid-upload and accounts deleted mid-upload; `video.asset.deleted` also sets `video_asset_deleted_at`.
+  - `deno check` passes on all three. config.toml: both new functions `verify_jwt = true`.
+- **App**: Settings > Account > "Delete account" (red; dialog, type your username to confirm) → `AuthRepository.deleteAccount()` → function, then local sign-out (router redirects). Sign-up now starts with a neutral birth-date screen (`core/utils/age_gate.dart`, 13+, tested); under 13 → "can't sign up yet", persisted per device (`ageGateBlockedProvider`) so changing the date doesn't get around it; the date is never stored or sent. There are no Apple/Google buttons in the UI yet — if they're added, they need the same gate.
+- **Follower stats**: `PublicProfile.followersCount/followingCount` from the new columns; both profile screens show Ads / Followers / Following (`ProfileStat`, tappable) — own profile moves SOLD/views to a line under the username; the public profile gained an avatar. New `FollowListScreen` (`/u/:username/follows[?tab=following]`, two tabs; the embed must name `follows_follower_id_fkey`/`follows_following_id_fkey`). `FollowController.toggle` invalidates profiles + lists after success. The old per-request COUNT(*) methods were removed.
+- **Editor trim row (both platforms)**: a drag starting in the middle of the kept part slides the whole window (same length, clamped to the source); edges still trim; outside still scrubs; a tap still scrubs (iOS: a body "drag" under 4pt is treated as a tap). No rebuild when the values didn't change. Speed ranges follow via `setClipTrim`'s existing remap.
+- **Web**: `docs/delete-account/index.html` (TR/EN) — the account-deletion URL Play asks for; needs its own Netlify site like the others. Privacy policy now describes in-app deletion, and its email placeholders are filled in; the `[GELİŞTİRİCİ ADI / ŞİRKET UNVANI]` / `[DEVELOPER / COMPANY NAME]` placeholders are still there for the owner.
+- analyze clean, 67/67 tests. **Not device-tested**; nothing here has run against live Supabase yet unless the deploy note below says so.
 
 ## Play policy pages, child-safety reporting, blocking that visibly works, feed releases decoders, Market previews (2026-09-28)
 

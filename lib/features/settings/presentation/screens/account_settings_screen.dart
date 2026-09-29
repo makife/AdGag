@@ -8,7 +8,8 @@ import "../../../../core/theme/app_spacing.dart";
 import "../../../auth/presentation/providers/auth_providers.dart";
 
 /// Settings > Account: the private account details (email is never shown
-/// anywhere public — CLAUDE.md section 45) and password change.
+/// anywhere public — CLAUDE.md section 45), password change, and account
+/// deletion (Google Play / App Store require an in-app path).
 class AccountSettingsScreen extends ConsumerWidget {
   const AccountSettingsScreen({super.key});
 
@@ -38,6 +39,15 @@ class AccountSettingsScreen extends ConsumerWidget {
                 showDragHandle: true,
                 builder: (_) => const _ChangePasswordSheet(),
               ),
+            ),
+          ),
+          const Divider(height: AppSpacing.xxl),
+          ListTile(
+            leading: Icon(Icons.delete_forever_outlined, color: Theme.of(context).colorScheme.error),
+            title: Text(l10n.accountDelete, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            subtitle: Text(l10n.accountDeleteSubtitle),
+            onTap: () => unawaited(
+              showDialog<void>(context: context, builder: (_) => const _DeleteAccountDialog()),
             ),
           ),
         ],
@@ -141,6 +151,101 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Permanent account deletion. The user types their username to confirm —
+/// a deliberate step for something that can't be undone.
+class _DeleteAccountDialog extends ConsumerStatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  ConsumerState<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
+  final TextEditingController _confirm = TextEditingController();
+  bool _deleting = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _confirm.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _delete() async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final NavigatorState navigator = Navigator.of(context);
+    setState(() {
+      _deleting = true;
+      _error = null;
+    });
+    try {
+      await ref.read(authRepositoryProvider).deleteAccount();
+      // Signed out now: the router's auth redirect leaves Settings.
+      navigator.pop();
+      messenger.showSnackBar(SnackBar(content: Text(l10n.accountDeleted)));
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _deleting = false;
+          _error = l10n.accountDeleteFailed("$e");
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final String username = ref.watch(currentAppUserProvider).valueOrNull?.username ?? "";
+    final bool confirmed = username.isNotEmpty && _confirm.text.trim().toLowerCase() == username;
+    final Color danger = Theme.of(context).colorScheme.error;
+
+    return AlertDialog(
+      title: Text(l10n.accountDeleteTitle),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Text(l10n.accountDeleteBody),
+            const SizedBox(height: AppSpacing.lg),
+            TextField(
+              controller: _confirm,
+              enabled: !_deleting,
+              autocorrect: false,
+              decoration: InputDecoration(labelText: l10n.accountDeleteConfirmHint(username)),
+            ),
+            if (_error != null) ...<Widget>[
+              const SizedBox(height: AppSpacing.sm),
+              Text(_error!, style: TextStyle(color: danger)),
+            ],
+          ],
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: _deleting ? null : () => Navigator.of(context).pop(),
+          child: Text(l10n.genericCancel),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: danger, foregroundColor: Theme.of(context).colorScheme.onError),
+          onPressed: confirmed && !_deleting ? () => unawaited(_delete()) : null,
+          child: _deleting
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : Text(l10n.accountDeleteButton),
+        ),
+      ],
     );
   }
 }

@@ -20,6 +20,7 @@ import "../../features/settings/presentation/screens/about_screen.dart";
 import "../../features/settings/presentation/screens/account_settings_screen.dart";
 import "../../features/settings/presentation/screens/blocked_accounts_screen.dart";
 import "../../features/settings/presentation/screens/settings_screen.dart";
+import "../../features/social/presentation/screens/follow_list_screen.dart";
 import "../../features/subjects/presentation/screens/subject_screen.dart";
 import "../preferences/app_preferences.dart";
 import "app_shell.dart";
@@ -97,6 +98,13 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.userProfile,
         builder: (BuildContext context, GoRouterState state) =>
             PublicProfileScreen(username: state.pathParameters["username"]!),
+      ),
+      GoRoute(
+        path: RoutePaths.userFollows,
+        builder: (BuildContext context, GoRouterState state) => FollowListScreen(
+          username: state.pathParameters["username"]!,
+          showFollowing: state.uri.queryParameters["tab"] == "following",
+        ),
       ),
       GoRoute(
         path: RoutePaths.editProfile,

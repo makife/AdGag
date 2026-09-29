@@ -198,5 +198,22 @@
   "authConfirmedTitle": "Dein Konto ist bestätigt!",
   "authConfirmedBody": "Willkommen bei AdGag. Such dir etwas aus und verkauf es.",
   "authConfirmedStart": "Los geht's",
-  "authResend": "E-Mail erneut senden"
+  "authResend": "E-Mail erneut senden",
+  "statFollowers": "Follower",
+  "statFollowing": "Gefolgt",
+  "followersEmpty": "Noch keine Follower.",
+  "followingEmpty": "Folgt noch niemandem.",
+  "accountDelete": "Konto löschen",
+  "accountDeleteSubtitle": "Dein Konto und deine Werbungen endgültig löschen",
+  "accountDeleteTitle": "Konto löschen?",
+  "accountDeleteBody": "Dein Konto, deine Werbungen samt Videos, Bewertungen, SOLDs und Follows werden endgültig gelöscht. Das kann nicht rückgängig gemacht werden.",
+  "accountDeleteConfirmHint": "Zur Bestätigung {username} eingeben",
+  "accountDeleteButton": "Endgültig löschen",
+  "accountDeleted": "Dein Konto wurde gelöscht.",
+  "accountDeleteFailed": "Konto konnte nicht gelöscht werden: {error}",
+  "ageGateTitle": "Wann hast du Geburtstag?",
+  "ageGateBody": "Es wird weder auf deinem Profil angezeigt noch gespeichert.",
+  "ageGatePick": "Geburtsdatum auswählen",
+  "ageGateTooYoungTitle": "Du kannst dich leider noch nicht registrieren",
+  "ageGateTooYoungBody": "Du musst mindestens 13 Jahre alt sein, um AdGag zu nutzen."
 }

@@ -198,5 +198,22 @@
   "authConfirmedTitle": "¡Tu cuenta está confirmada!",
   "authConfirmedBody": "Bienvenido a AdGag. Elige algo y véndelo.",
   "authConfirmedStart": "¡Vamos!",
-  "authResend": "Reenviar email"
+  "authResend": "Reenviar email",
+  "statFollowers": "Seguidores",
+  "statFollowing": "Siguiendo",
+  "followersEmpty": "Aún no hay seguidores.",
+  "followingEmpty": "Aún no sigue a nadie.",
+  "accountDelete": "Eliminar cuenta",
+  "accountDeleteSubtitle": "Elimina para siempre tu cuenta y tus anuncios",
+  "accountDeleteTitle": "¿Eliminar tu cuenta?",
+  "accountDeleteBody": "Esto elimina para siempre tu cuenta, tus anuncios y sus videos, tus reseñas, SOLD y seguimientos. No se puede deshacer.",
+  "accountDeleteConfirmHint": "Escribe {username} para confirmar",
+  "accountDeleteButton": "Eliminar para siempre",
+  "accountDeleted": "Tu cuenta fue eliminada.",
+  "accountDeleteFailed": "No se pudo eliminar tu cuenta: {error}",
+  "ageGateTitle": "¿Cuándo es tu cumpleaños?",
+  "ageGateBody": "No se mostrará en tu perfil ni se guardará.",
+  "ageGatePick": "Selecciona tu fecha de nacimiento",
+  "ageGateTooYoungTitle": "Lo sentimos, aún no puedes registrarte",
+  "ageGateTooYoungBody": "Necesitas tener al menos 13 años para usar AdGag."
 }
