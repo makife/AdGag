@@ -43,6 +43,8 @@ android {
         // CameraX APIs require API 23 or later.
         minSdk = 23
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // ADGAG PATCH (live AR): keeps ML Kit's reflectively created registrars.
+        consumerProguardFiles 'proguard-rules.pro'
     }
 
     testOptions {
