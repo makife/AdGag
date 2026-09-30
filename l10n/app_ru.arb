@@ -231,5 +231,17 @@
   "adThisChainTitle": "Сделано через AD THIS",
   "adThisChainEmpty": "Пока никто не сделал свою версию.",
   "adThisChainCount": "Своих версий: {count}",
-  "adThisInspiredBy": "По мотивам {name}"
+  "adThisInspiredBy": "По мотивам {name}",
+  "cameraSwitch": "Сменить камеру",
+  "arEffects": "Эффекты для лица",
+  "arNone": "Без эффекта",
+  "arUnavailable": "Эффекты для лица недоступны на этом устройстве.",
+  "arSunglasses": "Солнцезащитные очки",
+  "arCrown": "Корона",
+  "arMustache": "Усы",
+  "arClown": "Нос клоуна",
+  "arParty": "Праздничный колпак",
+  "arHeartEyes": "Глаза-сердечки",
+  "arHalo": "Нимб",
+  "arPuppy": "Щенок"
 }

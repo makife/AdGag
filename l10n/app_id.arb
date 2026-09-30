@@ -231,5 +231,17 @@
   "adThisChainTitle": "Dibuat dengan AD THIS",
   "adThisChainEmpty": "Belum ada yang membuat versinya sendiri.",
   "adThisChainCount": "{count} membuat versinya sendiri",
-  "adThisInspiredBy": "Terinspirasi dari {name}"
+  "adThisInspiredBy": "Terinspirasi dari {name}",
+  "cameraSwitch": "Ganti kamera",
+  "arEffects": "Efek wajah",
+  "arNone": "Tanpa efek",
+  "arUnavailable": "Efek wajah tidak tersedia di perangkat ini.",
+  "arSunglasses": "Kacamata hitam",
+  "arCrown": "Mahkota",
+  "arMustache": "Kumis",
+  "arClown": "Hidung badut",
+  "arParty": "Topi pesta",
+  "arHeartEyes": "Mata hati",
+  "arHalo": "Lingkaran cahaya",
+  "arPuppy": "Anak anjing"
 }

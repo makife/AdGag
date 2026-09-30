@@ -814,3 +814,29 @@ K("adThisChainCount", "{count} made their own version", "{count} kişi kendi ver
 K("adThisInspiredBy", "Inspired by {name}", "{name} reklamından esinlendi", "Inspirado en {name}", "Inspirado em {name}",
   "Inspiriert von {name}", "Inspiré par {name}", "Ispirato a {name}", "По мотивам {name}", "مستوحى من {name}",
   "Terinspirasi dari {name}", "{name}さんの広告から", "{name}님 광고에서 영감")
+
+# --- Camera: live AR effects ---
+K("cameraSwitch", "Switch camera", "Kamerayı çevir", "Cambiar cámara", "Trocar câmera", "Kamera wechseln", "Changer de caméra",
+  "Cambia fotocamera", "Сменить камеру", "تبديل الكاميرا", "Ganti kamera", "カメラを切り替え", "카메라 전환")
+K("arEffects", "Face effects", "Yüz efektleri", "Efectos de cara", "Efeitos de rosto", "Gesichtseffekte", "Effets visage",
+  "Effetti viso", "Эффекты для лица", "تأثيرات الوجه", "Efek wajah", "顔エフェクト", "얼굴 효과")
+K("arNone", "No effect", "Efekt yok", "Sin efecto", "Sem efeito", "Kein Effekt", "Aucun effet", "Nessun effetto", "Без эффекта",
+  "بلا تأثير", "Tanpa efek", "エフェクトなし", "효과 없음")
+K("arUnavailable", "Face effects aren't available on this device.", "Yüz efektleri bu cihazda kullanılamıyor.",
+  "Los efectos de cara no están disponibles en este dispositivo.", "Os efeitos de rosto não estão disponíveis neste aparelho.",
+  "Gesichtseffekte sind auf diesem Gerät nicht verfügbar.", "Les effets visage ne sont pas disponibles sur cet appareil.",
+  "Gli effetti viso non sono disponibili su questo dispositivo.", "Эффекты для лица недоступны на этом устройстве.",
+  "تأثيرات الوجه غير متاحة على هذا الجهاز.", "Efek wajah tidak tersedia di perangkat ini.",
+  "この端末では顔エフェクトを使えません。", "이 기기에서는 얼굴 효과를 사용할 수 없어요.")
+K("arSunglasses", "Sunglasses", "Güneş gözlüğü", "Gafas de sol", "Óculos de sol", "Sonnenbrille", "Lunettes de soleil", "Occhiali da sole",
+  "Солнцезащитные очки", "نظارة شمسية", "Kacamata hitam", "サングラス", "선글라스")
+K("arCrown", "Crown", "Taç", "Corona", "Coroa", "Krone", "Couronne", "Corona", "Корона", "تاج", "Mahkota", "王冠", "왕관")
+K("arMustache", "Mustache", "Bıyık", "Bigote", "Bigode", "Schnurrbart", "Moustache", "Baffi", "Усы", "شارب", "Kumis", "口ひげ", "콧수염")
+K("arClown", "Clown nose", "Palyaço burnu", "Nariz de payaso", "Nariz de palhaço", "Clownsnase", "Nez de clown", "Naso da clown",
+  "Нос клоуна", "أنف مهرج", "Hidung badut", "ピエロの鼻", "광대 코")
+K("arParty", "Party hat", "Parti şapkası", "Gorro de fiesta", "Chapéu de festa", "Partyhut", "Chapeau de fête", "Cappello da festa",
+  "Праздничный колпак", "قبعة حفلة", "Topi pesta", "パーティー帽", "파티 모자")
+K("arHeartEyes", "Heart eyes", "Kalp gözler", "Ojos de corazón", "Olhos de coração", "Herzaugen", "Yeux en cœur", "Occhi a cuore",
+  "Глаза-сердечки", "عيون قلوب", "Mata hati", "ハートの目", "하트 눈")
+K("arHalo", "Halo", "Hale", "Aureola", "Auréola", "Heiligenschein", "Auréole", "Aureola", "Нимб", "هالة", "Lingkaran cahaya", "天使の輪", "후광")
+K("arPuppy", "Puppy", "Köpecik", "Perrito", "Cachorrinho", "Welpe", "Chiot", "Cucciolo", "Щенок", "جرو", "Anak anjing", "子犬", "강아지")

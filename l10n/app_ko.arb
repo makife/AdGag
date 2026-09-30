@@ -231,5 +231,17 @@
   "adThisChainTitle": "AD THIS로 만든 광고",
   "adThisChainEmpty": "아직 아무도 자기 버전을 만들지 않았어요.",
   "adThisChainCount": "{count}명이 자기 버전을 만들었어요",
-  "adThisInspiredBy": "{name}님 광고에서 영감"
+  "adThisInspiredBy": "{name}님 광고에서 영감",
+  "cameraSwitch": "카메라 전환",
+  "arEffects": "얼굴 효과",
+  "arNone": "효과 없음",
+  "arUnavailable": "이 기기에서는 얼굴 효과를 사용할 수 없어요.",
+  "arSunglasses": "선글라스",
+  "arCrown": "왕관",
+  "arMustache": "콧수염",
+  "arClown": "광대 코",
+  "arParty": "파티 모자",
+  "arHeartEyes": "하트 눈",
+  "arHalo": "후광",
+  "arPuppy": "강아지"
 }

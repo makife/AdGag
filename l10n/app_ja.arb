@@ -231,5 +231,17 @@
   "adThisChainTitle": "AD THISで作られた広告",
   "adThisChainEmpty": "まだ誰も自分のバージョンを作っていません。",
   "adThisChainCount": "{count}人が自分のバージョンを作成",
-  "adThisInspiredBy": "{name}さんの広告から"
+  "adThisInspiredBy": "{name}さんの広告から",
+  "cameraSwitch": "カメラを切り替え",
+  "arEffects": "顔エフェクト",
+  "arNone": "エフェクトなし",
+  "arUnavailable": "この端末では顔エフェクトを使えません。",
+  "arSunglasses": "サングラス",
+  "arCrown": "王冠",
+  "arMustache": "口ひげ",
+  "arClown": "ピエロの鼻",
+  "arParty": "パーティー帽",
+  "arHeartEyes": "ハートの目",
+  "arHalo": "天使の輪",
+  "arPuppy": "子犬"
 }

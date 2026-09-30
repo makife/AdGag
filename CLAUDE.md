@@ -1444,7 +1444,7 @@ The ultimate product promise is:
 
 Repo: `C:\Users\LENOVO10OCT2020\Desktop\makifbilgisayar\AdGag`, brand name **AdGag** (codename `everything_is_an_ad` retired — the real name was decided). 14 commits, 124 `lib/` files, 14 test files (59 test cases), 17 SQL migrations, 2 Supabase Edge Functions. Full narrative detail for all of this lives in `README.md` (architecture, ER model, RLS plan, tech choices, and — most importantly — the "Verification log" entries, which are the authoritative record of what's actually been proven against real infrastructure vs. only written).
 
-## >>> RESUME HERE (last session ended 2026-09-29, version 0.1.9+10) <<<
+## >>> RESUME HERE (last session ended 2026-09-30, version 0.1.10+11) <<<
 
 Everything is committed and pushed to `master` (github.com/makife/AdGag). Current app version **0.1.4+5**; signed release AAB + APK built locally (`flutter build appbundle|apk --release --dart-define-from-file=env/dev.json`, config check `unzip -p … libapp.so | grep -c <project ref>`), copies on the owner's Desktop in "AdGag Play Store gorselleri". **Android CI now works** (secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ENV_DEV_JSON added 2026-09-28) and iOS CI (simulator build) is green on every commit since 57d2614. iOS has still never run on a device.
 
@@ -1457,6 +1457,15 @@ Contact address on all pages: makifergan@gmail.com. Play listing images + 512px 
 **Version rule**: Play needs a higher versionCode for every upload — bump `pubspec.yaml` `version: x.y.z+N` before each release build (CI uses `github.run_number` as the build number instead; don't mix local and CI uploads without checking the last versionCode).
 
 **Still to do before launch**: (the 2026-09-29 round below built account deletion, Mux deletion and the age check — its migration/functions are LIVE); a licensed or CC0 music library is optional (user-picked music is the uploader's responsibility per the Terms); iOS needs an Apple Developer account for TestFlight.
+
+## LIVE AR face effects in the camera — Android (2026-09-30, 0.1.10+11)
+
+Owner wanted REAL live AR (effect visible while recording), explicitly not post-recording face tracking.
+- Built inside the vendored camera plugin (full notes: `third_party/camera_android_camerax/PATCH_NOTES.md` "Live AR"): ML Kit face detection (`MlKitAnalyzer`, sensor coordinates) + CameraX `OverlayEffect` on PREVIEW|VIDEO_CAPTURE → the effect is drawn INTO the camera frames, so preview and recording match. 8 procedural, symmetric effects (`ArEffects.kt`): sunglasses, crown, mustache, clown nose, party hat, heart eyes, halo, puppy. Face frame = origin between the eyes, 1 unit = eye distance, "down" toward the mouth; per-face EMA smoothing by tracking id; faces older than 500ms aren't drawn; the overlay is cleared once when faces disappear (an untouched overlay texture persists — verified in SurfaceProcessorImpl).
+- Verified from the CameraX 1.5.3 sources before writing: with an effect the preview's app edge is rotated+mirrored by the node and `hasCameraTransform=false` → the plugin's CameraPreview would rotate it again. So `camera_record_view.dart` shows `Texture(controller.cameraId)` itself, turned/mirrored from `ArCameraBridge.previewInfo()` (TransformationInfo), and falls back to CameraPreview when there's no info or `hasCameraTransform` is true.
+- App: face button (Android only) under the camera switch → strip of emoji chips; picking an effect when the camera was opened WITHOUT AR reopens the camera (the effect must be bound with it); switching between effects / "none" is instant. Selection persists for the session (`ArCameraBridge.selectedEffect`). Strings in 12 languages; licences page lists CameraX effects/ML Kit; privacy policy (TR/EN) says faces are detected on-device only, nothing stored/sent.
+- Size: universal release APK 73.9MB → 100.5MB (bundled ML Kit model + native libs for every ABI); per-device downloads from the AAB grow far less. Swap to `play-services-mlkit-face-detection` (unbundled) if size matters.
+- **Not device-tested — high risk, test first**: preview orientation (back AND front, the `_preview` transform), overlay alignment on the face in preview and in the recorded file, frame rate / heat on a mid-range phone, recording start still not frozen (the 1.8s freeze fix), switching effects mid-recording. iOS has no AR yet (needs AVCaptureVideoDataOutput + Vision + own recording pipeline).
 
 ## Editor magnets + caption size unified (2026-09-29, 0.1.9+10)
 

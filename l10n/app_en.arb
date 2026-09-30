@@ -486,5 +486,17 @@
         "type": "String"
       }
     }
-  }
+  },
+  "cameraSwitch": "Switch camera",
+  "arEffects": "Face effects",
+  "arNone": "No effect",
+  "arUnavailable": "Face effects aren't available on this device.",
+  "arSunglasses": "Sunglasses",
+  "arCrown": "Crown",
+  "arMustache": "Mustache",
+  "arClown": "Clown nose",
+  "arParty": "Party hat",
+  "arHeartEyes": "Heart eyes",
+  "arHalo": "Halo",
+  "arPuppy": "Puppy"
 }

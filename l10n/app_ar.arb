@@ -231,5 +231,17 @@
   "adThisChainTitle": "صُنعت بـ AD THIS",
   "adThisChainEmpty": "لم يصنع أحد نسخته بعد.",
   "adThisChainCount": "صنع {count} نسختهم",
-  "adThisInspiredBy": "مستوحى من {name}"
+  "adThisInspiredBy": "مستوحى من {name}",
+  "cameraSwitch": "تبديل الكاميرا",
+  "arEffects": "تأثيرات الوجه",
+  "arNone": "بلا تأثير",
+  "arUnavailable": "تأثيرات الوجه غير متاحة على هذا الجهاز.",
+  "arSunglasses": "نظارة شمسية",
+  "arCrown": "تاج",
+  "arMustache": "شارب",
+  "arClown": "أنف مهرج",
+  "arParty": "قبعة حفلة",
+  "arHeartEyes": "عيون قلوب",
+  "arHalo": "هالة",
+  "arPuppy": "جرو"
 }

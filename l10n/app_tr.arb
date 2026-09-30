@@ -231,5 +231,17 @@
   "adThisChainTitle": "AD THIS ile yapılanlar",
   "adThisChainEmpty": "Henüz kimse kendi versiyonunu yapmadı.",
   "adThisChainCount": "{count} kişi kendi versiyonunu yaptı",
-  "adThisInspiredBy": "{name} reklamından esinlendi"
+  "adThisInspiredBy": "{name} reklamından esinlendi",
+  "cameraSwitch": "Kamerayı çevir",
+  "arEffects": "Yüz efektleri",
+  "arNone": "Efekt yok",
+  "arUnavailable": "Yüz efektleri bu cihazda kullanılamıyor.",
+  "arSunglasses": "Güneş gözlüğü",
+  "arCrown": "Taç",
+  "arMustache": "Bıyık",
+  "arClown": "Palyaço burnu",
+  "arParty": "Parti şapkası",
+  "arHeartEyes": "Kalp gözler",
+  "arHalo": "Hale",
+  "arPuppy": "Köpecik"
 }

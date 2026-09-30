@@ -231,5 +231,17 @@
   "adThisChainTitle": "Faites avec AD THIS",
   "adThisChainEmpty": "Personne n'a encore fait sa version.",
   "adThisChainCount": "{count} ont fait leur version",
-  "adThisInspiredBy": "Inspiré par {name}"
+  "adThisInspiredBy": "Inspiré par {name}",
+  "cameraSwitch": "Changer de caméra",
+  "arEffects": "Effets visage",
+  "arNone": "Aucun effet",
+  "arUnavailable": "Les effets visage ne sont pas disponibles sur cet appareil.",
+  "arSunglasses": "Lunettes de soleil",
+  "arCrown": "Couronne",
+  "arMustache": "Moustache",
+  "arClown": "Nez de clown",
+  "arParty": "Chapeau de fête",
+  "arHeartEyes": "Yeux en cœur",
+  "arHalo": "Auréole",
+  "arPuppy": "Chiot"
 }

@@ -117,6 +117,10 @@ class PreviewProxyApi extends PigeonApiPreview {
       @NonNull TextureRegistry.SurfaceProducer surfaceProducer,
       @NonNull SystemServicesManager systemServicesManager) {
     return request -> {
+      // ADGAG PATCH (live AR): record how CameraX wants this buffer shown —
+      // with the AR effect the buffer is GL-processed and the app shows it itself.
+      AdGagAr.onPreviewSurfaceRequest(request);
+
       // Set callback for surfaceProducer to invalidate Surfaces that it produces when they
       // get destroyed.
       surfaceProducer.setCallback(

@@ -3,7 +3,7 @@ description: >
   AdGag — the social network where everything is an ad.
   "See it. Ad it. Go." Internal codename: everything_is_an_ad.
 publish_to: "none"
-version: 0.1.9+10
+version: 0.1.10+11
 
 environment:
   sdk: ">=3.6.0 <4.0.0"

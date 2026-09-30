@@ -25,6 +25,7 @@ public final class CameraAndroidCameraxPlugin implements FlutterPlugin, Activity
 
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
+    AdGagAr.INSTANCE.attach(binding.getBinaryMessenger()); // ADGAG PATCH (live AR)
     pluginBinding = binding;
 
     proxyApiRegistrar =

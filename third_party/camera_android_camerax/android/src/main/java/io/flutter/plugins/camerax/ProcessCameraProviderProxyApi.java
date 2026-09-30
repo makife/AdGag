@@ -67,6 +67,15 @@ class ProcessCameraProviderProxyApi extends PigeonApiProcessCameraProvider {
       @NonNull List<? extends UseCase> useCases) {
     final LifecycleOwner lifecycleOwner = getPigeonRegistrar().getLifecycleOwner();
     if (lifecycleOwner != null) {
+      // ADGAG PATCH (live AR): with an AR effect picked, Preview + VideoCapture
+      // are bound together with the face analysis and the overlay effect.
+      final List<UseCase> asList = new java.util.ArrayList<>(useCases);
+      if (AdGagAr.shouldBindWithAr(asList)) {
+        return pigeonInstance.bindToLifecycle(
+            lifecycleOwner,
+            cameraSelector,
+            AdGagAr.buildGroup(getPigeonRegistrar().getContext(), asList));
+      }
       return pigeonInstance.bindToLifecycle(
           lifecycleOwner, cameraSelector, useCases.toArray(new UseCase[0]));
     }
@@ -89,5 +98,6 @@ class ProcessCameraProviderProxyApi extends PigeonApiProcessCameraProvider {
   @Override
   public void unbindAll(ProcessCameraProvider pigeonInstance) {
     pigeonInstance.unbindAll();
+    AdGagAr.onUnbound(); // ADGAG PATCH (live AR)
   }
 }

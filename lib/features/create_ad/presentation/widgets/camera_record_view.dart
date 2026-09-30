@@ -12,6 +12,7 @@ import "../../../../core/localization/generated/app_localizations.dart";
 import "../../../../core/theme/app_colors.dart";
 import "../../../../core/theme/app_spacing.dart";
 import "../../domain/video_constraints.dart";
+import "../ar/ar_effects.dart";
 
 /// Fullscreen record UI communicating the time limit clearly (CLAUDE.md
 /// section 4). Tap to start, tap again (or auto-stop at [maxDuration]) to
@@ -65,6 +66,11 @@ class _CameraRecordViewState extends State<CameraRecordView> {
   bool _isRecording = false;
   bool _switchingCamera = false;
   String? _error;
+
+  /// Live AR (Android): how to show the GL-processed preview when the camera
+  /// was opened with the AR pipeline (null = normal preview).
+  ArPreviewInfo? _arInfo;
+  bool _arPickerOpen = false;
 
   /// How the phone is physically held. The UI stays portrait (like the
   /// system camera) and the on-screen controls turn in place to stay
@@ -125,6 +131,15 @@ class _CameraRecordViewState extends State<CameraRecordView> {
   }
 
   Future<void> _openCamera(CameraDescription description) async {
+    // The native side decides at bind time whether this camera gets the AR
+    // pipeline: only when an effect is picked.
+    if (Platform.isAndroid) {
+      try {
+        await ArCameraBridge.setEffect(ArCameraBridge.selectedEffect);
+      } catch (_) {
+        ArCameraBridge.selectedEffect = null; // no AR on this build/device
+      }
+    }
     final CameraController controller = CameraController(
       description,
       // Was ResolutionPreset.high (~720p on most devices) — a real,
@@ -141,11 +156,78 @@ class _CameraRecordViewState extends State<CameraRecordView> {
       enableAudio: true,
     );
     await controller.initialize();
+    final ArPreviewInfo? arInfo = await _readArPreviewInfo();
     if (!mounted) {
       await controller.dispose();
       return;
     }
-    setState(() => _controller = controller);
+    setState(() {
+      _controller = controller;
+      _arInfo = arInfo;
+    });
+  }
+
+  /// With the AR pipeline bound, CameraX reports the preview buffer's
+  /// transform shortly after binding; wait briefly for it.
+  Future<ArPreviewInfo?> _readArPreviewInfo() async {
+    if (!Platform.isAndroid || ArCameraBridge.selectedEffect == null) {
+      return null;
+    }
+    try {
+      if (!await ArCameraBridge.isPipelineBound()) {
+        return null;
+      }
+      for (int i = 0; i < 30; i++) {
+        final ArPreviewInfo? info = await ArCameraBridge.previewInfo();
+        if (info != null) {
+          return info;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+    } catch (_) {
+      // Fall back to the normal preview widget.
+    }
+    return null;
+  }
+
+  /// Picks a live AR effect (null = none). Switching between effects is
+  /// instant; turning AR on for a camera opened without it reopens the
+  /// camera (the effect has to be part of the camera's setup).
+  Future<void> _selectArEffect(String? id) async {
+    final CameraController? current = _controller;
+    if (current == null || _switchingCamera) {
+      return;
+    }
+    bool bound = false;
+    try {
+      bound = await ArCameraBridge.isPipelineBound();
+      await ArCameraBridge.setEffect(id);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).arUnavailable)));
+      }
+      return;
+    }
+    if (id == null || bound || _isRecording) {
+      setState(() {}); // just redraw the picker's selection
+      return;
+    }
+    setState(() {
+      _switchingCamera = true;
+      _controller = null;
+    });
+    await current.dispose();
+    try {
+      await _openCamera(current.description);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = AppLocalizations.of(context).cameraStartFailed("$e"));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _switchingCamera = false);
+      }
+    }
   }
 
   /// Switches between front and back cameras (CLAUDE.md section 4 doesn't
@@ -309,6 +391,49 @@ class _CameraRecordViewState extends State<CameraRecordView> {
     super.dispose();
   }
 
+  /// The camera preview. With the AR pipeline the texture is a GL-processed
+  /// buffer: it's turned/mirrored exactly as CameraX reports ([_arInfo]),
+  /// instead of by the plugin's rotation logic (made for the camera's own
+  /// buffers — it would turn this one sideways).
+  Widget _preview(CameraController controller) {
+    final ArPreviewInfo? ar = _arInfo;
+    if (ar == null || ar.hasCameraTransform) {
+      // aspectRatio is reported in the sensor's natural (landscape)
+      // orientation, so it's inverted for the portrait UI — without an
+      // AspectRatio CameraPreview stretches to fill its box.
+      return AspectRatio(aspectRatio: 1 / controller.value.aspectRatio, child: CameraPreview(controller));
+    }
+    final bool quarter = (ar.rotationDegrees ~/ 90).isOdd;
+    Widget view = AspectRatio(
+      aspectRatio: ar.width / ar.height,
+      child: Texture(textureId: controller.cameraId),
+    );
+    view = RotatedBox(quarterTurns: (ar.rotationDegrees ~/ 90) % 4, child: view);
+    if (ar.mirroring) {
+      view = Transform.flip(flipX: true, child: view);
+    }
+    return AspectRatio(aspectRatio: quarter ? ar.height / ar.width : ar.width / ar.height, child: view);
+  }
+
+  Widget _roundButton({required IconData icon, required String tooltip, VoidCallback? onTap, bool active = false}) {
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: active ? AppColors.brandTurquoise : Colors.black38,
+            shape: BoxShape.circle,
+          ),
+          child: _upright(Icon(icon, color: Colors.white, size: 24)),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
@@ -357,12 +482,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
           // reported in the sensor's natural (landscape) orientation, so
           // it's inverted here for portrait display — the standard fix for
           // this exact camera-plugin gotcha.
-          Center(
-            child: AspectRatio(
-              aspectRatio: 1 / controller.value.aspectRatio,
-              child: CameraPreview(controller),
-            ),
-          ),
+          Center(child: _preview(controller)),
           if (widget.onCancel != null)
             Positioned(
               top: AppSpacing.md,
@@ -382,21 +502,31 @@ class _CameraRecordViewState extends State<CameraRecordView> {
                 ),
               ),
             ),
-          if (_cameras.length > 1)
-            Positioned(
-              top: AppSpacing.md,
-              right: AppSpacing.md,
-              child: SafeArea(
-                child: GestureDetector(
-                  onTap: (_isRecording || _switchingCamera) ? null : _switchCamera,
-                  child: Container(
-                    padding: const EdgeInsets.all(AppSpacing.sm),
-                    decoration: const BoxDecoration(color: Colors.black38, shape: BoxShape.circle),
-                    child: _upright(const Icon(Icons.cameraswitch_outlined, color: Colors.white, size: 24)),
-                  ),
-                ),
+          Positioned(
+            top: AppSpacing.md,
+            right: AppSpacing.md,
+            child: SafeArea(
+              child: Column(
+                children: <Widget>[
+                  if (_cameras.length > 1)
+                    _roundButton(
+                      icon: Icons.cameraswitch_outlined,
+                      tooltip: AppLocalizations.of(context).cameraSwitch,
+                      onTap: (_isRecording || _switchingCamera) ? null : _switchCamera,
+                    ),
+                  if (Platform.isAndroid) ...<Widget>[
+                    const SizedBox(height: AppSpacing.md),
+                    _roundButton(
+                      icon: Icons.face_retouching_natural,
+                      tooltip: AppLocalizations.of(context).arEffects,
+                      active: _arPickerOpen || ArCameraBridge.selectedEffect != null,
+                      onTap: () => setState(() => _arPickerOpen = !_arPickerOpen),
+                    ),
+                  ],
+                ],
               ),
             ),
+          ),
           Positioned(
             bottom: AppSpacing.xxxl + MediaQuery.paddingOf(context).bottom,
             left: 0,
@@ -404,6 +534,13 @@ class _CameraRecordViewState extends State<CameraRecordView> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
+                if (_arPickerOpen) ...<Widget>[
+                  _ArEffectStrip(
+                    selected: ArCameraBridge.selectedEffect,
+                    onSelect: (String? id) => unawaited(_selectArEffect(id)),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                ],
                 _upright(
                   Text(
                     "${(_elapsed.inMilliseconds / 1000.0).toStringAsFixed(1)}s / "
@@ -469,6 +606,56 @@ class _CameraRecordViewState extends State<CameraRecordView> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Horizontal list of live AR effects: "none" first, then each effect as an
+/// emoji chip. The selected one is ringed in the brand colour.
+class _ArEffectStrip extends StatelessWidget {
+  const _ArEffectStrip({required this.selected, required this.onSelect});
+
+  final String? selected;
+  final ValueChanged<String?> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    Widget chip({required String? id, required Widget child, required String label}) {
+      final bool isSelected = id == selected;
+      return Semantics(
+        button: true,
+        selected: isSelected,
+        label: label,
+        child: GestureDetector(
+          onTap: () => onSelect(id),
+          child: Container(
+            width: 56,
+            height: 56,
+            margin: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+            decoration: BoxDecoration(
+              color: Colors.black45,
+              shape: BoxShape.circle,
+              border: Border.all(color: isSelected ? AppColors.brandTurquoise : Colors.white24, width: isSelected ? 3 : 1),
+            ),
+            alignment: Alignment.center,
+            child: child,
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 64,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+        children: <Widget>[
+          chip(id: null, label: l10n.arNone, child: const Icon(Icons.block, color: Colors.white70)),
+          for (final ArEffect e in ArEffect.all)
+            chip(id: e.id, label: e.label(l10n), child: Text(e.emoji, style: const TextStyle(fontSize: 28))),
         ],
       ),
     );

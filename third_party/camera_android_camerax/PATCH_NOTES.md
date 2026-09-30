@@ -29,3 +29,30 @@ then, which is acceptable for a photo).
 Delete this folder and the `camera_android_camerax` entry under
 `dependency_overrides` once upstream binds VideoCapture ahead of time (or
 exposes a way to). Re-check the recording-start freeze on a device after.
+
+## Live AR (added 2026-09-30, ADGAG PATCH)
+
+Live face effects drawn on the camera frames themselves, so the preview and
+the recording show the same thing:
+
+- `AdGagAr.kt`: when the app picked an effect ("adgag/ar" channel,
+  `setEffect`) before the camera binds, `ProcessCameraProviderProxyApi.bindToLifecycle`
+  binds a `UseCaseGroup` of Preview + VideoCapture + an `ImageAnalysis`
+  (ML Kit face detection through `MlKitAnalyzer`, `COORDINATE_SYSTEM_SENSOR`)
+  + a CameraX `OverlayEffect` (targets PREVIEW | VIDEO_CAPTURE, queue depth 0).
+  The draw listener sets `frame.sensorToBufferTransform` on the overlay canvas
+  and draws each face's effect in face units (`FaceGeom.localToSensor`).
+  `unbindAll` resets the AR state.
+- `ArEffects.kt`: the artwork, procedural and left-right symmetric (the front
+  camera's preview is mirrored, its recording isn't).
+- `PreviewProxyApi.createSurfaceProvider` records the preview SurfaceRequest's
+  TransformationInfo. With an effect CameraX hands the preview a GL-processed
+  buffer (`hasCameraTransform == false`), which the plugin's own rotation
+  logic would turn sideways — the app shows that texture itself, turned and
+  mirrored exactly as `previewInfo` says (camera_record_view.dart `_preview`).
+- Plugin `onAttachedToEngine` registers the channel.
+- build.gradle: `camera-effects`, `camera-mlkit-vision` (same CameraX version)
+  and `com.google.mlkit:face-detection` (bundled model).
+
+Removing: delete AdGagAr.kt / ArEffects.kt, the three marked hooks and the
+three dependencies; the app hides the AR button when the channel is missing.
