@@ -840,3 +840,30 @@ K("arHeartEyes", "Heart eyes", "Kalp gözler", "Ojos de corazón", "Olhos de cor
   "Глаза-сердечки", "عيون قلوب", "Mata hati", "ハートの目", "하트 눈")
 K("arHalo", "Halo", "Hale", "Aureola", "Auréola", "Heiligenschein", "Auréole", "Aureola", "Нимб", "هالة", "Lingkaran cahaya", "天使の輪", "후광")
 K("arPuppy", "Puppy", "Köpecik", "Perrito", "Cachorrinho", "Welpe", "Chiot", "Cucciolo", "Щенок", "جرو", "Anak anjing", "子犬", "강아지")
+
+# --- Camera: more live AR effects ---
+K("arNerd", "Nerd glasses", "İnek gözlüğü", "Gafas de nerd", "Óculos de nerd", "Nerdbrille", "Lunettes de geek", "Occhiali da nerd",
+  "Очки ботаника", "نظارة المهووس", "Kacamata kutu buku", "オタクメガネ", "너드 안경")
+K("arFlowerCrown", "Flower crown", "Çiçek taç", "Corona de flores", "Coroa de flores", "Blumenkranz", "Couronne de fleurs",
+  "Corona di fiori", "Венок", "تاج زهور", "Mahkota bunga", "花冠", "꽃 왕관")
+K("arViking", "Viking helmet", "Viking miğferi", "Casco vikingo", "Capacete viking", "Wikingerhelm", "Casque viking",
+  "Elmo vichingo", "Шлем викинга", "خوذة الفايكنغ", "Helm viking", "バイキングの兜", "바이킹 투구")
+K("arDevil", "Devil horns", "Şeytan boynuzları", "Cuernos de diablo", "Chifres de diabo", "Teufelshörner", "Cornes de diable",
+  "Corna da diavolo", "Рожки чертёнка", "قرون الشيطان", "Tanduk setan", "悪魔の角", "악마 뿔")
+K("arCat", "Kitty", "Kedi", "Gatito", "Gatinho", "Kätzchen", "Chaton", "Gattino", "Котик", "قطة", "Kucing", "ネコ", "고양이")
+K("arBunny", "Bunny", "Tavşan", "Conejito", "Coelhinho", "Häschen", "Lapin", "Coniglietto", "Зайка", "أرنب", "Kelinci", "ウサギ", "토끼")
+K("arAlien", "Alien", "Uzaylı", "Alienígena", "Alienígena", "Alien", "Alien", "Alieno", "Инопланетянин", "كائن فضائي", "Alien", "宇宙人", "외계인")
+K("arStarEyes", "Star eyes", "Yıldız gözler", "Ojos de estrella", "Olhos de estrela", "Sternenaugen", "Yeux étoilés", "Occhi a stella",
+  "Глаза-звёзды", "عيون نجوم", "Mata bintang", "キラキラ目", "별 눈")
+K("arBlush", "Blush", "Kızarık yanaklar", "Rubor", "Bochechas coradas", "Rote Bäckchen", "Joues roses", "Guance rosse",
+  "Румянец", "خدود وردية", "Pipi merona", "ほっぺ", "볼터치")
+K("arTears", "Tears", "Gözyaşı", "Lágrimas", "Lágrimas", "Tränen", "Larmes", "Lacrime", "Слёзы", "دموع", "Air mata", "涙", "눈물")
+K("arHearts", "Floating hearts", "Uçuşan kalpler", "Corazones flotantes", "Corações flutuantes", "Schwebende Herzen",
+  "Cœurs flottants", "Cuori fluttuanti", "Летящие сердечки", "قلوب طائرة", "Hati melayang", "ふわふわハート", "떠다니는 하트")
+K("arMoneyRain", "Money rain", "Para yağmuru", "Lluvia de dinero", "Chuva de dinheiro", "Geldregen", "Pluie d'argent",
+  "Pioggia di soldi", "Денежный дождь", "مطر المال", "Hujan uang", "お金の雨", "돈 비")
+K("arSparkles", "Sparkles", "Pırıltı", "Destellos", "Brilhos", "Glitzer", "Paillettes", "Scintille", "Блёстки", "بريق", "Kilau",
+  "キラキラ", "반짝이")
+K("arRainbow", "Rainbow mouth (open wide!)", "Gökkuşağı (ağzını aç!)", "Boca arcoíris (¡abre la boca!)", "Boca arco-íris (abra a boca!)",
+  "Regenbogenmund (Mund auf!)", "Bouche arc-en-ciel (ouvre grand !)", "Bocca arcobaleno (apri la bocca!)",
+  "Радуга (открой рот!)", "فم قوس قزح (افتح فمك!)", "Mulut pelangi (buka mulut!)", "レインボー（口を開けて！）", "무지개 입 (입을 벌려!)")

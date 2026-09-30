@@ -237,7 +237,7 @@ object AdGagAr {
         for (face in current) {
             c.save()
             c.concat(face.localToSensor())
-            ArEffects.draw(c, effectId, face)
+            ArEffects.draw(c, effectId, face, (frameNanos % 1_000_000_000_000L) / 1e9f)
             c.restore()
         }
         c.restore()
@@ -246,20 +246,36 @@ object AdGagAr {
 }
 
 /**
- * One face in sensor coordinates: eye centres, nose base, mouth centre.
- * [localToSensor] builds the face's own frame — origin between the eyes,
- * 1 unit = eye distance, +x toward one eye, +y down the face (toward the
- * mouth) — so effects are drawn once, in face units, at any size/tilt.
+ * One face in sensor coordinates. [localToSensor] builds the face's own
+ * frame — origin between the eyes, x: 1 unit = eye distance toward one eye,
+ * y: down the face (toward the mouth), 1 unit = the eye distance the face
+ * would have seen head-on — so effects are drawn once, in face units, at any
+ * size/tilt, and a turned head narrows them instead of shrinking them.
  */
-data class FaceGeom(val leftEye: PointF, val rightEye: PointF, val nose: PointF, val mouth: PointF) {
+data class FaceGeom(
+    val leftEye: PointF,
+    val rightEye: PointF,
+    val nose: PointF,
+    /** Midpoint of the mouth corners (steady whether the mouth is open or not). */
+    val mouth: PointF,
+    val mouthBottom: PointF,
+    val leftCheek: PointF,
+    val rightCheek: PointF,
+    /** Head turn left/right (ML Kit Euler Y), degrees. */
+    val yawDeg: Float,
+) {
     fun lerp(to: FaceGeom, t: Float) = FaceGeom(
         mix(leftEye, to.leftEye, t), mix(rightEye, to.rightEye, t), mix(nose, to.nose, t), mix(mouth, to.mouth, t),
+        mix(mouthBottom, to.mouthBottom, t), mix(leftCheek, to.leftCheek, t), mix(rightCheek, to.rightCheek, t),
+        yawDeg + (to.yawDeg - yawDeg) * t,
     )
 
     fun localToSensor(): Matrix {
         val mx = (leftEye.x + rightEye.x) / 2f
         val my = (leftEye.y + rightEye.y) / 2f
         val e = hypot(rightEye.x - leftEye.x, rightEye.y - leftEye.y).coerceAtLeast(1f)
+        // The eye distance shrinks as the head turns; the face's height doesn't.
+        val ey = e / kotlin.math.cos(Math.toRadians(yawDeg.toDouble())).toFloat().coerceIn(0.55f, 1f)
         // "Down" = from between the eyes toward the mouth.
         var dx = mouth.x - mx
         var dy = mouth.y - my
@@ -270,7 +286,7 @@ data class FaceGeom(val leftEye: PointF, val rightEye: PointF, val nose: PointF,
         val rx = dy
         val ry = -dx
         return Matrix().apply {
-            setValues(floatArrayOf(rx * e, dx * e, mx, ry * e, dy * e, my, 0f, 0f, 1f))
+            setValues(floatArrayOf(rx * e, dx * ey, mx, ry * e, dy * ey, my, 0f, 0f, 1f))
         }
     }
 
@@ -283,6 +299,13 @@ data class FaceGeom(val leftEye: PointF, val rightEye: PointF, val nose: PointF,
         return PointF(pts[0], pts[1])
     }
 
+    /** 0 = mouth closed … 1 = wide open (lip gap relative to the face). */
+    fun mouthOpen(): Float {
+        val corners = toLocal(mouth)
+        val bottom = toLocal(mouthBottom)
+        return ((bottom.y - corners.y - 0.18f) / 0.32f).coerceIn(0f, 1f)
+    }
+
     companion object {
         fun of(face: Face): FaceGeom? {
             val l = face.getLandmark(FaceLandmark.LEFT_EYE)?.position ?: return null
@@ -290,12 +313,21 @@ data class FaceGeom(val leftEye: PointF, val rightEye: PointF, val nose: PointF,
             val box = face.boundingBox
             val nose = face.getLandmark(FaceLandmark.NOSE_BASE)?.position
                 ?: PointF(box.exactCenterX(), box.exactCenterY())
-            val mouth = face.getLandmark(FaceLandmark.MOUTH_BOTTOM)?.position
-                ?: face.getLandmark(FaceLandmark.MOUTH_LEFT)?.position?.let { ml ->
-                    face.getLandmark(FaceLandmark.MOUTH_RIGHT)?.position?.let { mr -> PointF((ml.x + mr.x) / 2, (ml.y + mr.y) / 2) }
-                }
-                ?: PointF(box.exactCenterX(), box.bottom.toFloat())
-            return FaceGeom(PointF(l.x, l.y), PointF(r.x, r.y), PointF(nose.x, nose.y), PointF(mouth.x, mouth.y))
+            val ml = face.getLandmark(FaceLandmark.MOUTH_LEFT)?.position
+            val mr = face.getLandmark(FaceLandmark.MOUTH_RIGHT)?.position
+            val mb = face.getLandmark(FaceLandmark.MOUTH_BOTTOM)?.position
+            val mouth = if (ml != null && mr != null) PointF((ml.x + mr.x) / 2, (ml.y + mr.y) / 2)
+                else mb ?: PointF(box.exactCenterX(), box.bottom - box.height() * 0.2f)
+            val mouthBottom = mb ?: mouth
+            // Cheeks: landmarks when present, else between the eye and mouth corner.
+            val lc = face.getLandmark(FaceLandmark.LEFT_CHEEK)?.position
+                ?: PointF(l.x + (mouth.x - l.x) * 0.3f, l.y + (mouth.y - l.y) * 0.6f)
+            val rc = face.getLandmark(FaceLandmark.RIGHT_CHEEK)?.position
+                ?: PointF(r.x + (mouth.x - r.x) * 0.3f, r.y + (mouth.y - r.y) * 0.6f)
+            return FaceGeom(
+                PointF(l.x, l.y), PointF(r.x, r.y), PointF(nose.x, nose.y), PointF(mouth.x, mouth.y),
+                PointF(mouthBottom.x, mouthBottom.y), PointF(lc.x, lc.y), PointF(rc.x, rc.y), face.headEulerAngleY,
+            )
         }
 
         private fun mix(a: PointF, b: PointF, t: Float) = PointF(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)

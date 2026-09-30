@@ -699,17 +699,33 @@ class _ArEffectStrip extends StatelessWidget {
       );
     }
 
-    return SizedBox(
-      height: 64,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-        children: <Widget>[
-          chip(id: null, label: l10n.arNone, child: const Icon(Icons.block, color: Colors.white70)),
-          for (final ArEffect e in ArEffect.all)
-            chip(id: e.id, label: e.label(l10n), child: Text(e.emoji, style: const TextStyle(fontSize: 28))),
-        ],
-      ),
+    final ArEffect? current = ArEffect.all.where((ArEffect e) => e.id == selected).firstOrNull;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        SizedBox(
+          height: 64,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            children: <Widget>[
+              chip(id: null, label: l10n.arNone, child: const Icon(Icons.block, color: Colors.white70)),
+              for (final ArEffect e in ArEffect.all)
+                chip(id: e.id, label: e.label(l10n), child: Text(e.emoji, style: const TextStyle(fontSize: 28))),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        // The picked effect's name (some carry a hint, e.g. "open wide!").
+        Text(
+          current?.label(l10n) ?? l10n.arNone,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            shadows: <Shadow>[Shadow(color: Colors.black87, blurRadius: 6)],
+          ),
+        ),
+      ],
     );
   }
 }
