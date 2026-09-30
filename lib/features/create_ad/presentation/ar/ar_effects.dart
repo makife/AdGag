@@ -85,6 +85,16 @@ abstract final class ArCameraBridge {
   /// Whether the open camera was bound with the AR pipeline.
   static Future<bool> isPipelineBound() async => await _channel.invokeMethod<bool>("isPipelineBound") ?? false;
 
+  /// The last camera error (with native stack trace) while AR was picked, or
+  /// null; reading clears it. For diagnosing device-only failures.
+  static Future<String?> lastError() async {
+    try {
+      return await _channel.invokeMethod<String>("lastError");
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// The preview buffer's transform; null until CameraX has reported it.
   static Future<ArPreviewInfo?> previewInfo() async {
     final Map<Object?, Object?>? m = await _channel.invokeMethod<Map<Object?, Object?>>("previewInfo");

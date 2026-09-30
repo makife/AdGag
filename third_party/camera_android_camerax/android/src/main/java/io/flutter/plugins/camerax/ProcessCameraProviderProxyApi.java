@@ -71,10 +71,17 @@ class ProcessCameraProviderProxyApi extends PigeonApiProcessCameraProvider {
       // are bound together with the face analysis and the overlay effect.
       final List<UseCase> asList = new java.util.ArrayList<>(useCases);
       if (AdGagAr.shouldBindWithAr(asList)) {
-        return pigeonInstance.bindToLifecycle(
-            lifecycleOwner,
-            cameraSelector,
-            AdGagAr.buildGroup(getPigeonRegistrar().getContext(), asList));
+        try {
+          return pigeonInstance.bindToLifecycle(
+              lifecycleOwner,
+              cameraSelector,
+              AdGagAr.buildGroup(getPigeonRegistrar().getContext(), asList));
+        } catch (Throwable t) {
+          // AR must never cost the camera: record why, open it without AR.
+          AdGagAr.recordError(t);
+          pigeonInstance.unbindAll();
+          AdGagAr.onUnbound();
+        }
       }
       return pigeonInstance.bindToLifecycle(
           lifecycleOwner, cameraSelector, useCases.toArray(new UseCase[0]));

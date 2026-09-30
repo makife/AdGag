@@ -124,10 +124,62 @@ class _CameraRecordViewState extends State<CameraRecordView> {
         (CameraDescription c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
       );
-      await _openCamera(description);
+      await _openCameraOrWithoutAr(description);
     } catch (e) {
       setState(() => _error = AppLocalizations.of(context).cameraStartFailed("$e"));
     }
+  }
+
+  /// Opens [description]; if that fails with a live AR effect picked, drops
+  /// the effect, reopens without it and explains (AR must never cost the
+  /// camera). Also notices when the native side already fell back.
+  Future<void> _openCameraOrWithoutAr(CameraDescription description) async {
+    final bool withAr = Platform.isAndroid && ArCameraBridge.selectedEffect != null;
+    try {
+      await _openCamera(description);
+    } catch (e) {
+      if (!withAr) {
+        rethrow;
+      }
+      final String details = "$e\n\n${await ArCameraBridge.lastError() ?? ""}";
+      await _releaseCamera();
+      ArCameraBridge.selectedEffect = null;
+      await _openCamera(description);
+      _showArFailure(details);
+      return;
+    }
+    if (withAr && _arInfo == null && !await ArCameraBridge.isPipelineBound()) {
+      // The native bind failed and opened the camera without AR.
+      final String? details = await ArCameraBridge.lastError();
+      await ArCameraBridge.setEffect(null);
+      _showArFailure(details);
+    }
+  }
+
+  void _showArFailure(String? details) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {}); // the picker shows "no effect" again
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (BuildContext context) => AlertDialog(
+          title: Text(AppLocalizations.of(context).arUnavailable),
+          content: details == null || details.trim().isEmpty
+              ? null
+              : SizedBox(
+                  height: 280,
+                  child: SingleChildScrollView(
+                    child: SelectableText(details, style: const TextStyle(fontSize: 11)),
+                  ),
+                ),
+          actions: <Widget>[
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(AppLocalizations.of(context).genericDone)),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _openCamera(CameraDescription description) async {
@@ -218,7 +270,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
     });
     await current.dispose();
     try {
-      await _openCamera(current.description);
+      await _openCameraOrWithoutAr(current.description);
     } catch (e) {
       if (mounted) {
         setState(() => _error = AppLocalizations.of(context).cameraStartFailed("$e"));
@@ -261,7 +313,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
     );
     await current.dispose();
     try {
-      await _openCamera(next);
+      await _openCameraOrWithoutAr(next);
     } catch (e) {
       setState(() => _error = AppLocalizations.of(context).cameraSwitchFailed("$e"));
     } finally {

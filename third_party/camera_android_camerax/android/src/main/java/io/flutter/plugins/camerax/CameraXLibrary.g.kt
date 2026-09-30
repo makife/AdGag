@@ -27,6 +27,7 @@ private object CameraXLibraryPigeonUtils {
   }
 
   fun wrapError(exception: Throwable): List<Any?> {
+    AdGagAr.recordError(exception) // ADGAG PATCH (live AR diagnostics)
     return if (exception is CameraXError) {
       listOf(exception.code, exception.message, exception.details)
     } else {

@@ -71,6 +71,14 @@ object AdGagAr {
     var pipelineBound: Boolean = false
         private set
 
+    /**
+     * The last plugin error (with stack trace) while AR was picked — the
+     * plugin only hands Dart the message, which wasn't enough to find a
+     * device-only failure. Read (and cleared) by the app over "lastError".
+     */
+    @Volatile
+    private var lastError: String? = null
+
     /** The last preview SurfaceRequest's transformation (see [previewInfo]). */
     @Volatile
     private var previewTransform: Map<String, Any>? = null
@@ -95,6 +103,10 @@ object AdGagAr {
                 }
                 "isPipelineBound" -> result.success(pipelineBound)
                 "previewInfo" -> result.success(previewTransform)
+                "lastError" -> {
+                    result.success(lastError)
+                    lastError = null
+                }
                 else -> result.notImplemented()
             }
         }
@@ -152,6 +164,14 @@ object AdGagAr {
         builder.addEffect(overlay)
         pipelineBound = true
         return builder.build()
+    }
+
+    /** Any plugin error while AR is picked (CameraXLibrary.g.kt wrapError, the AR bind). */
+    @JvmStatic
+    fun recordError(t: Throwable) {
+        if (currentEffect == null && !pipelineBound) return
+        Log.e(TAG, "camera error with AR", t)
+        lastError = Log.getStackTraceString(t).take(4000)
     }
 
     /** ProcessCameraProviderProxyApi.unbindAll / an ordinary bind: the AR pipeline is gone. */
