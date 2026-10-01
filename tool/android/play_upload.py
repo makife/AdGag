@@ -1,6 +1,6 @@
 """Uploads an .aab to Google Play and releases it on a testing track.
 
-    python tool/android/play_upload.py <app-release.aab> [--track internal]
+    python tool/android/play_upload.py <app-release.aab> [--track alpha] [--version-name 0.1.15]
 
 Credentials: a Google service account JSON (env PLAY_SERVICE_ACCOUNT_JSON, the
 file's contents) that is invited in Play Console > Users and permissions with
@@ -54,7 +54,8 @@ def check(r: requests.Response, what: str) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("aab")
-    ap.add_argument("--track", default="internal")
+    ap.add_argument("--track", default="alpha", help="internal | alpha (closed testing) | beta | production")
+    ap.add_argument("--version-name", help='shown in Play as "<versionCode> (<version name>)"')
     a = ap.parse_args()
 
     raw = os.environ.get("PLAY_SERVICE_ACCOUNT_JSON")
@@ -76,11 +77,14 @@ def main() -> None:
             "Uploading the bundle",
         )
     version_code = bundle["versionCode"]
+    release = {"versionCodes": [str(version_code)], "status": "completed"}
+    if a.version_name:
+        release["name"] = f"{version_code} ({a.version_name})"
     check(
         requests.put(
             f"{API}/edits/{edit}/tracks/{a.track}",
             headers=h,
-            json={"track": a.track, "releases": [{"versionCodes": [str(version_code)], "status": "completed"}]},
+            json={"track": a.track, "releases": [release]},
             timeout=60,
         ),
         f"Setting the {a.track} track",
