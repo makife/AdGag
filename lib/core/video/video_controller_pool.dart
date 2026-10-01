@@ -77,6 +77,20 @@ final class VideoControllerPool {
     }
   }
 
+  /// Starts [adId] right away (if it's already initialized) and pauses the
+  /// rest — called from a pager's onPageChanged, i.e. as soon as a swipe
+  /// has crossed into the next Ad, instead of waiting for the page to
+  /// settle; the card's own activation follows when it does. Only the
+  /// platform play/pause calls, no rebuilds (switching the whole active
+  /// card mid-swipe made the swipe hitch).
+  void playOnly(String adId) {
+    pauseAllExcept(adId);
+    final VideoPlayerController? controller = _controllers[adId];
+    if (controller != null && controller.value.isInitialized && !controller.value.isPlaying) {
+      unawaited(controller.play());
+    }
+  }
+
   /// Pauses every controller — call on app background / route change away
   /// from the feed (section 17).
   void pauseAll() {

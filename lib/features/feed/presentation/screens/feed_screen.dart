@@ -293,6 +293,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
                     itemCount: feedState.ads.length,
                     onPageChanged: (int index) {
                       _pendingIndex = index;
+                      _pool.playOnly(feedState.ads[index].id);
                       ref.read(openReviewsAdIdProvider.notifier).state = null;
                     },
                     itemBuilder: (BuildContext context, int index) {

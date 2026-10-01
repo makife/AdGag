@@ -3,7 +3,7 @@ description: >
   AdGag — the social network where everything is an ad.
   "See it. Ad it. Go." Internal codename: everything_is_an_ad.
 publish_to: "none"
-version: 0.1.13+14
+version: 0.1.14+15
 
 environment:
   sdk: ">=3.6.0 <4.0.0"
@@ -114,6 +114,11 @@ dependency_overrides:
   # third_party/camera_android_camerax/PATCH_NOTES.md.
   camera_android_camerax:
     path: third_party/camera_android_camerax
+  # Patched copy of video_player's Android implementation: ExoPlayer starts
+  # after 0.7s of buffered video instead of 2.5s, so feed Ads start right
+  # away. See third_party/video_player_android/PATCH_NOTES.md.
+  video_player_android:
+    path: third_party/video_player_android
 
 flutter:
   uses-material-design: true

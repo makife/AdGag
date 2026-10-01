@@ -81,6 +81,37 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
   bool _trackedCompleted = false;
   bool _wasNearEnd = false;
 
+  /// Whether this card can actually be seen: its bottom-nav tab is the one
+  /// showing (go_router's indexed stack turns tickers off in hidden
+  /// branches) and no other page is pushed over it. A card that is
+  /// [AdVideoCard.isActive] but not visible must not play — a viewer opened
+  /// from MARKET kept playing (with sound) behind other tabs and pages
+  /// (device report).
+  bool _visible = true;
+
+  bool _appInForeground = true;
+
+  bool get _shouldPlay => widget.isActive && _visible && _appInForeground;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final bool visible = TickerMode.valuesOf(context).enabled && (ModalRoute.of(context)?.isCurrent ?? true);
+    if (visible != _visible) {
+      _visible = visible;
+      _syncPlayback();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final bool foreground = state == AppLifecycleState.resumed;
+    if (foreground != _appInForeground) {
+      _appInForeground = foreground;
+      _syncPlayback();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -142,7 +173,7 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
     if (controller == null || !controller.value.isInitialized) {
       return;
     }
-    if (widget.isActive) {
+    if (_shouldPlay) {
       widget.pool.pauseAllExcept(widget.ad.id);
       unawaited(controller.play());
       if (!_trackedPlayStarted) {
@@ -152,7 +183,7 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
       _twoSecondTimer?.cancel();
       _twoSecondTimer = Timer(const Duration(seconds: 2), () {
         final VideoPlayerController? c = _controller;
-        if (!_trackedTwoSecondView && widget.isActive && (c?.value.isPlaying ?? false)) {
+        if (!_trackedTwoSecondView && _shouldPlay && (c?.value.isPlaying ?? false)) {
           _trackedTwoSecondView = true;
           ref.read(analyticsServiceProvider).track(widget.ad.id, AdEventType.twoSecondView);
         }

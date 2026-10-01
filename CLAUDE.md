@@ -1444,7 +1444,7 @@ The ultimate product promise is:
 
 Repo: `C:\Users\LENOVO10OCT2020\Desktop\makifbilgisayar\AdGag`, brand name **AdGag** (codename `everything_is_an_ad` retired — the real name was decided). 14 commits, 124 `lib/` files, 14 test files (59 test cases), 17 SQL migrations, 2 Supabase Edge Functions. Full narrative detail for all of this lives in `README.md` (architecture, ER model, RLS plan, tech choices, and — most importantly — the "Verification log" entries, which are the authoritative record of what's actually been proven against real infrastructure vs. only written).
 
-## >>> RESUME HERE (last session ended 2026-09-30, version 0.1.13+14) <<<
+## >>> RESUME HERE (last session ended 2026-10-01, version 0.1.14+15) <<<
 
 Everything is committed and pushed to `master` (github.com/makife/AdGag). Current app version **0.1.4+5**; signed release AAB + APK built locally (`flutter build appbundle|apk --release --dart-define-from-file=env/dev.json`, config check `unzip -p … libapp.so | grep -c <project ref>`), copies on the owner's Desktop in "AdGag Play Store gorselleri". **Android CI now works** (secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ENV_DEV_JSON added 2026-09-28) and iOS CI (simulator build) is green on every commit since 57d2614. iOS has still never run on a device.
 
@@ -1457,6 +1457,14 @@ Contact address on all pages: makifergan@gmail.com. Play listing images + 512px 
 **Version rule**: Play needs a higher versionCode for every upload — bump `pubspec.yaml` `version: x.y.z+N` before each release build (CI uses `github.run_number` as the build number instead; don't mix local and CI uploads without checking the last versionCode).
 
 **Still to do before launch**: (the 2026-09-29 round below built account deletion, Mux deletion and the age check — its migration/functions are LIVE); a licensed or CC0 music library is optional (user-picked music is the uploader's responsibility per the Terms); iOS needs an Apple Developer account for TestFlight.
+
+## First iPhone feedback: viewer kept playing, cropped differently, slow video start (2026-10-01, 0.1.14+15)
+
+Owner installed build 0.1.13 (1) from TestFlight: layout/editor fine; three problems.
+- **Viewer opened from MARKET kept playing (with sound) after going to another tab/page.** `SubjectAdsViewerScreen` (shared by Market, subject pages, profiles, AD THIS chain) is pushed onto the tab's own navigator and stays mounted in the indexed stack. Fix is in `AdVideoCard` itself, so every screen gets it: it plays only when `isActive && visible && app resumed` — visible = `TickerMode.valuesOf(context).enabled` (go_router turns tickers off in hidden branches; the Overlay does for covered routes) `&& ModalRoute.isCurrent`. Side effect: dialogs/menus/sheets opened over a card pause it until closed.
+- **Viewer cropped/overflowed differently from Home**: it ran under the bottom-nav bar (card taller than Home's, so the cover/contain decision and the overlays differed). It now uses the feed's layout (`Padding(bottom: padding.bottom)` + `removePadding` + `belowCardHeight`), `allowImplicitScrolling` (neighbours preload — it had NO preloading before), settle-time activation.
+- **Slow start**: measured a real Ad — Mux HLS, 5s segments, master playlist first variant 720p, manifests served from US East (~0.4-0.5s per request from Turkey). ExoPlayer waited for 2.5s of buffer before starting. (1) `third_party/video_player_android` (vendored 2.12.2, `ADGAG PATCH`, PATCH_NOTES.md): DefaultLoadControl 15s/30s/700ms/2000ms. (2) `VideoControllerPool.playOnly` called from the pagers' onPageChanged: the next (preloaded) Ad starts as soon as the swipe crosses into it instead of after the settle animation. iOS AVPlayer settings untouched (`automaticallyWaitsToMinimizeStalling=NO` would need a stall-recovery path video_player doesn't have) — if iOS cold starts are still slow, next candidates: Mux `max_resolution`, or Mux static MP4 renditions.
+- analyze clean, 72/72, Android release APK built. **Not device-tested.**
 
 ## iOS TestFlight pipeline (2026-10-01)
 

@@ -10,10 +10,14 @@ import "../../../../core/video/video_providers.dart";
 import "../../../feed/domain/ad.dart";
 import "../../../feed/presentation/widgets/ad_video_card.dart";
 
-/// Fullscreen vertical viewer over a fixed list of Ads — used when tapping
-/// into a subject page's grid (CLAUDE.md section 10). Same playback
-/// mechanics as [FeedScreen] (bounded pool, one active controller at a
-/// time) but over a static list rather than a paginated feed.
+/// Fullscreen vertical viewer over a fixed list of Ads — opened from
+/// MARKET, subject pages, profiles and the AD THIS chain (CLAUDE.md section
+/// 10). Same playback mechanics AND layout as [FeedScreen]: bounded pool,
+/// neighbours preloaded, the active card switched once a swipe settles,
+/// pages ending at the bottom-nav bar. (It used to run under the bar with
+/// no preloading: Ads were cropped differently from Home and started late —
+/// device report.) Pausing when another tab or page covers it is handled by
+/// [AdVideoCard] itself.
 class SubjectAdsViewerScreen extends ConsumerStatefulWidget {
   const SubjectAdsViewerScreen({required this.ads, required this.initialIndex, super.key});
 
@@ -29,6 +33,9 @@ class _SubjectAdsViewerScreenState extends ConsumerState<SubjectAdsViewerScreen>
   final VideoControllerPool _pool = VideoControllerPool();
   late int _activeIndex = widget.initialIndex;
 
+  /// The page a swipe has crossed into but not settled on yet.
+  int? _pendingIndex;
+
   @override
   void dispose() {
     _pageController.dispose();
@@ -36,8 +43,10 @@ class _SubjectAdsViewerScreenState extends ConsumerState<SubjectAdsViewerScreen>
     super.dispose();
   }
 
-  void _onPageChanged(int index) {
-    ref.read(openReviewsAdIdProvider.notifier).state = null;
+  void _activate(int index) {
+    if (index == _activeIndex) {
+      return;
+    }
     setState(() => _activeIndex = index);
     final Set<String> keep = <String>{
       if (index - 1 >= 0) widget.ads[index - 1].id,
@@ -49,48 +58,78 @@ class _SubjectAdsViewerScreenState extends ConsumerState<SubjectAdsViewerScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Inside a bottom-nav tab this is the bar (the shell extends its body
+    // behind it); on a route without the bar it's the system inset.
+    final double barInset = MediaQuery.paddingOf(context).bottom;
+    final bool reviewsOpen = ref.watch(openReviewsAdIdProvider) != null;
+
     return Scaffold(
       backgroundColor: AppColors.darkBackground,
+      resizeToAvoidBottomInset: false, // the reviews panel handles the keyboard
       body: Stack(
         children: <Widget>[
-          PageView.builder(
-            controller: _pageController,
-            scrollDirection: Axis.vertical,
-            // Same light-swipe paging as the feed; stops while reviews are open.
-            physics: ref.watch(openReviewsAdIdProvider) != null
-                ? const NeverScrollableScrollPhysics()
-                : const FeedPagePhysics(),
-            itemCount: widget.ads.length,
-            onPageChanged: _onPageChanged,
-            itemBuilder: (BuildContext context, int index) {
-              return AdVideoCard(
-                ad: widget.ads[index],
-                pool: _pool,
-                videoService: ref.read(videoServiceProvider),
-                isActive: index == _activeIndex,
-              );
-            },
-          ),
-          // No AppBar here — it would look like a different screen from
-          // the rest of the app's fullscreen video presentation. This
-          // still has to be reachable somehow other than the system back
-          // gesture (which isn't discoverable on every device/nav mode):
-          // this screen is always reached via Navigator.push (has
-          // something to pop back to), it just had no *visible* way to.
-          Positioned(
-            top: AppSpacing.md,
-            left: AppSpacing.md,
-            child: SafeArea(
-              child: GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                child: Container(
-                  padding: const EdgeInsets.all(AppSpacing.sm),
-                  decoration: const BoxDecoration(color: Colors.black38, shape: BoxShape.circle),
-                  child: const Icon(Icons.arrow_back, color: Colors.white, size: 22),
+          Positioned.fill(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: barInset),
+              child: MediaQuery.removePadding(
+                context: context,
+                removeBottom: true,
+                child: NotificationListener<ScrollEndNotification>(
+                  onNotification: (ScrollEndNotification notification) {
+                    final int? pending = _pendingIndex;
+                    if (pending != null && notification.depth == 0) {
+                      _pendingIndex = null;
+                      _activate(pending);
+                    }
+                    return false;
+                  },
+                  child: PageView.builder(
+                    controller: _pageController,
+                    // Neighbours stay laid out, so the next Ad's player is
+                    // already loading before the swipe reaches it.
+                    allowImplicitScrolling: true,
+                    scrollDirection: Axis.vertical,
+                    // Same light-swipe paging as the feed; stops while reviews are open.
+                    physics: reviewsOpen ? const NeverScrollableScrollPhysics() : const FeedPagePhysics(),
+                    itemCount: widget.ads.length,
+                    onPageChanged: (int index) {
+                      _pendingIndex = index;
+                      _pool.playOnly(widget.ads[index].id);
+                      ref.read(openReviewsAdIdProvider.notifier).state = null;
+                    },
+                    itemBuilder: (BuildContext context, int index) {
+                      return AdVideoCard(
+                        ad: widget.ads[index],
+                        pool: _pool,
+                        videoService: ref.read(videoServiceProvider),
+                        isActive: index == _activeIndex,
+                        belowCardHeight: barInset,
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
           ),
+          // No AppBar here — it would look like a different screen from
+          // the rest of the app's fullscreen video presentation. This
+          // still has to be reachable somehow other than the system back
+          // gesture (which isn't discoverable on every device/nav mode).
+          if (!reviewsOpen)
+            Positioned(
+              top: AppSpacing.md,
+              left: AppSpacing.md,
+              child: SafeArea(
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Container(
+                    padding: const EdgeInsets.all(AppSpacing.sm),
+                    decoration: const BoxDecoration(color: Colors.black38, shape: BoxShape.circle),
+                    child: const Icon(Icons.arrow_back, color: Colors.white, size: 22),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
