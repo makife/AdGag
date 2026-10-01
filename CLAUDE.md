@@ -1442,7 +1442,7 @@ The ultimate product promise is:
 
 **This section is a living status record, appended after the product spec above — it does not modify sections 1-72.** Future sessions: update *this* section going forward rather than adding a new one; check it against actual repo/infra state (`git log`, `supabase migration list --linked`, `flutter test`) before trusting it, since it can drift out of date.
 
-Repo: `C:\Users\LENOVO10OCT2020\Desktop\makifbilgisayar\AdGag`, brand name **AdGag** (codename `everything_is_an_ad` retired — the real name was decided). 14 commits, 124 `lib/` files, 14 test files (59 test cases), 17 SQL migrations, 2 Supabase Edge Functions. Full narrative detail for all of this lives in `README.md` (architecture, ER model, RLS plan, tech choices, and — most importantly — the "Verification log" entries, which are the authoritative record of what's actually been proven against real infrastructure vs. only written).
+Repo: `C:\Users\LENOVO10OCT2020\Desktop\makifbilgisayar\AdGag`, brand name **AdGag** (codename `everything_is_an_ad` retired). As of 2026-10-02: 177 commits, 163 `lib/` files, 18 test files (78 test cases), 27 SQL migrations (all live), 5 Supabase Edge Functions. Narrative detail lives in `README.md` and in the dated sections below (newest first after RESUME HERE).
 
 ## >>> RESUME HERE (last session ended 2026-10-02, version 0.1.17+18) <<<
 
