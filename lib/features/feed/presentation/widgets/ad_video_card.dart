@@ -97,6 +97,12 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
   /// Cleared when the card stops being the active one.
   bool _pausedByUser = false;
 
+  /// The player has shown a real frame (it has played past 0). Until then the
+  /// thumbnail stays ON TOP of the video: an initialized player can still be
+  /// a blank texture for a moment, which flashed black between the thumbnail
+  /// and the first frame on every swipe (owner: "blinks when it autoplays").
+  bool _hasRenderedFrame = false;
+
   bool get _shouldPlay => widget.isActive && _visible && _appInForeground;
 
   @override
@@ -166,6 +172,8 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
     unawaited(controller.setLooping(true));
     unawaited(controller.setVolume(ref.read(isFeedMutedProvider) ? 0 : 1));
     controller.addListener(_onControllerTick);
+    // A pooled player that already played (a neighbour, coming back) has a frame.
+    _hasRenderedFrame = controller.value.isInitialized && controller.value.position > Duration.zero;
     setState(() => _controller = controller);
     widget.pool.initializationOf(widget.ad.id)?.then((_) {
       if (mounted) {
@@ -211,6 +219,9 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
       return;
     }
     final Duration position = controller.value.position;
+    if (!_hasRenderedFrame && position > Duration.zero && mounted) {
+      setState(() => _hasRenderedFrame = true);
+    }
     final Duration duration = controller.value.duration;
     if (duration == Duration.zero) {
       return;
@@ -309,27 +320,39 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
 
     Widget videoLayerFor(Size card) {
       final BoxFit fit = fitFor(card);
-      return showVideo
-          ? SizedBox.expand(
-              child: FittedBox(
-                fit: fit,
-                clipBehavior: Clip.hardEdge,
-                child: SizedBox(
-                  width: controller.value.size.width,
-                  height: controller.value.size.height,
-                  child: VideoPlayer(controller),
-                ),
-              ),
-            )
-          : widget.ad.thumbnailUrl != null
-              ? CachedNetworkImage(
-                  imageUrl: widget.ad.thumbnailUrl!,
-                  fit: fit,
-                  width: double.infinity,
-                  height: double.infinity,
-                  errorWidget: (context, url, error) => const SizedBox.shrink(),
-                )
-              : const Center(child: CircularProgressIndicator());
+      final String? thumb = widget.ad.thumbnailUrl;
+      final Widget? thumbnail = thumb == null
+          ? null
+          : CachedNetworkImage(
+              imageUrl: thumb,
+              fit: fit,
+              width: double.infinity,
+              height: double.infinity,
+              // No fade: fading in from black was a blink of its own.
+              fadeInDuration: Duration.zero,
+              fadeOutDuration: Duration.zero,
+              placeholderFadeInDuration: Duration.zero,
+              errorWidget: (context, url, error) => const SizedBox.shrink(),
+            );
+      if (!showVideo) {
+        return thumbnail ?? const Center(child: CircularProgressIndicator());
+      }
+      return Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          FittedBox(
+            fit: fit,
+            clipBehavior: Clip.hardEdge,
+            child: SizedBox(
+              width: controller.value.size.width,
+              height: controller.value.size.height,
+              child: VideoPlayer(controller),
+            ),
+          ),
+          // Same picture as the first frame, until that frame is really on screen.
+          if (!_hasRenderedFrame && thumbnail != null) thumbnail,
+        ],
+      );
     }
 
     return PopScope(
