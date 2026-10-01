@@ -1446,7 +1446,15 @@ Repo: `C:\Users\LENOVO10OCT2020\Desktop\makifbilgisayar\AdGag`, brand name **AdG
 
 ## >>> RESUME HERE (last session ended 2026-10-02, version 0.1.17+18) <<<
 
-Everything is committed and pushed to `master` (github.com/makife/AdGag). Current app version **0.1.4+5**; signed release AAB + APK built locally (`flutter build appbundle|apk --release --dart-define-from-file=env/dev.json`, config check `unzip -p … libapp.so | grep -c <project ref>`), copies on the owner's Desktop in "AdGag Play Store gorselleri". **Android CI now works** (secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ENV_DEV_JSON added 2026-09-28) and iOS CI (simulator build) is green on every commit since 57d2614. iOS has still never run on a device.
+Everything is committed and pushed to `master` (github.com/makife/AdGag). App version **0.1.17+18** (pubspec; CI builds use the run number as versionCode/CFBundleVersion).
+
+**Where things stand (2026-10-02)**:
+- **Shipping is automated from GitHub Actions, no Mac needed.** iOS: `ios-testflight.yml` (manual run) → signed IPA → App Store Connect/TestFlight (signing set up by `tool/ios/setup_signing.py`; see "iOS TestFlight pipeline"). Android: `android-build.yml` manual run → AAB → Google Play **closed testing (alpha)** by default. Push builds only compile-check (`ios-build.yml`) / build artifacts.
+- **Both apps run on the owner's phones** (iPhone via TestFlight as @bebeq, Android via Play as @makifergan). iPhone push confirmed on device; Android push not yet confirmed.
+- **Server is live** through migration **0027**; Edge Functions create-upload-session, mux-webhook, delete-ad, delete-account, **send-push** (FCM v1, Firebase project `adgag-7d40b`). Supabase CLI/API access: a personal access token from the account that OWNS the AdGag project (not the owner's GitHub-login Supabase account — see the push section); always check `GET https://api.supabase.com/v1/projects` lists AdGag first.
+- **Every DB change must keep the INSTALLED builds working** (0025 briefly broke old builds' REVIEWS; 0026 fixed it). Live smoke tests with throwaway users are the norm — create via the Admin API, clean up, check 0 leftovers.
+- All secret material lives in `ios/signing/` (gitignored: Apple API key, signing cert/profile, Firebase files, Play service account, and one `<SECRET_NAME>.txt` per GitHub secret).
+- **Open items**: Android push on a device; re-upload `docs/privacy-policy/index.html` to Netlify (push section added); replace the Bielat service account used for Play uploads with an AdGag-only one; owner may want per-SOLD notifications (only milestones exist); disk on this machine is tight (delete `build/app/intermediates` when builds fail on space).
 
 **Store state**: the owner is filling in Google Play Console. Live policy pages (Netlify, one site each):
 - Privacy policy: https://fanciful-medovik-d846a9.netlify.app/ (source `docs/privacy-policy/index.html`)
@@ -1457,8 +1465,6 @@ Contact address on all pages: makifergan@gmail.com. Play listing images + 512px 
 **Play upload from CI (2026-10-01)**: `android-build.yml` uploads the .aab to Play on manual runs (track input, default **alpha = closed testing — the track the owner uses**; internal on request) and v* tags (alpha), release named "<versionCode> (<version name>)" (never on pushes) via `tool/android/play_upload.py` (Android Publisher API: edit → bundle upload → track → commit) when secret PLAY_SERVICE_ACCOUNT_JSON is set. That secret is currently the **Bielat** app's Firebase admin SA (`firebase-adminsdk-fbsvc@bielat-1c00a`), which the owner had invited in Play Console — verified it can open/delete an edit on com.ergan.adgag (tracks then: internal vc 1, alpha vc 2). Recommend replacing it with an AdGag-only SA. First run (#26) uploaded vc 26 to internal; promoted to alpha as "26 (0.1.15)" via the API.
 
 **Version rule**: Play needs a higher versionCode for every upload — bump `pubspec.yaml` `version: x.y.z+N` before each release build (CI uses `github.run_number` as the build number instead; don't mix local and CI uploads without checking the last versionCode).
-
-**Still to do before launch**: (the 2026-09-29 round below built account deletion, Mux deletion and the age check — its migration/functions are LIVE); a licensed or CC0 music library is optional (user-picked music is the uploader's responsibility per the Terms); iOS needs an Apple Developer account for TestFlight.
 
 ## Live counters, double-counted reviews, one token per phone (2026-10-02, 0.1.17+18)
 
