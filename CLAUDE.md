@@ -1471,7 +1471,7 @@ FCM HTTP v1 for Android AND iOS (APNs key lives in the Firebase project).
 - Privacy policy (TR/EN): push token/platform/language + FCM/APNs as processors — re-upload to Netlify.
 - **LIVE 2026-10-01**: Firebase project `adgag-7d40b` (APNs key BXTWJ3CJY6 uploaded by the owner); 0024 applied; send-push v1 deployed; secrets FIREBASE_SERVICE_ACCOUNT + PUSH_WEBHOOK_SECRET set; Vault push_function_url + push_webhook_secret set. Verified: service account gets a Google token and FCM answers (fake token → INVALID_ARGUMENT); live smoke test with 2 throwaway users (register token 204, anon 401, follow → trigger → pg_net → send-push 200 `{"sent":0}`, wrong secret 401, new_followers off → `PREFERENCE_OFF`, prefs RLS; cleaned up, 0 leftovers). Firebase client files are in `ios/signing/secrets/` (gitignored) + android/app/google-services.json; GitHub secrets ENV_DEV_JSON/GOOGLE_SERVICES_JSON added by the owner.
 - **Supabase account gotcha**: the AdGag project is NOT in the owner's GitHub-login Supabase account (that one has kelimele + helper-hub); a token from that account answers 401/"no access". The owner found the right account — if a token fails again, check `GET https://api.supabase.com/v1/projects` lists AdGag before anything else.
-- **Still untested: a real push on a real phone** (needs the 0.1.15+16 builds installed and permission granted).
+- **iPhone CONFIRMED 2026-10-01**: TestFlight build 3 registered a token (@bebeq, ios, tr) and a direct FCM test push arrived on the owner's iPhone (so the APNs key in Firebase works). Still untested: Android delivery, the localized follow/review texts on a device, tap → Ad/profile, the preference switches.
 
 ## Live AR on iOS — editor parity check (2026-10-01)
 
