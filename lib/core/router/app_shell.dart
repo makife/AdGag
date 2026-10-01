@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 import "../localization/generated/app_localizations.dart";
+import "../push/push_gate.dart";
 
 import "../../features/create_ad/domain/create_ad_step.dart";
 import "../../features/create_ad/presentation/providers/create_ad_flow_controller.dart";
@@ -108,7 +109,8 @@ class AppShell extends ConsumerWidget {
       // The home feed lays itself out around the keyboard (reviews panel);
       // resizing the whole pager made the open panel jump away.
       resizeToAvoidBottomInset: navigationShell.currentIndex != 0,
-      body: navigationShell,
+      // Push notifications run only while someone is signed in (the shell).
+      body: PushGate(child: navigationShell),
       bottomNavigationBar: onTrimStep
           ? null
           : DecoratedBox(

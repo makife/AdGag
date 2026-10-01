@@ -257,5 +257,19 @@
   "arHearts": "Uçuşan kalpler",
   "arMoneyRain": "Para yağmuru",
   "arSparkles": "Pırıltı",
-  "arRainbow": "Gökkuşağı (ağzını aç!)"
+  "arRainbow": "Gökkuşağı (ağzını aç!)",
+  "settingsNotifications": "Bildirimler",
+  "notifPrefsHint": "Telefonuna neleri göndereceğimizi seç. Hepsi yine uygulamadaki Bildirimler'de görünür.",
+  "notifPrefFollowers": "Yeni takipçiler",
+  "notifPrefReviews": "Yorumlar ve yanıtlar",
+  "notifPrefMentions": "Bahsetmeler",
+  "notifPrefAdThis": "Biri reklamına AD THIS yaptı",
+  "notifPushOffTitle": "Bildirimler kapalı",
+  "notifPushOffBody": "Telefonunun ayarlarından AdGag bildirimlerini aç.",
+  "notifOpenSettings": "Ayarları aç",
+  "notifTurnOn": "Bildirimleri aç",
+  "notifUnavailable": "Bu sürümde bildirimler kullanılamıyor.",
+  "notifSaveFailed": "Kaydedilemedi. Tekrar dene.",
+  "pushChannelName": "Etkinlik",
+  "notifView": "Göster"
 }

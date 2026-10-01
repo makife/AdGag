@@ -257,5 +257,19 @@
   "arHearts": "Летящие сердечки",
   "arMoneyRain": "Денежный дождь",
   "arSparkles": "Блёстки",
-  "arRainbow": "Радуга (открой рот!)"
+  "arRainbow": "Радуга (открой рот!)",
+  "settingsNotifications": "Уведомления",
+  "notifPrefsHint": "Выберите, что присылать на телефон. Всё по-прежнему будет в разделе «Уведомления» в приложении.",
+  "notifPrefFollowers": "Новые подписчики",
+  "notifPrefReviews": "Отзывы и ответы",
+  "notifPrefMentions": "Упоминания",
+  "notifPrefAdThis": "Кто-то сделал AD THIS вашей рекламы",
+  "notifPushOffTitle": "Уведомления отключены",
+  "notifPushOffBody": "Включите уведомления AdGag в настройках телефона.",
+  "notifOpenSettings": "Открыть настройки",
+  "notifTurnOn": "Включить уведомления",
+  "notifUnavailable": "Уведомления недоступны в этой версии.",
+  "notifSaveFailed": "Не удалось сохранить. Попробуйте ещё раз.",
+  "pushChannelName": "Активность",
+  "notifView": "Открыть"
 }

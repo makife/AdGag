@@ -1,5 +1,7 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../../../core/push/push_gate.dart";
+
 import "../../../../core/supabase/supabase_providers.dart";
 import "../../data/auth_repository_impl.dart";
 import "../../domain/app_user.dart";
@@ -63,6 +65,8 @@ final class AuthController extends AsyncNotifier<void> {
 
   Future<void> signOut() async {
     state = const AsyncLoading<void>();
+    // While still signed in: this phone stops getting the account's pushes.
+    await ref.read(pushServiceProvider).unregister();
     state = await AsyncValue.guard(() => ref.read(authRepositoryProvider).signOut());
   }
 }

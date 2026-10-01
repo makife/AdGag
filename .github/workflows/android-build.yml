@@ -11,6 +11,8 @@ name: Android release build
 #   ANDROID_KEYSTORE_BASE64  the upload keystore (android/adgag-upload.jks), base64
 #   ANDROID_KEYSTORE_PASSWORD  its password (store and key use the same one)
 #   ENV_DEV_JSON             the contents of env/dev.json (Supabase URL + publishable key)
+#   GOOGLE_SERVICES_JSON     android/app/google-services.json from Firebase (push
+#                            notifications; optional — without it the app has no push)
 # Without ENV_DEV_JSON the build stops (an app built without it opens to a
 # blank white screen). Without the keystore it's signed with a throwaway
 # debug key — fine to install for testing, rejected by Play.
@@ -62,6 +64,16 @@ jobs:
           fi
           printf '%s' "$ENV_DEV_JSON" > env/dev.json
 
+      - name: Firebase config (push notifications)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          else
+            echo "::warning::No GOOGLE_SERVICES_JSON secret — this build has no push notifications."
+          fi
+
       - name: Upload key
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -99,4 +111,4 @@ jobs:
 
       - name: Remove secrets from the runner
         if: always()
-        run: rm -f android/adgag-upload.jks android/key.properties env/dev.json
+        run: rm -f android/adgag-upload.jks android/key.properties env/dev.json android/app/google-services.json

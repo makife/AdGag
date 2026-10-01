@@ -2,6 +2,9 @@
     <!-- Needed in RELEASE builds too (Supabase, Mux uploads, GIPHY): Flutter's
          template only puts it in the debug/profile manifests. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 13+: push notifications need the user's permission (asked by
+         firebase_messaging's requestPermission). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="AdGag"
         android:name="${applicationName}"
@@ -49,6 +52,18 @@
             android:screenOrientation="portrait"
             android:theme="@style/NormalTheme"
             android:windowSoftInputMode="adjustResize" />
+        <!-- Push notifications (Firebase Cloud Messaging): status-bar icon,
+             accent colour and channel. The channel is created, with its
+             localized name, in MainActivity. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_adgag" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/adgag_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="adgag_activity" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

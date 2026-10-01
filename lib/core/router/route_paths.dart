@@ -38,6 +38,7 @@ abstract final class RoutePaths {
   static const String settingsAccount = "/settings/account";
   static const String settingsBlocked = "/settings/blocked";
   static const String settingsAbout = "/settings/about";
+  static const String settingsNotifications = "/settings/notifications";
 
   /// Matches the share link shape ShareButton builds
   /// (`https://<host>/ad/<id>` — see share_button.dart). Universal/App

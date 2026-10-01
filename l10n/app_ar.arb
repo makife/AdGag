@@ -257,5 +257,19 @@
   "arHearts": "قلوب طائرة",
   "arMoneyRain": "مطر المال",
   "arSparkles": "بريق",
-  "arRainbow": "فم قوس قزح (افتح فمك!)"
+  "arRainbow": "فم قوس قزح (افتح فمك!)",
+  "settingsNotifications": "الإشعارات",
+  "notifPrefsHint": "اختر ما نرسله إلى هاتفك. سيظل كل شيء ظاهرًا في الإشعارات داخل التطبيق.",
+  "notifPrefFollowers": "متابعون جدد",
+  "notifPrefReviews": "التعليقات والردود",
+  "notifPrefMentions": "الإشارات",
+  "notifPrefAdThis": "شخص ما صنع AD THIS لإعلانك",
+  "notifPushOffTitle": "الإشعارات متوقفة",
+  "notifPushOffBody": "فعّل إشعارات AdGag من إعدادات هاتفك.",
+  "notifOpenSettings": "فتح الإعدادات",
+  "notifTurnOn": "تفعيل الإشعارات",
+  "notifUnavailable": "الإشعارات غير متاحة في هذا الإصدار.",
+  "notifSaveFailed": "تعذّر الحفظ. حاول مرة أخرى.",
+  "pushChannelName": "النشاط",
+  "notifView": "عرض"
 }

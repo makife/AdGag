@@ -867,3 +867,62 @@ K("arSparkles", "Sparkles", "Pırıltı", "Destellos", "Brilhos", "Glitzer", "Pa
 K("arRainbow", "Rainbow mouth (open wide!)", "Gökkuşağı (ağzını aç!)", "Boca arcoíris (¡abre la boca!)", "Boca arco-íris (abra a boca!)",
   "Regenbogenmund (Mund auf!)", "Bouche arc-en-ciel (ouvre grand !)", "Bocca arcobaleno (apri la bocca!)",
   "Радуга (открой рот!)", "فم قوس قزح (افتح فمك!)", "Mulut pelangi (buka mulut!)", "レインボー（口を開けて！）", "무지개 입 (입을 벌려!)")
+
+# ------------------------------------------------------- push notifications
+K("settingsNotifications", "Notifications", "Bildirimler", "Notificaciones", "Notificações", "Benachrichtigungen", "Notifications",
+  "Notifiche", "Уведомления", "الإشعارات", "Notifikasi", "通知", "알림")
+K("notifPrefsHint", "Choose what we send to your phone. Everything still shows up under Notifications in the app.",
+  "Telefonuna neleri göndereceğimizi seç. Hepsi yine uygulamadaki Bildirimler'de görünür.",
+  "Elige qué enviamos a tu teléfono. Todo sigue apareciendo en Notificaciones dentro de la app.",
+  "Escolha o que enviamos para o seu celular. Tudo continua aparecendo em Notificações no app.",
+  "Wähle, was wir an dein Handy schicken. Alles erscheint weiterhin unter Benachrichtigungen in der App.",
+  "Choisis ce que nous envoyons sur ton téléphone. Tout reste visible dans Notifications dans l'app.",
+  "Scegli cosa inviamo al tuo telefono. Tutto resta visibile in Notifiche nell'app.",
+  "Выберите, что присылать на телефон. Всё по-прежнему будет в разделе «Уведомления» в приложении.",
+  "اختر ما نرسله إلى هاتفك. سيظل كل شيء ظاهرًا في الإشعارات داخل التطبيق.",
+  "Pilih apa yang kami kirim ke ponselmu. Semuanya tetap muncul di Notifikasi dalam aplikasi.",
+  "スマホに送る通知を選べます。すべての通知はアプリ内の「通知」にも表示されます。",
+  "휴대폰으로 보낼 알림을 선택하세요. 모든 알림은 앱의 알림 탭에도 계속 표시돼요.")
+K("notifPrefFollowers", "New followers", "Yeni takipçiler", "Nuevos seguidores", "Novos seguidores", "Neue Follower",
+  "Nouveaux abonnés", "Nuovi follower", "Новые подписчики", "متابعون جدد", "Pengikut baru", "新しいフォロワー", "새 팔로워")
+K("notifPrefReviews", "Reviews and replies", "Yorumlar ve yanıtlar", "Reseñas y respuestas", "Avaliações e respostas",
+  "Bewertungen und Antworten", "Avis et réponses", "Recensioni e risposte", "Отзывы и ответы", "التعليقات والردود",
+  "Ulasan dan balasan", "レビューと返信", "리뷰와 답글")
+K("notifPrefMentions", "Mentions", "Bahsetmeler", "Menciones", "Menções", "Erwähnungen", "Mentions", "Menzioni", "Упоминания",
+  "الإشارات", "Sebutan", "メンション", "멘션")
+K("notifPrefAdThis", "Someone makes an AD THIS of your Ad", "Biri reklamına AD THIS yaptı", "Alguien hace un AD THIS de tu anuncio",
+  "Alguém faz um AD THIS do seu anúncio", "Jemand macht ein AD THIS deiner Werbung", "Quelqu'un fait un AD THIS de ta pub",
+  "Qualcuno fa un AD THIS della tua pubblicità", "Кто-то сделал AD THIS вашей рекламы", "شخص ما صنع AD THIS لإعلانك",
+  "Seseorang membuat AD THIS dari iklanmu", "誰かがあなたの広告でAD THISしたとき", "누군가 내 광고로 AD THIS를 만들 때")
+K("notifPushOffTitle", "Push notifications are off", "Bildirimler kapalı", "Las notificaciones están desactivadas",
+  "As notificações estão desativadas", "Benachrichtigungen sind aus", "Les notifications sont désactivées",
+  "Le notifiche sono disattivate", "Уведомления отключены", "الإشعارات متوقفة", "Notifikasi nonaktif", "通知がオフです",
+  "알림이 꺼져 있어요")
+K("notifPushOffBody", "Turn on notifications for AdGag in your phone's settings.",
+  "Telefonunun ayarlarından AdGag bildirimlerini aç.", "Activa las notificaciones de AdGag en los ajustes del teléfono.",
+  "Ative as notificações do AdGag nas configurações do celular.",
+  "Aktiviere Benachrichtigungen für AdGag in den Einstellungen deines Handys.",
+  "Active les notifications d'AdGag dans les réglages de ton téléphone.",
+  "Attiva le notifiche di AdGag nelle impostazioni del telefono.", "Включите уведомления AdGag в настройках телефона.",
+  "فعّل إشعارات AdGag من إعدادات هاتفك.", "Aktifkan notifikasi AdGag di pengaturan ponselmu.",
+  "スマホの設定でAdGagの通知をオンにしてください。", "휴대폰 설정에서 AdGag 알림을 켜 주세요.")
+K("notifOpenSettings", "Open settings", "Ayarları aç", "Abrir ajustes", "Abrir configurações", "Einstellungen öffnen",
+  "Ouvrir les réglages", "Apri impostazioni", "Открыть настройки", "فتح الإعدادات", "Buka pengaturan", "設定を開く", "설정 열기")
+K("notifTurnOn", "Turn on notifications", "Bildirimleri aç", "Activar notificaciones", "Ativar notificações",
+  "Benachrichtigungen aktivieren", "Activer les notifications", "Attiva notifiche", "Включить уведомления", "تفعيل الإشعارات",
+  "Aktifkan notifikasi", "通知をオンにする", "알림 켜기")
+K("notifUnavailable", "Push notifications aren't available in this version.", "Bu sürümde bildirimler kullanılamıyor.",
+  "Las notificaciones no están disponibles en esta versión.", "As notificações não estão disponíveis nesta versão.",
+  "Benachrichtigungen sind in dieser Version nicht verfügbar.", "Les notifications ne sont pas disponibles dans cette version.",
+  "Le notifiche non sono disponibili in questa versione.", "Уведомления недоступны в этой версии.",
+  "الإشعارات غير متاحة في هذا الإصدار.", "Notifikasi tidak tersedia di versi ini.", "このバージョンでは通知を利用できません。",
+  "이 버전에서는 알림을 사용할 수 없어요.")
+K("notifSaveFailed", "Couldn't save. Try again.", "Kaydedilemedi. Tekrar dene.", "No se pudo guardar. Inténtalo de nuevo.",
+  "Não foi possível salvar. Tente novamente.", "Speichern fehlgeschlagen. Versuch es noch mal.",
+  "Impossible d'enregistrer. Réessaie.", "Impossibile salvare. Riprova.", "Не удалось сохранить. Попробуйте ещё раз.",
+  "تعذّر الحفظ. حاول مرة أخرى.", "Gagal menyimpan. Coba lagi.", "保存できませんでした。もう一度お試しください。",
+  "저장하지 못했어요. 다시 시도해 주세요.")
+# Android notification channel name (generated into res/values*/push_strings.xml).
+K("pushChannelName", "Activity", "Etkinlik", "Actividad", "Atividade", "Aktivität", "Activité", "Attività", "Активность", "النشاط",
+  "Aktivitas", "アクティビティ", "활동")
+K("notifView", "View", "Göster", "Ver", "Ver", "Ansehen", "Voir", "Vedi", "Открыть", "عرض", "Lihat", "見る", "보기")

@@ -1444,7 +1444,7 @@ The ultimate product promise is:
 
 Repo: `C:\Users\LENOVO10OCT2020\Desktop\makifbilgisayar\AdGag`, brand name **AdGag** (codename `everything_is_an_ad` retired — the real name was decided). 14 commits, 124 `lib/` files, 14 test files (59 test cases), 17 SQL migrations, 2 Supabase Edge Functions. Full narrative detail for all of this lives in `README.md` (architecture, ER model, RLS plan, tech choices, and — most importantly — the "Verification log" entries, which are the authoritative record of what's actually been proven against real infrastructure vs. only written).
 
-## >>> RESUME HERE (last session ended 2026-10-01, version 0.1.14+15) <<<
+## >>> RESUME HERE (last session ended 2026-10-01, version 0.1.15+16) <<<
 
 Everything is committed and pushed to `master` (github.com/makife/AdGag). Current app version **0.1.4+5**; signed release AAB + APK built locally (`flutter build appbundle|apk --release --dart-define-from-file=env/dev.json`, config check `unzip -p … libapp.so | grep -c <project ref>`), copies on the owner's Desktop in "AdGag Play Store gorselleri". **Android CI now works** (secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ENV_DEV_JSON added 2026-09-28) and iOS CI (simulator build) is green on every commit since 57d2614. iOS has still never run on a device.
 
@@ -1457,6 +1457,17 @@ Contact address on all pages: makifergan@gmail.com. Play listing images + 512px 
 **Version rule**: Play needs a higher versionCode for every upload — bump `pubspec.yaml` `version: x.y.z+N` before each release build (CI uses `github.run_number` as the build number instead; don't mix local and CI uploads without checking the last versionCode).
 
 **Still to do before launch**: (the 2026-09-29 round below built account deletion, Mux deletion and the age check — its migration/functions are LIVE); a licensed or CC0 music library is optional (user-picked music is the uploader's responsibility per the Terms); iOS needs an Apple Developer account for TestFlight.
+
+## Push notifications, both platforms, 12 languages (2026-10-01, 0.1.15+16)
+
+FCM HTTP v1 for Android AND iOS (APNs key lives in the Firebase project).
+- **Server**: `0024_push_notifications.sql` — device_tokens + `locale`/`updated_at`; `register_device_token(token, platform, locale)` (moves a token away from any other user = shared phone) / `unregister_device_token`; `notification_preferences` (new_followers, reviews = new_review+review_reply, mentions, ad_this; no row = all on; RLS own rows); AFTER INSERT trigger on notifications → `net.http_post` (pg_net, async, never breaks the causing action) to the send-push function with `x-push-secret`, both read from **Vault secrets `push_function_url` / `push_webhook_secret`** (unset = no pushes). `supabase/functions/send-push` (verify_jwt=false; secrets PUSH_WEBHOOK_SECRET, FIREBASE_SERVICE_ACCOUNT): checks prefs, title = the app's own Activity sentence in the device's language with @actor, body = review excerpt, data {notification_id, type, ad_id, actor_username}, Android channel `adgag_activity`, deletes UNREGISTERED tokens. `_shared/fcm.ts` signs the Google OAuth JWT with WebCrypto (verified locally: valid RS256 signature, right grant/scope).
+- **Texts**: `python tool/l10n/build_push_l10n.py` → `supabase/functions/_shared/push_strings.json` (from strings.py activity* keys) + `android/app/src/main/res/values-<lang>/push_strings.xml` (channel name; Indonesian = values-in). Rerun after editing those strings.
+- **App**: `lib/core/push/` — `PushService` (Firebase init: Android from google-services.json, iOS from env FIREBASE_* dart-defines; everything no-ops when unconfigured), `PushGate` wraps AppShell's body (asks permission once ever, registers token in the app's language, re-registers on language change, tap → /ad/:id or /u/:username + mark read, foreground → refresh list + SnackBar on Android, iOS shows its own banner). Sign-out unregisters first. Settings > Notifications (`NotificationSettingsScreen`): permission state (Turn on / Open settings) + 4 switches.
+- **Android**: google-services Gradle plugin 4.5.0 applied ONLY if `android/app/google-services.json` exists (gitignored; CI secret GOOGLE_SERVICES_JSON); POST_NOTIFICATIONS; `ic_stat_adgag` vector + turquoise accent; MainActivity creates the channel with the localized name.
+- **iOS**: `Runner.entitlements` (aps-environment production, CODE_SIGN_ENTITLEMENTS in all 3 Runner configs), UIBackgroundModes remote-notification; PUSH_NOTIFICATIONS capability enabled on com.ergan.adgag via the ASC API and the profile regenerated (setup_signing.py re-makes the .p12 with a NEW password each run → IOS_DIST_CERT_P12_BASE64, IOS_DIST_CERT_PASSWORD, IOS_PROVISION_PROFILE_BASE64 must all be updated together).
+- Privacy policy (TR/EN): push token/platform/language + FCM/APNs as processors — re-upload to Netlify.
+- **Not live / not tested**: needs a Firebase project (owner), APNs key uploaded to Firebase, migration + function deploy + Vault secrets + function secrets (Supabase token), updated GitHub secrets. Then: a real push on both phones.
 
 ## Live AR on iOS — editor parity check (2026-10-01)
 

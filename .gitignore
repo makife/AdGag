@@ -93,3 +93,7 @@ ios/signing/
 *.p12
 *.mobileprovision
 __pycache__/
+
+# Firebase client config (push notifications) — per environment, written by CI from secrets
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist

@@ -257,5 +257,19 @@
   "arHearts": "Cœurs flottants",
   "arMoneyRain": "Pluie d'argent",
   "arSparkles": "Paillettes",
-  "arRainbow": "Bouche arc-en-ciel (ouvre grand !)"
+  "arRainbow": "Bouche arc-en-ciel (ouvre grand !)",
+  "settingsNotifications": "Notifications",
+  "notifPrefsHint": "Choisis ce que nous envoyons sur ton téléphone. Tout reste visible dans Notifications dans l'app.",
+  "notifPrefFollowers": "Nouveaux abonnés",
+  "notifPrefReviews": "Avis et réponses",
+  "notifPrefMentions": "Mentions",
+  "notifPrefAdThis": "Quelqu'un fait un AD THIS de ta pub",
+  "notifPushOffTitle": "Les notifications sont désactivées",
+  "notifPushOffBody": "Active les notifications d'AdGag dans les réglages de ton téléphone.",
+  "notifOpenSettings": "Ouvrir les réglages",
+  "notifTurnOn": "Activer les notifications",
+  "notifUnavailable": "Les notifications ne sont pas disponibles dans cette version.",
+  "notifSaveFailed": "Impossible d'enregistrer. Réessaie.",
+  "pushChannelName": "Activité",
+  "notifView": "Voir"
 }

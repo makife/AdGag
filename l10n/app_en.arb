@@ -512,5 +512,19 @@
   "arHearts": "Floating hearts",
   "arMoneyRain": "Money rain",
   "arSparkles": "Sparkles",
-  "arRainbow": "Rainbow mouth (open wide!)"
+  "arRainbow": "Rainbow mouth (open wide!)",
+  "settingsNotifications": "Notifications",
+  "notifPrefsHint": "Choose what we send to your phone. Everything still shows up under Notifications in the app.",
+  "notifPrefFollowers": "New followers",
+  "notifPrefReviews": "Reviews and replies",
+  "notifPrefMentions": "Mentions",
+  "notifPrefAdThis": "Someone makes an AD THIS of your Ad",
+  "notifPushOffTitle": "Push notifications are off",
+  "notifPushOffBody": "Turn on notifications for AdGag in your phone's settings.",
+  "notifOpenSettings": "Open settings",
+  "notifTurnOn": "Turn on notifications",
+  "notifUnavailable": "Push notifications aren't available in this version.",
+  "notifSaveFailed": "Couldn't save. Try again.",
+  "pushChannelName": "Activity",
+  "notifView": "View"
 }

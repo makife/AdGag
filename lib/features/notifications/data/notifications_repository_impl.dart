@@ -1,6 +1,7 @@
 import "package:supabase_flutter/supabase_flutter.dart" as supa;
 
 import "../domain/app_notification.dart";
+import "../domain/notification_preferences.dart";
 import "../domain/notifications_repository.dart";
 
 final class NotificationsRepositoryImpl implements NotificationsRepository {
@@ -24,5 +25,25 @@ final class NotificationsRepositoryImpl implements NotificationsRepository {
       "mark_notification_read",
       params: <String, dynamic>{"p_notification_id": notificationId},
     );
+  }
+
+  @override
+  Future<NotificationPreferences> fetchPreferences() async {
+    final String? uid = _client.auth.currentUser?.id;
+    if (uid == null) {
+      return const NotificationPreferences();
+    }
+    final Map<String, dynamic>? row =
+        await _client.from("notification_preferences").select().eq("user_id", uid).maybeSingle();
+    return NotificationPreferences.fromRow(row);
+  }
+
+  @override
+  Future<void> savePreferences(NotificationPreferences preferences) async {
+    final String? uid = _client.auth.currentUser?.id;
+    if (uid == null) {
+      return;
+    }
+    await _client.from("notification_preferences").upsert(preferences.toRow(uid));
   }
 }

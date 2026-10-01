@@ -257,5 +257,19 @@
   "arHearts": "ふわふわハート",
   "arMoneyRain": "お金の雨",
   "arSparkles": "キラキラ",
-  "arRainbow": "レインボー（口を開けて！）"
+  "arRainbow": "レインボー（口を開けて！）",
+  "settingsNotifications": "通知",
+  "notifPrefsHint": "スマホに送る通知を選べます。すべての通知はアプリ内の「通知」にも表示されます。",
+  "notifPrefFollowers": "新しいフォロワー",
+  "notifPrefReviews": "レビューと返信",
+  "notifPrefMentions": "メンション",
+  "notifPrefAdThis": "誰かがあなたの広告でAD THISしたとき",
+  "notifPushOffTitle": "通知がオフです",
+  "notifPushOffBody": "スマホの設定でAdGagの通知をオンにしてください。",
+  "notifOpenSettings": "設定を開く",
+  "notifTurnOn": "通知をオンにする",
+  "notifUnavailable": "このバージョンでは通知を利用できません。",
+  "notifSaveFailed": "保存できませんでした。もう一度お試しください。",
+  "pushChannelName": "アクティビティ",
+  "notifView": "見る"
 }

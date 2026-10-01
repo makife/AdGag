@@ -29,6 +29,16 @@ abstract final class EnvConfig {
     defaultValue: "adgag.app",
   );
 
+  /// Firebase (push notifications). On iOS the app is configured from these
+  /// values; Android reads android/app/google-services.json instead (needed
+  /// there so a push can be handled while the app isn't running). Client
+  /// config, not secrets — Firebase's own docs ship them in the app. Empty =
+  /// push notifications off in this build.
+  static const String firebaseProjectId = String.fromEnvironment("FIREBASE_PROJECT_ID");
+  static const String firebaseMessagingSenderId = String.fromEnvironment("FIREBASE_MESSAGING_SENDER_ID");
+  static const String firebaseIosApiKey = String.fromEnvironment("FIREBASE_IOS_API_KEY");
+  static const String firebaseIosAppId = String.fromEnvironment("FIREBASE_IOS_APP_ID");
+
   static bool get isProduction => environment == AppEnvironment.production;
 
   /// Fails fast with a readable message instead of a null-Supabase crash

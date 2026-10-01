@@ -18,6 +18,7 @@ import "../../features/profile/presentation/screens/edit_profile_screen.dart";
 import "../../features/profile/presentation/screens/profile_screen.dart";
 import "../../features/profile/presentation/screens/public_profile_screen.dart";
 import "../../features/settings/presentation/screens/about_screen.dart";
+import "../../features/settings/presentation/screens/notification_settings_screen.dart";
 import "../../features/settings/presentation/screens/account_settings_screen.dart";
 import "../../features/settings/presentation/screens/blocked_accounts_screen.dart";
 import "../../features/settings/presentation/screens/settings_screen.dart";
@@ -126,6 +127,10 @@ final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: RoutePaths.settingsAbout,
         builder: (BuildContext context, GoRouterState state) => const AboutScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.settingsNotifications,
+        builder: (BuildContext context, GoRouterState state) => const NotificationSettingsScreen(),
       ),
       GoRoute(
         path: RoutePaths.adDetail,

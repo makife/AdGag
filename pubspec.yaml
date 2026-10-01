@@ -3,7 +3,7 @@ description: >
   AdGag — the social network where everything is an ad.
   "See it. Ad it. Go." Internal codename: everything_is_an_ad.
 publish_to: "none"
-version: 0.1.14+15
+version: 0.1.15+16
 
 environment:
   sdk: ">=3.6.0 <4.0.0"
@@ -96,6 +96,8 @@ dependencies:
   # Direct-to-provider video upload with progress/cancellation (section 39).
   # Used only inside lib/core/video/ — never leaks past that boundary.
   dio: ^5.7.0
+  firebase_core: 4.15.0
+  firebase_messaging: 16.7.0
 
 dev_dependencies:
   flutter_test:

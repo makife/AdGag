@@ -257,5 +257,19 @@
   "arHearts": "Schwebende Herzen",
   "arMoneyRain": "Geldregen",
   "arSparkles": "Glitzer",
-  "arRainbow": "Regenbogenmund (Mund auf!)"
+  "arRainbow": "Regenbogenmund (Mund auf!)",
+  "settingsNotifications": "Benachrichtigungen",
+  "notifPrefsHint": "Wähle, was wir an dein Handy schicken. Alles erscheint weiterhin unter Benachrichtigungen in der App.",
+  "notifPrefFollowers": "Neue Follower",
+  "notifPrefReviews": "Bewertungen und Antworten",
+  "notifPrefMentions": "Erwähnungen",
+  "notifPrefAdThis": "Jemand macht ein AD THIS deiner Werbung",
+  "notifPushOffTitle": "Benachrichtigungen sind aus",
+  "notifPushOffBody": "Aktiviere Benachrichtigungen für AdGag in den Einstellungen deines Handys.",
+  "notifOpenSettings": "Einstellungen öffnen",
+  "notifTurnOn": "Benachrichtigungen aktivieren",
+  "notifUnavailable": "Benachrichtigungen sind in dieser Version nicht verfügbar.",
+  "notifSaveFailed": "Speichern fehlgeschlagen. Versuch es noch mal.",
+  "pushChannelName": "Aktivität",
+  "notifView": "Ansehen"
 }

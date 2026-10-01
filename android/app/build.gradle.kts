@@ -19,6 +19,14 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Push notifications: Firebase reads its config from google-services.json
+// (gitignored; CI writes it from the GOOGLE_SERVICES_JSON secret). Natively,
+// not from Dart, so a push can be handled while the app isn't running.
+// Without the file the app builds as before, just without push.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 // Release signing with the Play UPLOAD key, read from android/key.properties
 // (gitignored, as is the .jks — never commit either). Without that file
 // (another machine, CI without the secrets) release builds fall back to the

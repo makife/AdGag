@@ -27,6 +27,9 @@ plugins {
     // same version as org.jetbrains.kotlin.android above, per Google's
     // own guidance that this plugin tracks the Kotlin version 1:1.
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.0" apply false
+    // Firebase config from app/google-services.json (push notifications);
+    // applied by app/build.gradle.kts only when that file exists.
+    id("com.google.gms.google-services") version "4.5.0" apply false
 }
 
 include(":app")

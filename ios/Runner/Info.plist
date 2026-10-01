@@ -83,6 +83,10 @@
 	<string>AdGag saves a video to your photo library when you choose "Save Video" while sharing.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>AdGag opens your photo library so you can pick a video or a profile photo.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

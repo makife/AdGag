@@ -13,9 +13,7 @@ import "../widgets/settings_tiles.dart";
 /// Settings, laid out like Instagram's: grouped rows under quiet section
 /// headings, and "Log out" as plain red text at the very bottom instead of
 /// a button on the profile. Only things that actually work are listed —
-/// no placeholder rows for features that don't exist yet (notification
-/// preferences, account deletion, policy pages need a backend/hosting
-/// first).
+/// no placeholder rows for features that don't exist yet.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -57,6 +55,11 @@ class SettingsScreen extends ConsumerWidget {
             title: l10n.settingsAccount,
             subtitle: l10n.settingsAccountSubtitle,
             onTap: () => unawaited(context.pushTo(RoutePaths.settingsAccount)),
+          ),
+          SettingsTile(
+            icon: Icons.notifications_outlined,
+            title: l10n.settingsNotifications,
+            onTap: () => unawaited(context.pushTo(RoutePaths.settingsNotifications)),
           ),
           SettingsSectionHeader(l10n.settingsSectionPrivacy),
           SettingsTile(

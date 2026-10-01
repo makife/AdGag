@@ -1,0 +1,72 @@
+{
+  "new_follower": {
+    "en": "{actor} started following you.",
+    "tr": "{actor} seni takip etmeye başladı.",
+    "es": "{actor} empezó a seguirte.",
+    "pt": "{actor} começou a seguir você.",
+    "de": "{actor} folgt dir jetzt.",
+    "fr": "{actor} s'est abonné à toi.",
+    "it": "{actor} ha iniziato a seguirti.",
+    "ru": "{actor} подписался на вас.",
+    "ar": "بدأ {actor} بمتابعتك.",
+    "id": "{actor} mulai mengikutimu.",
+    "ja": "{actor}さんがあなたをフォローしました。",
+    "ko": "{actor}님이 회원님을 팔로우하기 시작했어요."
+  },
+  "new_review": {
+    "en": "{actor} reviewed your Ad.",
+    "tr": "{actor} reklamına yorum yaptı.",
+    "es": "{actor} comentó tu anuncio.",
+    "pt": "{actor} avaliou seu anúncio.",
+    "de": "{actor} hat deine Werbung bewertet.",
+    "fr": "{actor} a laissé un avis sur ta pub.",
+    "it": "{actor} ha recensito la tua pubblicità.",
+    "ru": "{actor} оставил отзыв о вашей рекламе.",
+    "ar": "علّق {actor} على إعلانك.",
+    "id": "{actor} mengulas iklanmu.",
+    "ja": "{actor}さんがあなたの広告にレビューしました。",
+    "ko": "{actor}님이 내 광고에 리뷰를 남겼어요."
+  },
+  "ad_this": {
+    "en": "{actor} pressed AD THIS on your Ad.",
+    "tr": "{actor} reklamında AD THIS'e bastı.",
+    "es": "{actor} pulsó AD THIS en tu anuncio.",
+    "pt": "{actor} tocou em AD THIS no seu anúncio.",
+    "de": "{actor} hat bei deiner Werbung AD THIS gedrückt.",
+    "fr": "{actor} a appuyé sur AD THIS sur ta pub.",
+    "it": "{actor} ha premuto AD THIS sulla tua pubblicità.",
+    "ru": "{actor} нажал AD THIS на вашей рекламе.",
+    "ar": "ضغط {actor} على AD THIS في إعلانك.",
+    "id": "{actor} menekan AD THIS di iklanmu.",
+    "ja": "{actor}さんがあなたの広告でAD THISを押しました。",
+    "ko": "{actor}님이 내 광고에서 AD THIS를 눌렀어요."
+  },
+  "review_reply": {
+    "en": "{actor} replied to your review.",
+    "tr": "{actor} yorumuna yanıt verdi.",
+    "es": "{actor} respondió a tu reseña.",
+    "pt": "{actor} respondeu à sua avaliação.",
+    "de": "{actor} hat auf deine Bewertung geantwortet.",
+    "fr": "{actor} a répondu à ton avis.",
+    "it": "{actor} ha risposto alla tua recensione.",
+    "ru": "{actor} ответил на ваш отзыв.",
+    "ar": "ردّ {actor} على تعليقك.",
+    "id": "{actor} membalas ulasanmu.",
+    "ja": "{actor}さんがあなたのレビューに返信しました。",
+    "ko": "{actor}님이 내 리뷰에 답글을 남겼어요."
+  },
+  "mention": {
+    "en": "{actor} mentioned you in a review.",
+    "tr": "{actor} bir yorumda senden bahsetti.",
+    "es": "{actor} te mencionó en una reseña.",
+    "pt": "{actor} mencionou você em uma avaliação.",
+    "de": "{actor} hat dich in einer Bewertung erwähnt.",
+    "fr": "{actor} t'a mentionné dans un avis.",
+    "it": "{actor} ti ha menzionato in una recensione.",
+    "ru": "{actor} упомянул вас в отзыве.",
+    "ar": "أشار إليك {actor} في تعليق.",
+    "id": "{actor} menyebutmu di ulasan.",
+    "ja": "{actor}さんがレビューであなたをメンションしました。",
+    "ko": "{actor}님이 리뷰에서 나를 언급했어요."
+  }
+}

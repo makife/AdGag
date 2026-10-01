@@ -25,3 +25,9 @@ verify_jwt = true
 [functions.delete-account]
 # Caller's JWT required; deletes only the caller's own account.
 verify_jwt = true
+
+[functions.send-push]
+# Called by the database (pg_net, 0024_push_notifications.sql), which has no
+# user JWT. Authentication is the x-push-secret shared secret checked in
+# index.ts (PUSH_WEBHOOK_SECRET = Vault secret push_webhook_secret).
+verify_jwt = false

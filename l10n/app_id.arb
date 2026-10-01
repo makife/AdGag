@@ -257,5 +257,19 @@
   "arHearts": "Hati melayang",
   "arMoneyRain": "Hujan uang",
   "arSparkles": "Kilau",
-  "arRainbow": "Mulut pelangi (buka mulut!)"
+  "arRainbow": "Mulut pelangi (buka mulut!)",
+  "settingsNotifications": "Notifikasi",
+  "notifPrefsHint": "Pilih apa yang kami kirim ke ponselmu. Semuanya tetap muncul di Notifikasi dalam aplikasi.",
+  "notifPrefFollowers": "Pengikut baru",
+  "notifPrefReviews": "Ulasan dan balasan",
+  "notifPrefMentions": "Sebutan",
+  "notifPrefAdThis": "Seseorang membuat AD THIS dari iklanmu",
+  "notifPushOffTitle": "Notifikasi nonaktif",
+  "notifPushOffBody": "Aktifkan notifikasi AdGag di pengaturan ponselmu.",
+  "notifOpenSettings": "Buka pengaturan",
+  "notifTurnOn": "Aktifkan notifikasi",
+  "notifUnavailable": "Notifikasi tidak tersedia di versi ini.",
+  "notifSaveFailed": "Gagal menyimpan. Coba lagi.",
+  "pushChannelName": "Aktivitas",
+  "notifView": "Lihat"
 }

@@ -257,5 +257,19 @@
   "arHearts": "Corações flutuantes",
   "arMoneyRain": "Chuva de dinheiro",
   "arSparkles": "Brilhos",
-  "arRainbow": "Boca arco-íris (abra a boca!)"
+  "arRainbow": "Boca arco-íris (abra a boca!)",
+  "settingsNotifications": "Notificações",
+  "notifPrefsHint": "Escolha o que enviamos para o seu celular. Tudo continua aparecendo em Notificações no app.",
+  "notifPrefFollowers": "Novos seguidores",
+  "notifPrefReviews": "Avaliações e respostas",
+  "notifPrefMentions": "Menções",
+  "notifPrefAdThis": "Alguém faz um AD THIS do seu anúncio",
+  "notifPushOffTitle": "As notificações estão desativadas",
+  "notifPushOffBody": "Ative as notificações do AdGag nas configurações do celular.",
+  "notifOpenSettings": "Abrir configurações",
+  "notifTurnOn": "Ativar notificações",
+  "notifUnavailable": "As notificações não estão disponíveis nesta versão.",
+  "notifSaveFailed": "Não foi possível salvar. Tente novamente.",
+  "pushChannelName": "Atividade",
+  "notifView": "Ver"
 }

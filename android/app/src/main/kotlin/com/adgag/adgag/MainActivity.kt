@@ -1,6 +1,9 @@
 package com.adgag.adgag
 
 import android.app.Activity
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
 import android.content.Intent
 import com.adgag.adgag.editor.DebugLog
 import com.adgag.adgag.editor.NativeEditorActivity
@@ -30,6 +33,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        createPushChannel()
         // The PHYSICAL device orientation (accelerometer), for the camera: the
         // app UI is locked to portrait, so the UI orientation never changes —
         // but a phone held sideways must still record a landscape video (the
@@ -176,5 +180,20 @@ class MainActivity : FlutterActivity() {
             // Flutter creation flow already treats "user backed out."
             result.success(null)
         }
+    }
+
+    /**
+     * The channel push notifications arrive on (send-push sets channel_id
+     * "adgag_activity"; the manifest names it the default). Its name is the
+     * phone-language "Activity" from res/values-<lang>/push_strings.xml (generated
+     * by tool/l10n/build_push_l10n.py). Creating it again just updates the
+     * name, e.g. after a language change.
+     */
+    private fun createPushChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = getSystemService(NotificationManager::class.java) ?: return
+        manager.createNotificationChannel(
+            NotificationChannel("adgag_activity", getString(R.string.push_channel_name), NotificationManager.IMPORTANCE_HIGH),
+        )
     }
 }
