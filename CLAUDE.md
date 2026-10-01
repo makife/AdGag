@@ -1458,6 +1458,13 @@ Contact address on all pages: makifergan@gmail.com. Play listing images + 512px 
 
 **Still to do before launch**: (the 2026-09-29 round below built account deletion, Mux deletion and the age check — its migration/functions are LIVE); a licensed or CC0 music library is optional (user-picked music is the uploader's responsibility per the Terms); iOS needs an Apple Developer account for TestFlight.
 
+## Live AR on iOS — editor parity check (2026-10-01)
+
+Owner: "everything the Android editor has, iOS should have too". Compared both editors feature by feature (VM operations, tool rows, every enum — transitions 11, filters/frames 21, text styles 26, in 20, out 13 — fonts 38, stickers 43(+json/licence), sound FX 39, song row, magnets, trim slide, collapsible panel): **already at parity**; the only Android-only creation feature was the camera's live AR.
+- `third_party/camera_avfoundation` (vendored 0.9.23+2, PATCH_NOTES.md): `AdGagAr.swift` (adgag/ar channel, Vision face landmarks every other frame on the capture queue, smoothing by nearest face, draws into the BGRA frame in `captureOutput` BEFORE it goes to the preview texture and the AVAssetWriter — this plugin records the very buffers it previews, so no reopen/rebind ever) + `ArEffects.swift` (line-for-line port of the 22 Android effects; Android drawArc sampled into paths so angles mean the same; BlurMaskFilter → CG shadow). Vision has no cheek landmarks → the Android fallback formula; mouth corners/bottom from outerLips.
+- App: `_arSupported` (Android || iOS) shows the face button on iOS; `isPipelineBound` is always true on iOS, so picking an effect never reopens the camera; `previewInfo` nil → normal CameraPreview.
+- **Only compiled in CI; never run.** Risks to check on the iPhone: effect position on the face (front AND back), frame rate while an effect is on (sync Vision on the capture queue), effect visible in the recorded file.
+
 ## First iPhone feedback: viewer kept playing, cropped differently, slow video start (2026-10-01, 0.1.14+15)
 
 Owner installed build 0.1.13 (1) from TestFlight: layout/editor fine; three problems.

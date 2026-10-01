@@ -3,8 +3,9 @@ import "package:flutter/services.dart";
 import "../../../../core/localization/generated/app_localizations.dart";
 
 /// One live AR face effect. Drawn natively on the camera frames (preview AND
-/// recording) — see third_party/camera_android_camerax/.../AdGagAr.kt and
-/// ArEffects.kt, which use the same [id]s. Android only for now.
+/// recording) by the vendored camera plugins, which use the same [id]s:
+/// Android third_party/camera_android_camerax/.../AdGagAr.kt + ArEffects.kt,
+/// iOS third_party/camera_avfoundation/.../AdGagAr.swift + ArEffects.swift.
 final class ArEffect {
   const ArEffect(this.id, this.emoji);
 

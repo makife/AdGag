@@ -119,6 +119,11 @@ dependency_overrides:
   # away. See third_party/video_player_android/PATCH_NOTES.md.
   video_player_android:
     path: third_party/video_player_android
+  # Patched copy of the camera plugin's iOS implementation: live AR face
+  # effects drawn into the camera frames (preview AND recording), like the
+  # Android CameraX patch. See third_party/camera_avfoundation/PATCH_NOTES.md.
+  camera_avfoundation:
+    path: third_party/camera_avfoundation
 
 flutter:
   uses-material-design: true

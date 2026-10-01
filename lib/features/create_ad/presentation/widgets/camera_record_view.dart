@@ -70,6 +70,10 @@ class _CameraRecordViewState extends State<CameraRecordView> {
   /// Live AR (Android): how to show the GL-processed preview when the camera
   /// was opened with the AR pipeline (null = normal preview).
   ArPreviewInfo? _arInfo;
+
+  /// Live AR face effects: Android (CameraX + ML Kit) and iOS (Vision), both
+  /// drawn into the camera frames by the vendored camera plugins.
+  bool get _arSupported => Platform.isAndroid || Platform.isIOS;
   bool _arPickerOpen = false;
 
   /// How the phone is physically held. The UI stays portrait (like the
@@ -134,7 +138,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
   /// the effect, reopens without it and explains (AR must never cost the
   /// camera). Also notices when the native side already fell back.
   Future<void> _openCameraOrWithoutAr(CameraDescription description) async {
-    final bool withAr = Platform.isAndroid && ArCameraBridge.selectedEffect != null;
+    final bool withAr = _arSupported && ArCameraBridge.selectedEffect != null;
     try {
       await _openCamera(description);
     } catch (e) {
@@ -184,8 +188,9 @@ class _CameraRecordViewState extends State<CameraRecordView> {
 
   Future<void> _openCamera(CameraDescription description) async {
     // The native side decides at bind time whether this camera gets the AR
-    // pipeline: only when an effect is picked.
-    if (Platform.isAndroid) {
+    // pipeline: only when an effect is picked. (On iOS every frame passes
+    // through the AR step anyway; this just tells it what to draw.)
+    if (_arSupported) {
       try {
         await ArCameraBridge.setEffect(ArCameraBridge.selectedEffect);
       } catch (_) {
@@ -566,7 +571,7 @@ class _CameraRecordViewState extends State<CameraRecordView> {
                       tooltip: AppLocalizations.of(context).cameraSwitch,
                       onTap: (_isRecording || _switchingCamera) ? null : _switchCamera,
                     ),
-                  if (Platform.isAndroid) ...<Widget>[
+                  if (_arSupported) ...<Widget>[
                     const SizedBox(height: AppSpacing.md),
                     _roundButton(
                       icon: Icons.face_retouching_natural,
