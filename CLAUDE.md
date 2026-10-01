@@ -1466,7 +1466,8 @@ Owner has an Apple Developer account; iOS ships from GitHub Actions (no Mac anyw
 - Runner target Release config: Manual signing, "Apple Distribution", profile specifier "AdGag App Store CI" (Debug stays Automatic, the simulator compile-check is unaffected). iPhone only (`TARGETED_DEVICE_FAMILY = 1` — no iPad screenshots needed; runs on iPad in compatibility mode).
 - **Real iOS bug fixed before it ever ran**: there was no committed Podfile, so permission_handler compiled every permission OUT on iOS → `Permission.camera.request()` would answer "permanently denied" without a prompt, i.e. the camera could never open. `ios/Podfile` now sets PERMISSION_CAMERA=1 / PERMISSION_MICROPHONE=1; Debug/Release xcconfigs include the Pods xcconfigs.
 - Info.plist: ITSAppUsesNonExemptEncryption=false (no export-compliance question per build), NSPhotoLibraryAddUsageDescription (share sheet "Save Video" crashes without it), iPad orientations removed.
-- **Nothing here has run yet** — the first TestFlight run is the test. Needs the App Store Connect app record for com.ergan.adgag to exist first. iOS still has no live AR (Android only).
+- **VERIFIED 2026-10-01**: first TestFlight run (Actions run 36839249635) succeeded end to end in ~5 min (archive 2m14s, upload 44s); App Store Connect build 0.1.13 (1) reached processingState VALID. App record "AdGag" exists. Signing was set up with API key K5L8D64FK7 (issuer 5df8948f-…, team W66SUK5Q29); the account was at Apple's 3-distribution-cert limit, so the owner revoked the oldest one (YG8F6CYMH5, likely an old Capawesome setup) — the owner's OTHER apps (kelimele, Capawesome, RevenueCat keys) share this team: never delete their API keys or the other two distribution certs.
+- Still to do: the app has never run on an iPhone yet (TestFlight install = first real test of the camera, the native iOS editor, etc.); iOS has no live AR (Android only).
 
 ## LIVE AR face effects in the camera — Android (2026-09-30, 0.1.10+11)
 
