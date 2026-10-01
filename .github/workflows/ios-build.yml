@@ -6,13 +6,8 @@ name: iOS build
 # compiled. A macOS GitHub-hosted runner stands in for a local Mac.
 #
 # Simulator build: this workflow only confirms the Swift/Flutter code
-# COMPILES — it does not produce an installable .ipa. Getting a build
-# onto a real iPhone (TestFlight or ad-hoc) needs an Apple Developer
-# Program account for real signing certificates/provisioning profiles,
-# which this project does not have configured yet (see CLAUDE.md's
-# checkpoint). Do not add signing here until those are provided —
-# inventing placeholder credentials would just produce a build that
-# silently can't install anywhere.
+# COMPILES on every push. Signed builds for TestFlight are made by
+# ios-testflight.yml (manual run or a v* tag).
 on:
   push:
     branches: [master, main]

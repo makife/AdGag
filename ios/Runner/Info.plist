@@ -77,6 +77,10 @@
 	<string>AdGag uses the camera to record your Ads.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>AdGag uses the microphone to record sound with your Ads.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>AdGag saves a video to your photo library when you choose "Save Video" while sharing.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>AdGag opens your photo library so you can pick a video or a profile photo.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
@@ -88,13 +92,6 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 </dict>
 </plist>

@@ -85,3 +85,11 @@ Thumbs.db
 
 # Coverage
 coverage/
+
+# iOS signing material (made by tool/ios/setup_signing.py; lives only on the
+# owner's machine + GitHub secrets)
+ios/signing/
+*.p8
+*.p12
+*.mobileprovision
+__pycache__/

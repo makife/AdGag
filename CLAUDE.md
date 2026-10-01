@@ -1458,6 +1458,16 @@ Contact address on all pages: makifergan@gmail.com. Play listing images + 512px 
 
 **Still to do before launch**: (the 2026-09-29 round below built account deletion, Mux deletion and the age check — its migration/functions are LIVE); a licensed or CC0 music library is optional (user-picked music is the uploader's responsibility per the Terms); iOS needs an Apple Developer account for TestFlight.
 
+## iOS TestFlight pipeline (2026-10-01)
+
+Owner has an Apple Developer account; iOS ships from GitHub Actions (no Mac anywhere).
+- `.github/workflows/ios-testflight.yml` (manual run / `v*` tag, macos-15 + latest-stable Xcode): temp keychain with the distribution .p12, installs the profile, `flutter build ios --release --config-only --no-codesign --build-number=<run_number> --dart-define-from-file=env/dev.json`, `pod install`, `xcodebuild archive` (DEVELOPMENT_TEAM from the secret), export IPA (manual signing, artifact kept 14 days), `xcrun altool --upload-app` with the API key. Secrets: IOS_DIST_CERT_P12_BASE64, IOS_DIST_CERT_PASSWORD, IOS_PROVISION_PROFILE_BASE64, APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8, ENV_DEV_JSON.
+- Signing material is made ONCE on Windows by `python tool/ios/setup_signing.py --p8 AuthKey_X.p8 --issuer-id …` (App Store Connect API, Admin key): registers com.ergan.adgag, creates an Apple Distribution cert from a locally generated key (kept in `ios/signing/`, gitignored, reused on reruns), (re)creates the "AdGag App Store CI" App Store profile, writes each secret to `ios/signing/secrets/<NAME>.txt`. Profiles expire after a year → rerun the script and update IOS_PROVISION_PROFILE_BASE64.
+- Runner target Release config: Manual signing, "Apple Distribution", profile specifier "AdGag App Store CI" (Debug stays Automatic, the simulator compile-check is unaffected). iPhone only (`TARGETED_DEVICE_FAMILY = 1` — no iPad screenshots needed; runs on iPad in compatibility mode).
+- **Real iOS bug fixed before it ever ran**: there was no committed Podfile, so permission_handler compiled every permission OUT on iOS → `Permission.camera.request()` would answer "permanently denied" without a prompt, i.e. the camera could never open. `ios/Podfile` now sets PERMISSION_CAMERA=1 / PERMISSION_MICROPHONE=1; Debug/Release xcconfigs include the Pods xcconfigs.
+- Info.plist: ITSAppUsesNonExemptEncryption=false (no export-compliance question per build), NSPhotoLibraryAddUsageDescription (share sheet "Save Video" crashes without it), iPad orientations removed.
+- **Nothing here has run yet** — the first TestFlight run is the test. Needs the App Store Connect app record for com.ergan.adgag to exist first. iOS still has no live AR (Android only).
+
 ## LIVE AR face effects in the camera — Android (2026-09-30, 0.1.10+11)
 
 Owner wanted REAL live AR (effect visible while recording), explicitly not post-recording face tracking.

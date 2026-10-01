@@ -1,0 +1,166 @@
+name: iOS TestFlight
+
+# Builds a signed App Store build on a macOS runner and uploads it to
+# App Store Connect (→ TestFlight). There is no Mac in this project's dev
+# environment; this is the only way an installable iOS build is made.
+#
+# Signing is MANUAL with material made once by tool/ios/setup_signing.py
+# (Apple Distribution certificate + "AdGag App Store CI" profile, the name
+# ios/Runner.xcodeproj's Release config expects). Secrets:
+#   IOS_DIST_CERT_P12_BASE64, IOS_DIST_CERT_PASSWORD,
+#   IOS_PROVISION_PROFILE_BASE64, APPLE_TEAM_ID,
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8   (App Store Connect API key, upload)
+#   ENV_DEV_JSON                             (same as the Android workflow)
+#
+# The build number is this workflow's run number; the version name comes
+# from pubspec.yaml. Run it by hand (Actions → iOS TestFlight → Run
+# workflow) or push a v* tag.
+on:
+  workflow_dispatch: {}
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      IOS_DIST_CERT_P12_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+      IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+      IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      ENV_DEV_JSON: ${{ secrets.ENV_DEV_JSON }}
+    steps:
+      - name: Check secrets
+        run: |
+          missing=0
+          for v in IOS_DIST_CERT_P12_BASE64 IOS_DIST_CERT_PASSWORD IOS_PROVISION_PROFILE_BASE64 \
+                   APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8 ENV_DEV_JSON; do
+            if [ -z "${!v}" ]; then echo "::error::Missing secret $v"; missing=1; fi
+          done
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      # App Store Connect only accepts builds made with a recent SDK.
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Versions
+        run: |
+          xcodebuild -version
+          flutter --version
+
+      - name: Install signing certificate and profile
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/adgag-signing.keychain-db"
+          KC_PW="$(openssl rand -base64 24)"
+          security create-keychain -p "$KC_PW" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KC_PW" "$KEYCHAIN"
+          echo "$IOS_DIST_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -P "$IOS_DIST_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KC_PW" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/dist.p12"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+          PROFILE="$RUNNER_TEMP/profile.mobileprovision"
+          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > "$PROFILE"
+          UUID="$(security cms -D -i "$PROFILE" | plutil -extract UUID raw -o - -)"
+          for d in "$HOME/Library/MobileDevice/Provisioning Profiles" \
+                   "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$d"
+            cp "$PROFILE" "$d/$UUID.mobileprovision"
+          done
+          echo "Installed profile $UUID"
+
+      - name: Write app config and API key
+        run: |
+          printf '%s' "$ENV_DEV_JSON" > env/dev.json
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s\n' "$ASC_KEY_P8" > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Writes Generated.xcconfig (version, build number, dart-defines) and
+      # runs pod install; the actual compile happens in the archive below,
+      # whose Flutter build phase uses exactly this config.
+      - name: Configure Flutter for a release build
+        run: |
+          flutter build ios --release --config-only --no-codesign \
+            --build-number=${{ github.run_number }} \
+            --dart-define-from-file=env/dev.json
+          cd ios && pod install
+
+      - name: Archive
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            archive | tee "$RUNNER_TEMP/archive.log" | grep -E "error:|warning: .*sign|\*\* ARCHIVE" || true
+          test -d "$RUNNER_TEMP/Runner.xcarchive" || { tail -n 200 "$RUNNER_TEMP/archive.log"; exit 1; }
+
+      - name: Export IPA
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>export</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.ergan.adgag</key><string>AdGag App Store CI</string>
+            </dict>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/ipa"
+          ls -la "$RUNNER_TEMP/ipa"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: adgag-ios-${{ github.run_number }}
+          path: ${{ runner.temp }}/ipa/*.ipa
+          retention-days: 14
+
+      - name: Upload to App Store Connect (TestFlight)
+        run: |
+          IPA="$(ls "$RUNNER_TEMP"/ipa/*.ipa | head -n 1)"
+          xcrun altool --upload-app -f "$IPA" -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" --output-format normal
+
+      - name: Clean up signing material
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/adgag-signing.keychain-db" 2>/dev/null || true
+          rm -rf "$HOME/.appstoreconnect/private_keys" env/dev.json
