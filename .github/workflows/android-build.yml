@@ -35,9 +35,11 @@ on:
       - "pubspec.lock"
       - ".github/workflows/android-build.yml"
 
+# A newer push cancels an older PUSH build only — never a manual run or a
+# tag build, which may be uploading to Play at that moment.
 concurrency:
-  group: android-${{ github.ref }}
-  cancel-in-progress: true
+  group: android-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
