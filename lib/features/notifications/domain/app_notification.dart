@@ -5,7 +5,13 @@ enum NotificationType {
   newReview,
   adThis,
   reviewReply,
-  mention;
+  mention,
+
+  /// The user's Ad reached a SOLD milestone (payload count: 1, 10, 50, 100…).
+  soldMilestone,
+
+  /// The user's Ad reached a GAG! (share) milestone (10, 50, 100…).
+  gagMilestone;
 
   /// Null for a type this build doesn't know (added server-side later) —
   /// the list skips it instead of failing as a whole. (It used to throw,
@@ -16,6 +22,8 @@ enum NotificationType {
         "ad_this" => NotificationType.adThis,
         "review_reply" => NotificationType.reviewReply,
         "mention" => NotificationType.mention,
+        "sold_milestone" => NotificationType.soldMilestone,
+        "gag_milestone" => NotificationType.gagMilestone,
         _ => null,
       };
 }
@@ -60,4 +68,7 @@ final class AppNotification {
   bool get isUnread => readAt == null;
 
   String? get adId => payload["ad_id"] as String?;
+
+  /// The milestone reached (milestone notifications only).
+  int? get count => (payload["count"] as num?)?.toInt();
 }

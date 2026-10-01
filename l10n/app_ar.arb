@@ -271,5 +271,13 @@
   "notifUnavailable": "الإشعارات غير متاحة في هذا الإصدار.",
   "notifSaveFailed": "تعذّر الحفظ. حاول مرة أخرى.",
   "pushChannelName": "النشاط",
-  "notifView": "عرض"
+  "notifView": "عرض",
+  "activitySoldFirst": "حصل إعلانك على أول SOLD! 🎉",
+  "activitySoldMilestone": "وصل إعلانك إلى {count} SOLD! 🎉",
+  "activityGagMilestone": "تمت مشاركة إعلانك {count} مرة (GAG!) 🎉",
+  "notifPrefMilestones": "إنجازات SOLD وGAG!",
+  "reviewLike": "إعجاب",
+  "reviewUnlike": "إلغاء الإعجاب",
+  "reviewLikeFailed": "تعذّر الإعجاب. حاول مرة أخرى.",
+  "profilePhoto": "صورة الملف الشخصي"
 }

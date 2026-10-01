@@ -136,6 +136,7 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
           toggle(l10n.notifPrefReviews, (p) => p.reviews, (p, v) => p.copyWith(reviews: v)),
           toggle(l10n.notifPrefMentions, (p) => p.mentions, (p, v) => p.copyWith(mentions: v)),
           toggle(l10n.notifPrefAdThis, (p) => p.adThis, (p, v) => p.copyWith(adThis: v)),
+          toggle(l10n.notifPrefMilestones, (p) => p.milestones, (p, v) => p.copyWith(milestones: v)),
           const SizedBox(height: AppSpacing.xxl),
         ],
       ),

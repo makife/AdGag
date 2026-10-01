@@ -68,5 +68,47 @@
     "id": "{actor} menyebutmu di ulasan.",
     "ja": "{actor}さんがレビューであなたをメンションしました。",
     "ko": "{actor}님이 리뷰에서 나를 언급했어요."
+  },
+  "sold_milestone": {
+    "en": "Your Ad reached {count} SOLD! 🎉",
+    "tr": "Reklamın {count} SOLD'a ulaştı! 🎉",
+    "es": "¡Tu anuncio llegó a {count} SOLD! 🎉",
+    "pt": "Seu anúncio chegou a {count} SOLD! 🎉",
+    "de": "Deine Werbung hat {count} SOLD erreicht! 🎉",
+    "fr": "Ta pub a atteint {count} SOLD ! 🎉",
+    "it": "La tua pubblicità ha raggiunto {count} SOLD! 🎉",
+    "ru": "Ваша реклама набрала {count} SOLD! 🎉",
+    "ar": "وصل إعلانك إلى {count} SOLD! 🎉",
+    "id": "Iklanmu mencapai {count} SOLD! 🎉",
+    "ja": "あなたの広告が{count} SOLDに到達しました！🎉",
+    "ko": "내 광고가 SOLD {count}개를 달성했어요! 🎉"
+  },
+  "sold_milestone_first": {
+    "en": "Your Ad got its first SOLD! 🎉",
+    "tr": "Reklamın ilk SOLD'unu aldı! 🎉",
+    "es": "¡Tu anuncio consiguió su primer SOLD! 🎉",
+    "pt": "Seu anúncio ganhou o primeiro SOLD! 🎉",
+    "de": "Deine Werbung hat ihr erstes SOLD! 🎉",
+    "fr": "Ta pub a reçu son premier SOLD ! 🎉",
+    "it": "La tua pubblicità ha ricevuto il primo SOLD! 🎉",
+    "ru": "Ваша реклама получила первый SOLD! 🎉",
+    "ar": "حصل إعلانك على أول SOLD! 🎉",
+    "id": "Iklanmu dapat SOLD pertamanya! 🎉",
+    "ja": "あなたの広告に初めてのSOLDがつきました！🎉",
+    "ko": "내 광고가 첫 SOLD를 받았어요! 🎉"
+  },
+  "gag_milestone": {
+    "en": "Your Ad was shared {count} times (GAG!) 🎉",
+    "tr": "Reklamın {count} kez paylaşıldı (GAG!) 🎉",
+    "es": "Tu anuncio se compartió {count} veces (GAG!) 🎉",
+    "pt": "Seu anúncio foi compartilhado {count} vezes (GAG!) 🎉",
+    "de": "Deine Werbung wurde {count}-mal geteilt (GAG!) 🎉",
+    "fr": "Ta pub a été partagée {count} fois (GAG!) 🎉",
+    "it": "La tua pubblicità è stata condivisa {count} volte (GAG!) 🎉",
+    "ru": "Вашей рекламой поделились {count} раз (GAG!) 🎉",
+    "ar": "تمت مشاركة إعلانك {count} مرة (GAG!) 🎉",
+    "id": "Iklanmu dibagikan {count} kali (GAG!) 🎉",
+    "ja": "あなたの広告が{count}回シェアされました（GAG!）🎉",
+    "ko": "내 광고가 {count}번 공유됐어요 (GAG!) 🎉"
   }
 }

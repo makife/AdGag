@@ -4,8 +4,10 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../../../core/localization/generated/app_localizations.dart";
 
+import "../../../../core/router/route_paths.dart";
 import "../../../../core/supabase/supabase_providers.dart";
 import "../../../../core/theme/app_spacing.dart";
+import "../../../../shared/widgets/count_label.dart";
 import "../../../../shared/widgets/mention_text.dart";
 import "../../../../shared/widgets/mini_avatar.dart";
 import "../../../moderation/domain/report_target_type.dart";
@@ -318,7 +320,7 @@ class _ReviewsPanelState extends ConsumerState<ReviewsPanel> {
 }
 
 /// One review or reply: avatar, @author, text with tappable mentions,
-/// "Reply", and delete (own) / report (others').
+/// "Reply", a like (heart + count), and delete (own) / report (others').
 class _ReviewRow extends ConsumerWidget {
   const _ReviewRow({required this.adId, required this.comment, required this.onReply, this.small = false});
 
@@ -333,21 +335,34 @@ class _ReviewRow extends ConsumerWidget {
     final String? currentUserId = ref.watch(currentUserIdProvider);
     final bool isOwn = comment.userId == currentUserId;
     final TextTheme text = Theme.of(context).textTheme;
+    // The author's avatar and name open their profile (pushed over the feed).
+    final String? username = comment.username;
+    void openProfile() {
+      if (username != null) {
+        unawaited(context.pushTo(RoutePaths.userProfileOf(username)));
+      }
+    }
 
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.sm),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          MiniAvatar(avatarUrl: comment.avatarUrl, username: comment.username, size: small ? 26 : 32),
+          GestureDetector(
+            onTap: openProfile,
+            child: MiniAvatar(avatarUrl: comment.avatarUrl, username: comment.username, size: small ? 26 : 32),
+          ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(
-                  "@${comment.username ?? l10n.unknownUser}",
-                  style: text.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                GestureDetector(
+                  onTap: openProfile,
+                  child: Text(
+                    "@${comment.username ?? l10n.unknownUser}",
+                    style: text.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                  ),
                 ),
                 const SizedBox(height: 2),
                 MentionText(comment.body, style: text.bodyMedium),
@@ -365,6 +380,7 @@ class _ReviewRow extends ConsumerWidget {
               ],
             ),
           ),
+          _LikeButton(adId: adId, comment: comment, enabled: currentUserId != null),
           if (isOwn)
             IconButton(
               icon: const Icon(Icons.delete_outline, size: 18),
@@ -390,7 +406,7 @@ class _ReviewRow extends ConsumerWidget {
   }
 }
 
-/// "— View 3 replies" / "— Hide replies" under a top-level review.
+/// "↳ View 3 replies" / "↳ Hide replies" under a top-level review.
 class _RepliesToggle extends StatelessWidget {
   const _RepliesToggle({required this.count, required this.expanded, required this.loading, required this.onTap});
 
@@ -413,8 +429,8 @@ class _RepliesToggle extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Container(width: 24, height: 1, color: muted),
-              const SizedBox(width: AppSpacing.sm),
+              Icon(Icons.subdirectory_arrow_right, size: 16, color: muted),
+              const SizedBox(width: AppSpacing.xs),
               Text(
                 expanded ? l10n.reviewsHideReplies : l10n.reviewsViewReplies("$count"),
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(color: muted),
@@ -423,6 +439,60 @@ class _RepliesToggle extends StatelessWidget {
                 const SizedBox(width: AppSpacing.sm),
                 const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5)),
               ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Heart + like count on a review (Instagram-style, at the row's end).
+/// Liking shows at once; the controller undoes it if the server refuses.
+class _LikeButton extends ConsumerWidget {
+  const _LikeButton({required this.adId, required this.comment, required this.enabled});
+
+  final String adId;
+  final Comment comment;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final Color muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final bool liked = comment.likedByMe;
+    return Semantics(
+      button: true,
+      toggled: liked,
+      label: liked ? l10n.reviewUnlike : l10n.reviewLike,
+      excludeSemantics: true,
+      child: InkResponse(
+        radius: 22,
+        onTap: !enabled
+            ? null
+            : () => unawaited(
+                  ref.read(commentsControllerProvider(adId).notifier).toggleLike(comment).catchError((Object _) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.reviewLikeFailed)));
+                    }
+                  }),
+                ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(
+                liked ? Icons.favorite : Icons.favorite_border,
+                size: 18,
+                color: liked ? Colors.redAccent : muted,
+              ),
+              if (comment.likeCount > 0)
+                Text(
+                  CountLabel.format(comment.likeCount),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(color: muted),
+                ),
             ],
           ),
         ),

@@ -8,11 +8,21 @@ import "package:flutter/widgets.dart";
 /// a short, slow-ish swipe snapped back. Here: any fling faster than
 /// [_flingVelocity] px/s, or a drag past [_dragFraction] of the page,
 /// moves one page in the swipe's direction — and never more than one.
+///
+/// The page settles on a stiffer, critically damped spring than the stock
+/// one (which eased in slowly and looked soft next to Instagram — owner):
+/// a quick, clean stop with no overshoot, about a quarter second.
 class FeedPagePhysics extends PageScrollPhysics {
   const FeedPagePhysics({super.parent});
 
-  static const double _flingVelocity = 250;
-  static const double _dragFraction = 0.15;
+  static const double _flingVelocity = 200;
+  static const double _dragFraction = 0.12;
+
+  static final SpringDescription _settleSpring =
+      SpringDescription.withDampingRatio(mass: 0.5, stiffness: 320, ratio: 1.0);
+
+  @override
+  SpringDescription get spring => _settleSpring;
 
   @override
   FeedPagePhysics applyTo(ScrollPhysics? ancestor) => FeedPagePhysics(parent: buildParent(ancestor));

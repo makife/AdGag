@@ -271,5 +271,13 @@
   "notifUnavailable": "Уведомления недоступны в этой версии.",
   "notifSaveFailed": "Не удалось сохранить. Попробуйте ещё раз.",
   "pushChannelName": "Активность",
-  "notifView": "Открыть"
+  "notifView": "Открыть",
+  "activitySoldFirst": "Ваша реклама получила первый SOLD! 🎉",
+  "activitySoldMilestone": "Ваша реклама набрала {count} SOLD! 🎉",
+  "activityGagMilestone": "Вашей рекламой поделились {count} раз (GAG!) 🎉",
+  "notifPrefMilestones": "Достижения SOLD и GAG!",
+  "reviewLike": "Нравится",
+  "reviewUnlike": "Убрать отметку «Нравится»",
+  "reviewLikeFailed": "Не удалось поставить отметку. Попробуйте ещё раз.",
+  "profilePhoto": "Фото профиля"
 }

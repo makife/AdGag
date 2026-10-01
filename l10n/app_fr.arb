@@ -271,5 +271,13 @@
   "notifUnavailable": "Les notifications ne sont pas disponibles dans cette version.",
   "notifSaveFailed": "Impossible d'enregistrer. Réessaie.",
   "pushChannelName": "Activité",
-  "notifView": "Voir"
+  "notifView": "Voir",
+  "activitySoldFirst": "Ta pub a reçu son premier SOLD ! 🎉",
+  "activitySoldMilestone": "Ta pub a atteint {count} SOLD ! 🎉",
+  "activityGagMilestone": "Ta pub a été partagée {count} fois (GAG!) 🎉",
+  "notifPrefMilestones": "Paliers SOLD et GAG!",
+  "reviewLike": "J'aime",
+  "reviewUnlike": "Je n'aime plus",
+  "reviewLikeFailed": "Impossible d'aimer cet avis. Réessaie.",
+  "profilePhoto": "Photo de profil"
 }

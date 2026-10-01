@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../../feed/presentation/providers/reviews_panel_provider.dart";
 import "../../../feed/presentation/widgets/feed_page_physics.dart";
+import "../../../feed/presentation/widgets/swipe_seam_line.dart";
 
 import "../../../../core/theme/app_colors.dart";
 import "../../../../core/theme/app_spacing.dart";
@@ -83,29 +84,34 @@ class _SubjectAdsViewerScreenState extends ConsumerState<SubjectAdsViewerScreen>
                     }
                     return false;
                   },
-                  child: PageView.builder(
-                    controller: _pageController,
-                    // Neighbours stay laid out, so the next Ad's player is
-                    // already loading before the swipe reaches it.
-                    allowImplicitScrolling: true,
-                    scrollDirection: Axis.vertical,
-                    // Same light-swipe paging as the feed; stops while reviews are open.
-                    physics: reviewsOpen ? const NeverScrollableScrollPhysics() : const FeedPagePhysics(),
-                    itemCount: widget.ads.length,
-                    onPageChanged: (int index) {
-                      _pendingIndex = index;
-                      _pool.playOnly(widget.ads[index].id);
-                      ref.read(openReviewsAdIdProvider.notifier).state = null;
-                    },
-                    itemBuilder: (BuildContext context, int index) {
-                      return AdVideoCard(
-                        ad: widget.ads[index],
-                        pool: _pool,
-                        videoService: ref.read(videoServiceProvider),
-                        isActive: index == _activeIndex,
-                        belowCardHeight: barInset,
-                      );
-                    },
+                  child: Stack(
+                    children: <Widget>[
+                      PageView.builder(
+                        controller: _pageController,
+                        // Neighbours stay laid out, so the next Ad's player is
+                        // already loading before the swipe reaches it.
+                        allowImplicitScrolling: true,
+                        scrollDirection: Axis.vertical,
+                        // Same light-swipe paging as the feed; stops while reviews are open.
+                        physics: reviewsOpen ? const NeverScrollableScrollPhysics() : const FeedPagePhysics(),
+                        itemCount: widget.ads.length,
+                        onPageChanged: (int index) {
+                          _pendingIndex = index;
+                          _pool.playOnly(widget.ads[index].id);
+                          ref.read(openReviewsAdIdProvider.notifier).state = null;
+                        },
+                        itemBuilder: (BuildContext context, int index) {
+                          return AdVideoCard(
+                            ad: widget.ads[index],
+                            pool: _pool,
+                            videoService: ref.read(videoServiceProvider),
+                            isActive: index == _activeIndex,
+                            belowCardHeight: barInset,
+                          );
+                        },
+                      ),
+                      Positioned.fill(child: SwipeSeamLine(controller: _pageController)),
+                    ],
                   ),
                 ),
               ),

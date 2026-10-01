@@ -8,6 +8,7 @@ import "../../../../core/localization/generated/app_localizations.dart";
 import "../../../../core/router/route_paths.dart";
 import "../../../../core/supabase/supabase_providers.dart";
 import "../../../../core/theme/app_spacing.dart";
+import "../../../../shared/widgets/avatar_viewer.dart";
 import "../../../../shared/widgets/mini_avatar.dart";
 import "../../../feed/domain/ad.dart";
 import "../../../moderation/domain/report_target_type.dart";
@@ -74,7 +75,10 @@ class _ProfileBody extends ConsumerWidget {
               children: <Widget>[
                 Row(
                   children: <Widget>[
-                    MiniAvatar(avatarUrl: profile.avatarUrl, username: profile.username, size: 72),
+                    TappableAvatar(
+                      avatarUrl: profile.avatarUrl,
+                      child: MiniAvatar(avatarUrl: profile.avatarUrl, username: profile.username, size: 72),
+                    ),
                     const SizedBox(width: AppSpacing.lg),
                     Expanded(
                       child: Row(

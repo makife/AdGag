@@ -78,6 +78,8 @@ class ActivityScreen extends ConsumerWidget {
         NotificationType.adThis => Icons.bolt,
         NotificationType.reviewReply => Icons.reply,
         NotificationType.mention => Icons.alternate_email,
+        NotificationType.soldMilestone => Icons.local_offer_outlined,
+        NotificationType.gagMilestone => Icons.ios_share,
       };
 
   String _textFor(BuildContext context, AppNotification notification) {
@@ -90,6 +92,10 @@ class ActivityScreen extends ConsumerWidget {
       NotificationType.adThis => AppLocalizations.of(context).activityAdThis(actor),
       NotificationType.reviewReply => AppLocalizations.of(context).activityReviewReply(actor),
       NotificationType.mention => AppLocalizations.of(context).activityMention(actor),
+      NotificationType.soldMilestone => notification.count == 1
+          ? AppLocalizations.of(context).activitySoldFirst
+          : AppLocalizations.of(context).activitySoldMilestone("${notification.count ?? ""}"),
+      NotificationType.gagMilestone => AppLocalizations.of(context).activityGagMilestone("${notification.count ?? ""}"),
     };
   }
 

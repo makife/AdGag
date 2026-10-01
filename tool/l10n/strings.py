@@ -23,6 +23,8 @@ PLACEHOLDERS = {
     "reviewsViewReplies": {"count": "String"},
     "activityReviewReply": {"actor": "String"},
     "activityMention": {"actor": "String"},
+    "activitySoldMilestone": {"count": "String"},
+    "activityGagMilestone": {"count": "String"},
     "adThisChainCount": {"count": "String"},
     "adThisInspiredBy": {"name": "String"},
     "accountDeleteConfirmHint": {"username": "String"},
@@ -926,3 +928,31 @@ K("notifSaveFailed", "Couldn't save. Try again.", "Kaydedilemedi. Tekrar dene.",
 K("pushChannelName", "Activity", "Etkinlik", "Actividad", "Atividade", "Aktivität", "Activité", "Attività", "Активность", "النشاط",
   "Aktivitas", "アクティビティ", "활동")
 K("notifView", "View", "Göster", "Ver", "Ver", "Ansehen", "Voir", "Vedi", "Открыть", "عرض", "Lihat", "見る", "보기")
+
+# ----------------------------------------------- milestones + review likes
+K("activitySoldFirst", "Your Ad got its first SOLD! 🎉", "Reklamın ilk SOLD'unu aldı! 🎉", "¡Tu anuncio consiguió su primer SOLD! 🎉",
+  "Seu anúncio ganhou o primeiro SOLD! 🎉", "Deine Werbung hat ihr erstes SOLD! 🎉", "Ta pub a reçu son premier SOLD ! 🎉",
+  "La tua pubblicità ha ricevuto il primo SOLD! 🎉", "Ваша реклама получила первый SOLD! 🎉", "حصل إعلانك على أول SOLD! 🎉",
+  "Iklanmu dapat SOLD pertamanya! 🎉", "あなたの広告に初めてのSOLDがつきました！🎉", "내 광고가 첫 SOLD를 받았어요! 🎉")
+K("activitySoldMilestone", "Your Ad reached {count} SOLD! 🎉", "Reklamın {count} SOLD'a ulaştı! 🎉", "¡Tu anuncio llegó a {count} SOLD! 🎉",
+  "Seu anúncio chegou a {count} SOLD! 🎉", "Deine Werbung hat {count} SOLD erreicht! 🎉", "Ta pub a atteint {count} SOLD ! 🎉",
+  "La tua pubblicità ha raggiunto {count} SOLD! 🎉", "Ваша реклама набрала {count} SOLD! 🎉", "وصل إعلانك إلى {count} SOLD! 🎉",
+  "Iklanmu mencapai {count} SOLD! 🎉", "あなたの広告が{count} SOLDに到達しました！🎉", "내 광고가 SOLD {count}개를 달성했어요! 🎉")
+K("activityGagMilestone", "Your Ad was shared {count} times (GAG!) 🎉", "Reklamın {count} kez paylaşıldı (GAG!) 🎉",
+  "Tu anuncio se compartió {count} veces (GAG!) 🎉", "Seu anúncio foi compartilhado {count} vezes (GAG!) 🎉",
+  "Deine Werbung wurde {count}-mal geteilt (GAG!) 🎉", "Ta pub a été partagée {count} fois (GAG!) 🎉",
+  "La tua pubblicità è stata condivisa {count} volte (GAG!) 🎉", "Вашей рекламой поделились {count} раз (GAG!) 🎉",
+  "تمت مشاركة إعلانك {count} مرة (GAG!) 🎉", "Iklanmu dibagikan {count} kali (GAG!) 🎉", "あなたの広告が{count}回シェアされました（GAG!）🎉",
+  "내 광고가 {count}번 공유됐어요 (GAG!) 🎉")
+K("notifPrefMilestones", "SOLD and GAG! milestones", "SOLD ve GAG! başarıları", "Logros de SOLD y GAG!", "Marcos de SOLD e GAG!",
+  "SOLD- und GAG!-Meilensteine", "Paliers SOLD et GAG!", "Traguardi SOLD e GAG!", "Достижения SOLD и GAG!", "إنجازات SOLD وGAG!",
+  "Pencapaian SOLD dan GAG!", "SOLDとGAG!の達成", "SOLD·GAG! 달성")
+K("reviewLike", "Like", "Beğen", "Me gusta", "Curtir", "Gefällt mir", "J'aime", "Mi piace", "Нравится", "إعجاب", "Suka", "いいね", "좋아요")
+K("reviewUnlike", "Unlike", "Beğenmekten vazgeç", "Ya no me gusta", "Descurtir", "Gefällt mir nicht mehr", "Je n'aime plus",
+  "Non mi piace più", "Убрать отметку «Нравится»", "إلغاء الإعجاب", "Batal suka", "いいねを取り消す", "좋아요 취소")
+K("reviewLikeFailed", "Couldn't like this review. Try again.", "Yorum beğenilemedi. Tekrar dene.", "No se pudo dar me gusta. Inténtalo de nuevo.",
+  "Não foi possível curtir. Tente novamente.", "Gefällt mir hat nicht geklappt. Versuch es noch mal.", "Impossible d'aimer cet avis. Réessaie.",
+  "Impossibile mettere mi piace. Riprova.", "Не удалось поставить отметку. Попробуйте ещё раз.", "تعذّر الإعجاب. حاول مرة أخرى.",
+  "Gagal menyukai ulasan. Coba lagi.", "いいねできませんでした。もう一度お試しください。", "좋아요를 누르지 못했어요. 다시 시도해 주세요.")
+K("profilePhoto", "Profile photo", "Profil fotoğrafı", "Foto de perfil", "Foto de perfil", "Profilbild", "Photo de profil",
+  "Foto profilo", "Фото профиля", "صورة الملف الشخصي", "Foto profil", "プロフィール写真", "프로필 사진")

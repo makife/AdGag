@@ -271,5 +271,13 @@
   "notifUnavailable": "このバージョンでは通知を利用できません。",
   "notifSaveFailed": "保存できませんでした。もう一度お試しください。",
   "pushChannelName": "アクティビティ",
-  "notifView": "見る"
+  "notifView": "見る",
+  "activitySoldFirst": "あなたの広告に初めてのSOLDがつきました！🎉",
+  "activitySoldMilestone": "あなたの広告が{count} SOLDに到達しました！🎉",
+  "activityGagMilestone": "あなたの広告が{count}回シェアされました（GAG!）🎉",
+  "notifPrefMilestones": "SOLDとGAG!の達成",
+  "reviewLike": "いいね",
+  "reviewUnlike": "いいねを取り消す",
+  "reviewLikeFailed": "いいねできませんでした。もう一度お試しください。",
+  "profilePhoto": "プロフィール写真"
 }

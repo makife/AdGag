@@ -17,4 +17,7 @@ abstract interface class CommentsRepository {
   Future<Comment> create({required String adId, required String body, String? parentId});
 
   Future<void> deleteOwn(String commentId);
+
+  /// Likes the review, or takes the like back; returns whether it's liked now.
+  Future<bool> toggleLike(String commentId);
 }

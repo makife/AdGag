@@ -133,6 +133,39 @@ final class CommentsController extends FamilyAsyncNotifier<CommentsState, String
     ref.read(commentCountDeltaProvider(arg).notifier).state++;
   }
 
+  /// Likes / un-likes [comment] at once on screen, then on the server; the
+  /// change is undone if the server refuses.
+  Future<void> toggleLike(Comment comment) async {
+    final bool liked = !comment.likedByMe;
+    _replaceComment(comment.id, (Comment c) => c.withLike(liked: liked));
+    try {
+      final bool serverLiked = await ref.read(commentsRepositoryProvider).toggleLike(comment.id);
+      if (serverLiked != liked) {
+        _replaceComment(comment.id, (Comment c) => c.withLike(liked: serverLiked));
+      }
+    } catch (_) {
+      _replaceComment(comment.id, (Comment c) => c.withLike(liked: !liked));
+      rethrow;
+    }
+  }
+
+  /// Applies [change] to the review or reply with [id], wherever it is listed.
+  void _replaceComment(String id, Comment Function(Comment) change) {
+    final CommentsState? current = state.valueOrNull;
+    if (current == null) {
+      return;
+    }
+    Comment apply(Comment c) => c.id == id ? change(c) : c;
+    state = AsyncData<CommentsState>(
+      current.copyWith(
+        comments: current.comments.map(apply).toList(growable: false),
+        replies: current.replies.map(
+          (String parent, List<Comment> list) => MapEntry<String, List<Comment>>(parent, list.map(apply).toList(growable: false)),
+        ),
+      ),
+    );
+  }
+
   Future<void> deleteOwn(Comment comment) async {
     await ref.read(commentsRepositoryProvider).deleteOwn(comment.id);
     ref.read(commentCountDeltaProvider(arg).notifier).state--;

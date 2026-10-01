@@ -271,5 +271,13 @@
   "notifUnavailable": "Benachrichtigungen sind in dieser Version nicht verfügbar.",
   "notifSaveFailed": "Speichern fehlgeschlagen. Versuch es noch mal.",
   "pushChannelName": "Aktivität",
-  "notifView": "Ansehen"
+  "notifView": "Ansehen",
+  "activitySoldFirst": "Deine Werbung hat ihr erstes SOLD! 🎉",
+  "activitySoldMilestone": "Deine Werbung hat {count} SOLD erreicht! 🎉",
+  "activityGagMilestone": "Deine Werbung wurde {count}-mal geteilt (GAG!) 🎉",
+  "notifPrefMilestones": "SOLD- und GAG!-Meilensteine",
+  "reviewLike": "Gefällt mir",
+  "reviewUnlike": "Gefällt mir nicht mehr",
+  "reviewLikeFailed": "Gefällt mir hat nicht geklappt. Versuch es noch mal.",
+  "profilePhoto": "Profilbild"
 }

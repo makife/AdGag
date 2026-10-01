@@ -18,7 +18,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import strings from "../_shared/push_strings.json" with { type: "json" };
 import { readServiceAccount, sendFcm } from "../_shared/fcm.ts";
 
-type NotificationType = keyof typeof strings;
+type NotificationType = Exclude<keyof typeof strings, "sold_milestone_first">;
 
 // notification_type -> notification_preferences column.
 const PREFERENCE: Record<NotificationType, string> = {
@@ -27,6 +27,8 @@ const PREFERENCE: Record<NotificationType, string> = {
   review_reply: "reviews",
   mention: "mentions",
   ad_this: "ad_this",
+  sold_milestone: "milestones",
+  gag_milestone: "milestones",
 };
 
 Deno.serve(async (req: Request) => {
@@ -61,7 +63,7 @@ Deno.serve(async (req: Request) => {
     if (!n) return json({ skipped: "NOT_FOUND" });
 
     const type = n.type as NotificationType;
-    if (!(type in strings)) return json({ skipped: "UNKNOWN_TYPE" });
+    if (!(type in PREFERENCE)) return json({ skipped: "UNKNOWN_TYPE" });
 
     const { data: prefs } = await db
       .from("notification_preferences")
@@ -93,12 +95,18 @@ Deno.serve(async (req: Request) => {
     if (typeof payload.ad_id === "string") data.ad_id = payload.ad_id;
     if (actorUsername) data.actor_username = actorUsername;
 
+    // Milestones: "{count}" in the text; the very first SOLD has its own line.
+    const count = typeof payload.count === "number" ? payload.count : null;
+    const textKey = type === "sold_milestone" && count === 1 ? "sold_milestone_first" : type;
+
     let sent = 0;
     const gone: string[] = [];
     for (const device of tokens) {
-      const texts = strings[type] as Record<string, string>;
+      const texts = strings[textKey] as Record<string, string>;
       const lang = (device.locale ?? "en").split(/[-_]/)[0];
-      const title = (texts[lang] ?? texts.en).replace("{actor}", actor);
+      const title = (texts[lang] ?? texts.en)
+        .replace("{actor}", actor)
+        .replace("{count}", count === null ? "" : count.toLocaleString(lang));
       const notification: Record<string, string> = { title };
       if (excerpt) notification.body = excerpt;
       const result = await sendFcm(sa, {

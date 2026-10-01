@@ -22,6 +22,8 @@ class _FakeCommentsRepository implements CommentsRepository {
     "top1": <Comment>[_c("r1", parentId: "top1")],
   };
   int _next = 0;
+  bool failLikes = false;
+  final Set<String> liked = <String>{};
 
   @override
   Future<List<Comment>> fetchPage({required String adId, DateTime? before, int limit = 20}) async => topLevel;
@@ -35,16 +37,25 @@ class _FakeCommentsRepository implements CommentsRepository {
 
   @override
   Future<void> deleteOwn(String commentId) async {}
+
+  @override
+  Future<bool> toggleLike(String commentId) async {
+    if (failLikes) {
+      throw Exception("server said no");
+    }
+    return liked.remove(commentId) ? false : liked.add(commentId);
+  }
 }
 
 void main() {
   late ProviderContainer container;
+  late _FakeCommentsRepository repo;
   CommentsState state() => container.read(commentsControllerProvider("ad1")).requireValue;
   CommentsController controller() => container.read(commentsControllerProvider("ad1").notifier);
 
   setUp(() async {
     container = ProviderContainer(
-      overrides: <Override>[commentsRepositoryProvider.overrideWithValue(_FakeCommentsRepository())],
+      overrides: <Override>[commentsRepositoryProvider.overrideWithValue(repo = _FakeCommentsRepository())],
     );
     await container.read(commentsControllerProvider("ad1").future);
   });
@@ -78,5 +89,28 @@ void main() {
     expect(state().replies["top1"], isEmpty);
     expect(state().comments.first.replyCount, 0);
     expect(container.read(commentCountDeltaProvider("ad1")), -1);
+  });
+
+  test("liking a review shows at once, and liking again takes it back", () async {
+    await controller().toggleLike(state().comments.first);
+    expect(state().comments.first.likedByMe, isTrue);
+    expect(state().comments.first.likeCount, 1);
+    await controller().toggleLike(state().comments.first);
+    expect(state().comments.first.likedByMe, isFalse);
+    expect(state().comments.first.likeCount, 0);
+  });
+
+  test("a reply can be liked too", () async {
+    await controller().loadReplies("top1");
+    await controller().toggleLike(state().replies["top1"]!.single);
+    expect(state().replies["top1"]!.single.likedByMe, isTrue);
+    expect(state().comments.first.likedByMe, isFalse); // only the reply
+  });
+
+  test("a like the server refuses is undone", () async {
+    repo.failLikes = true;
+    await expectLater(controller().toggleLike(state().comments.first), throwsException);
+    expect(state().comments.first.likedByMe, isFalse);
+    expect(state().comments.first.likeCount, 0);
   });
 }

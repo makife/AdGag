@@ -271,5 +271,13 @@
   "notifUnavailable": "Bu sürümde bildirimler kullanılamıyor.",
   "notifSaveFailed": "Kaydedilemedi. Tekrar dene.",
   "pushChannelName": "Etkinlik",
-  "notifView": "Göster"
+  "notifView": "Göster",
+  "activitySoldFirst": "Reklamın ilk SOLD'unu aldı! 🎉",
+  "activitySoldMilestone": "Reklamın {count} SOLD'a ulaştı! 🎉",
+  "activityGagMilestone": "Reklamın {count} kez paylaşıldı (GAG!) 🎉",
+  "notifPrefMilestones": "SOLD ve GAG! başarıları",
+  "reviewLike": "Beğen",
+  "reviewUnlike": "Beğenmekten vazgeç",
+  "reviewLikeFailed": "Yorum beğenilemedi. Tekrar dene.",
+  "profilePhoto": "Profil fotoğrafı"
 }

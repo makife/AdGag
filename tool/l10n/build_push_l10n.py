@@ -23,13 +23,17 @@ TYPES = {
     "ad_this": "activityAdThis",
     "review_reply": "activityReviewReply",
     "mention": "activityMention",
+    "sold_milestone": "activitySoldMilestone",
+    "sold_milestone_first": "activitySoldFirst",
+    "gag_milestone": "activityGagMilestone",
 }
 
 out = {t: {lang: S[key][lang] for lang in LANGS} for t, key in TYPES.items()}
 for t, texts in out.items():
     for lang, text in texts.items():
-        if "{actor}" not in text:
-            sys.exit(f"{t} [{lang}] lost its {{actor}} placeholder")
+        wanted = "{count}" if t in ("sold_milestone", "gag_milestone") else None if t.endswith("_first") else "{actor}"
+        if wanted and wanted not in text:
+            sys.exit(f"{t} [{lang}] lost its {wanted} placeholder")
 path = os.path.join(ROOT, "supabase", "functions", "_shared", "push_strings.json")
 with open(path, "w", encoding="utf-8", newline="\n") as f:
     json.dump(out, f, ensure_ascii=False, indent=2)

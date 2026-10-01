@@ -271,5 +271,13 @@
   "notifUnavailable": "이 버전에서는 알림을 사용할 수 없어요.",
   "notifSaveFailed": "저장하지 못했어요. 다시 시도해 주세요.",
   "pushChannelName": "활동",
-  "notifView": "보기"
+  "notifView": "보기",
+  "activitySoldFirst": "내 광고가 첫 SOLD를 받았어요! 🎉",
+  "activitySoldMilestone": "내 광고가 SOLD {count}개를 달성했어요! 🎉",
+  "activityGagMilestone": "내 광고가 {count}번 공유됐어요 (GAG!) 🎉",
+  "notifPrefMilestones": "SOLD·GAG! 달성",
+  "reviewLike": "좋아요",
+  "reviewUnlike": "좋아요 취소",
+  "reviewLikeFailed": "좋아요를 누르지 못했어요. 다시 시도해 주세요.",
+  "profilePhoto": "프로필 사진"
 }

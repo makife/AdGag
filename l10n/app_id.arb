@@ -271,5 +271,13 @@
   "notifUnavailable": "Notifikasi tidak tersedia di versi ini.",
   "notifSaveFailed": "Gagal menyimpan. Coba lagi.",
   "pushChannelName": "Aktivitas",
-  "notifView": "Lihat"
+  "notifView": "Lihat",
+  "activitySoldFirst": "Iklanmu dapat SOLD pertamanya! 🎉",
+  "activitySoldMilestone": "Iklanmu mencapai {count} SOLD! 🎉",
+  "activityGagMilestone": "Iklanmu dibagikan {count} kali (GAG!) 🎉",
+  "notifPrefMilestones": "Pencapaian SOLD dan GAG!",
+  "reviewLike": "Suka",
+  "reviewUnlike": "Batal suka",
+  "reviewLikeFailed": "Gagal menyukai ulasan. Coba lagi.",
+  "profilePhoto": "Foto profil"
 }

@@ -91,6 +91,12 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
 
   bool _appInForeground = true;
 
+  /// The viewer tapped pause on this card. Only then is the big play icon
+  /// shown — a card that is merely not playing yet (just swiped to, still
+  /// starting) or that was paused by a swipe showed it after every swipe.
+  /// Cleared when the card stops being the active one.
+  bool _pausedByUser = false;
+
   bool get _shouldPlay => widget.isActive && _visible && _appInForeground;
 
   @override
@@ -129,6 +135,7 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
       _attach();
     }
     if (oldWidget.isActive != widget.isActive) {
+      _pausedByUser = false;
       _syncPlayback();
     }
   }
@@ -173,7 +180,7 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
     if (controller == null || !controller.value.isInitialized) {
       return;
     }
-    if (_shouldPlay) {
+    if (_shouldPlay && !_pausedByUser) {
       widget.pool.pauseAllExcept(widget.ad.id);
       unawaited(controller.play());
       if (!_trackedPlayStarted) {
@@ -246,8 +253,10 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
     }
     setState(() {
       if (controller.value.isPlaying) {
+        _pausedByUser = true;
         unawaited(controller.pause());
       } else {
+        _pausedByUser = false;
         unawaited(controller.play());
       }
     });
@@ -257,7 +266,7 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
   Widget build(BuildContext context) {
     final VideoPlayerController? controller = _controller;
     final bool showVideo = controller != null && controller.value.isInitialized;
-    final bool isPaused = showVideo && !controller.value.isPlaying;
+    final bool isPaused = showVideo && _pausedByUser && !controller.value.isPlaying;
 
     ref.listen(isFeedMutedProvider, (bool? previous, bool next) {
       final VideoPlayerController? c = _controller;
@@ -280,11 +289,13 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
     // bar, which AppShell sizes so the card is ~9:16 plus the status bar:
     // a 9:16 Ad loses only a sliver at the sides. A clearly different shape
     // (landscape, square) is letterboxed instead — covering it would cut
-    // most of it away. While the reviews panel is open the small video is
-    // always shown whole.
+    // most of it away. The small video above an open reviews panel is the
+    // SAME picture scaled down (same crop, card-shaped box): showing it
+    // uncropped there made text in the Ad sit at a different distance from
+    // the edges than in the full card (user report).
     BoxFit fitFor(Size card) {
-      if (reviewsOpen || !showVideo) {
-        return reviewsOpen ? BoxFit.contain : BoxFit.cover;
+      if (!showVideo) {
+        return BoxFit.cover;
       }
       final Size v = controller.value.size;
       if (v.width <= 0 || v.height <= 0 || card.width <= 0 || card.height <= 0) {
@@ -347,6 +358,9 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
             final double keyboardInCard = (keyboard - widget.belowCardHeight).clamp(0, height);
             // Smaller video while typing, so the reviews stay readable.
             final double openVideoHeight = height * (keyboardUp ? 0.2 : 0.36);
+            // Card-shaped (not screen-wide), centred: the full card scaled down.
+            final double openVideoWidth = height > 0 ? openVideoHeight * constraints.maxWidth / height : 0;
+            final double openVideoSide = ((constraints.maxWidth - openVideoWidth) / 2).clamp(0, constraints.maxWidth);
             // Anything of the card covered by the bottom bar (none in the feed,
             // whose pages end at the bar; kept for other hosts of this card).
             final double navClearance = keyboardUp ? 0 : _navBarClearance(context);
@@ -361,8 +375,8 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
                   // Full card (status bar area included) while watching; the
                   // small video under the status bar with reviews open.
                   top: reviewsOpen ? statusBar : 0,
-                  left: 0,
-                  right: 0,
+                  left: reviewsOpen ? openVideoSide : 0,
+                  right: reviewsOpen ? openVideoSide : 0,
                   height: reviewsOpen ? openVideoHeight : height,
                   child: GestureDetector(
                     // With the panel open, tapping the (small) video closes it.

@@ -526,5 +526,27 @@
   "notifUnavailable": "Push notifications aren't available in this version.",
   "notifSaveFailed": "Couldn't save. Try again.",
   "pushChannelName": "Activity",
-  "notifView": "View"
+  "notifView": "View",
+  "activitySoldFirst": "Your Ad got its first SOLD! 🎉",
+  "activitySoldMilestone": "Your Ad reached {count} SOLD! 🎉",
+  "@activitySoldMilestone": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "activityGagMilestone": "Your Ad was shared {count} times (GAG!) 🎉",
+  "@activityGagMilestone": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "notifPrefMilestones": "SOLD and GAG! milestones",
+  "reviewLike": "Like",
+  "reviewUnlike": "Unlike",
+  "reviewLikeFailed": "Couldn't like this review. Try again.",
+  "profilePhoto": "Profile photo"
 }

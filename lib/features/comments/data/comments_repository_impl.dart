@@ -9,7 +9,10 @@ final class CommentsRepositoryImpl implements CommentsRepository {
 
   final supa.SupabaseClient _client;
 
-  static const String _select = "*, profiles(username, avatar_url)";
+  // The FK is named: comment_likes (0025) also links comments to profiles,
+  // which makes a plain profiles(...) embed ambiguous (PGRST201).
+  // comment_likes(user_id) holds only the signed-in user's own like (RLS).
+  static const String _select = "*, profiles!comments_user_id_fkey(username, avatar_url), comment_likes(user_id)";
 
   @override
   Future<List<Comment>> fetchPage({required String adId, DateTime? before, int limit = 20}) async {
@@ -48,6 +51,15 @@ final class CommentsRepositoryImpl implements CommentsRepository {
       final Map<String, dynamic>? withAuthor =
           await _client.from("comments").select(_select).eq("id", row["id"] as String).maybeSingle();
       return Comment.fromRow(withAuthor ?? row);
+    } on supa.PostgrestException catch (e) {
+      throw app_error.ValidationException(e.message, e);
+    }
+  }
+
+  @override
+  Future<bool> toggleLike(String commentId) async {
+    try {
+      return await _client.rpc<bool>("toggle_comment_like", params: <String, dynamic>{"p_comment_id": commentId});
     } on supa.PostgrestException catch (e) {
       throw app_error.ValidationException(e.message, e);
     }

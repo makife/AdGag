@@ -7,6 +7,7 @@ final class NotificationPreferences {
     this.reviews = true,
     this.mentions = true,
     this.adThis = true,
+    this.milestones = true,
   });
 
   factory NotificationPreferences.fromRow(Map<String, dynamic>? row) => row == null
@@ -16,6 +17,7 @@ final class NotificationPreferences {
           reviews: row["reviews"] as bool? ?? true,
           mentions: row["mentions"] as bool? ?? true,
           adThis: row["ad_this"] as bool? ?? true,
+          milestones: row["milestones"] as bool? ?? true,
         );
 
   final bool newFollowers;
@@ -25,12 +27,16 @@ final class NotificationPreferences {
   final bool mentions;
   final bool adThis;
 
-  NotificationPreferences copyWith({bool? newFollowers, bool? reviews, bool? mentions, bool? adThis}) =>
+  /// SOLD and GAG! milestones of the user's Ads.
+  final bool milestones;
+
+  NotificationPreferences copyWith({bool? newFollowers, bool? reviews, bool? mentions, bool? adThis, bool? milestones}) =>
       NotificationPreferences(
         newFollowers: newFollowers ?? this.newFollowers,
         reviews: reviews ?? this.reviews,
         mentions: mentions ?? this.mentions,
         adThis: adThis ?? this.adThis,
+        milestones: milestones ?? this.milestones,
       );
 
   Map<String, dynamic> toRow(String userId) => <String, dynamic>{
@@ -39,6 +45,7 @@ final class NotificationPreferences {
         "reviews": reviews,
         "mentions": mentions,
         "ad_this": adThis,
+        "milestones": milestones,
         "updated_at": DateTime.now().toUtc().toIso8601String(),
       };
 }

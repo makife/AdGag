@@ -271,5 +271,13 @@
   "notifUnavailable": "As notificações não estão disponíveis nesta versão.",
   "notifSaveFailed": "Não foi possível salvar. Tente novamente.",
   "pushChannelName": "Atividade",
-  "notifView": "Ver"
+  "notifView": "Ver",
+  "activitySoldFirst": "Seu anúncio ganhou o primeiro SOLD! 🎉",
+  "activitySoldMilestone": "Seu anúncio chegou a {count} SOLD! 🎉",
+  "activityGagMilestone": "Seu anúncio foi compartilhado {count} vezes (GAG!) 🎉",
+  "notifPrefMilestones": "Marcos de SOLD e GAG!",
+  "reviewLike": "Curtir",
+  "reviewUnlike": "Descurtir",
+  "reviewLikeFailed": "Não foi possível curtir. Tente novamente.",
+  "profilePhoto": "Foto de perfil"
 }

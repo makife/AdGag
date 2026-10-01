@@ -11,6 +11,7 @@ import "../../../auth/domain/app_user.dart";
 import "../../../auth/presentation/providers/auth_providers.dart";
 import "../../../feed/domain/ad.dart";
 import "../../../subjects/presentation/screens/subject_ads_viewer_screen.dart";
+import "../../../../shared/widgets/avatar_viewer.dart";
 import "../../../../shared/widgets/count_label.dart";
 import "../../domain/public_profile.dart";
 import "../providers/profile_providers.dart";
@@ -73,12 +74,15 @@ class _ProfileBody extends ConsumerWidget {
               children: <Widget>[
                 Row(
                   children: <Widget>[
-                    CircleAvatar(
-                      radius: 36,
-                      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      backgroundImage:
-                          profile?.avatarUrl != null ? CachedNetworkImageProvider(profile!.avatarUrl!) : null,
-                      child: profile?.avatarUrl == null ? const Icon(Icons.person, size: 32) : null,
+                    TappableAvatar(
+                      avatarUrl: profile?.avatarUrl,
+                      child: CircleAvatar(
+                        radius: 36,
+                        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        backgroundImage:
+                            profile?.avatarUrl != null ? CachedNetworkImageProvider(profile!.avatarUrl!) : null,
+                        child: profile?.avatarUrl == null ? const Icon(Icons.person, size: 32) : null,
+                      ),
                     ),
                     const SizedBox(width: AppSpacing.lg),
                     Expanded(

@@ -17,6 +17,7 @@ import "../providers/feed_controller.dart";
 import "../providers/reviews_panel_provider.dart";
 import "../widgets/ad_video_card.dart";
 import "../widgets/feed_page_physics.dart";
+import "../widgets/swipe_seam_line.dart";
 
 /// HOME / FEED (CLAUDE.md section 6). Fullscreen vertical Ad feed with
 /// bounded-pool preloading (section 17) and the SOLD/REVIEWS/AD THIS/
@@ -216,106 +217,111 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with WidgetsBindingObse
 
   Widget _feedBody(BuildContext context, AsyncValue<FeedState> feedAsync, FeedKind kind) {
     return feedAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (Object error, StackTrace stackTrace) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              "${AppLocalizations.of(context).feedLoadFailed}\n$error",
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70),
-            ),
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (Object error, StackTrace stackTrace) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            "${AppLocalizations.of(context).feedLoadFailed}\n$error",
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70),
           ),
         ),
-        data: (FeedState feedState) {
-          final double topInset = MediaQuery.paddingOf(context).top;
-          if (feedState.ads.isEmpty) {
-            return RefreshIndicator(
-              onRefresh: _refresh,
-              edgeOffset: topInset,
-              child: LayoutBuilder(
-                builder: (BuildContext context, BoxConstraints constraints) => SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  child: SizedBox(
-                    height: constraints.maxHeight,
-                    child: kind == FeedKind.following
-                        ? _FollowingEmpty(onDiscover: () => context.goTo(RoutePaths.market))
-                        : ComingSoonView(
-                            title: AppLocalizations.of(context).feedEmptyTitle,
-                            phaseNote: AppLocalizations.of(context).feedEmptyBody,
-                          ),
-                  ),
-                ),
-              ),
-            );
-          }
-
-          // The pager ends at the bottom-nav bar's top edge (the Scaffold
-          // extends the body behind the bar): pages as tall as the space above
-          // the bar, so one Ad's bottom touches the next one's top. When pages
-          // reached under the bar, the strip hidden behind it scrolled into view
-          // between two Ads as a thick black gap (user report).
-          final double barInset = MediaQuery.paddingOf(context).bottom;
-
-          // Pull down on the first card to refresh. The indicator only
-          // reacts to an overscroll past the pager's top, so it never
-          // competes with an ordinary page swipe; it's disabled while a
-          // reviews panel is open (the pager is locked then anyway).
-          return Padding(
-            padding: EdgeInsets.only(bottom: barInset),
-            child: MediaQuery.removePadding(
-              context: context,
-              removeBottom: true,
-              child: RefreshIndicator(
-                onRefresh: _refresh,
-                edgeOffset: topInset,
-                notificationPredicate: (ScrollNotification notification) =>
-                    notification.depth == 0 && ref.read(openReviewsAdIdProvider) == null,
-                child: NotificationListener<ScrollEndNotification>(
-                  onNotification: (ScrollEndNotification notification) {
-                    final int? pending = _pendingIndex;
-                    if (pending != null && notification.depth == 0) {
-                      _pendingIndex = null;
-                      _activate(pending, feedState.ads);
-                    }
-                    return false;
-                  },
-                  child: PageView.builder(
-                    controller: _pageController,
-                    // Keep the neighbours laid out, so revealing the next card
-                    // mid-swipe doesn't build it on the spot.
-                    allowImplicitScrolling: true,
-                    scrollDirection: Axis.vertical,
-                    // Paging stops while a card's reviews panel is open.
-                    physics: ref.watch(openReviewsAdIdProvider) != null
-                        ? const NeverScrollableScrollPhysics()
-                        : const FeedPagePhysics(),
-                    itemCount: feedState.ads.length,
-                    onPageChanged: (int index) {
-                      _pendingIndex = index;
-                      _pool.playOnly(feedState.ads[index].id);
-                      ref.read(openReviewsAdIdProvider.notifier).state = null;
-                    },
-                    itemBuilder: (BuildContext context, int index) {
-                      final Ad ad = feedState.ads[index];
-                      if (_playersReleased) {
-                        return const ColoredBox(color: AppColors.darkBackground);
-                      }
-                      return AdVideoCard(
-                        ad: ad,
-                        pool: _pool,
-                        videoService: ref.read(videoServiceProvider),
-                        isActive: index == _activeIndex,
-                        belowCardHeight: barInset,
-                      );
-                    },
-                  ),
+      ),
+      data: (FeedState feedState) {
+        final double topInset = MediaQuery.paddingOf(context).top;
+        if (feedState.ads.isEmpty) {
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            edgeOffset: topInset,
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) => SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: SizedBox(
+                  height: constraints.maxHeight,
+                  child: kind == FeedKind.following
+                      ? _FollowingEmpty(onDiscover: () => context.goTo(RoutePaths.market))
+                      : ComingSoonView(
+                          title: AppLocalizations.of(context).feedEmptyTitle,
+                          phaseNote: AppLocalizations.of(context).feedEmptyBody,
+                        ),
                 ),
               ),
             ),
           );
-        },
-      );
+        }
+
+        // The pager ends at the bottom-nav bar's top edge (the Scaffold
+        // extends the body behind the bar): pages as tall as the space above
+        // the bar, so one Ad's bottom touches the next one's top. When pages
+        // reached under the bar, the strip hidden behind it scrolled into view
+        // between two Ads as a thick black gap (user report).
+        final double barInset = MediaQuery.paddingOf(context).bottom;
+
+        // Pull down on the first card to refresh. The indicator only
+        // reacts to an overscroll past the pager's top, so it never
+        // competes with an ordinary page swipe; it's disabled while a
+        // reviews panel is open (the pager is locked then anyway).
+        return Padding(
+          padding: EdgeInsets.only(bottom: barInset),
+          child: MediaQuery.removePadding(
+            context: context,
+            removeBottom: true,
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              edgeOffset: topInset,
+              notificationPredicate: (ScrollNotification notification) =>
+                  notification.depth == 0 && ref.read(openReviewsAdIdProvider) == null,
+              child: NotificationListener<ScrollEndNotification>(
+                onNotification: (ScrollEndNotification notification) {
+                  final int? pending = _pendingIndex;
+                  if (pending != null && notification.depth == 0) {
+                    _pendingIndex = null;
+                    _activate(pending, feedState.ads);
+                  }
+                  return false;
+                },
+                child: Stack(
+                  children: <Widget>[
+                    PageView.builder(
+                      controller: _pageController,
+                      // Keep the neighbours laid out, so revealing the next card
+                      // mid-swipe doesn't build it on the spot.
+                      allowImplicitScrolling: true,
+                      scrollDirection: Axis.vertical,
+                      // Paging stops while a card's reviews panel is open.
+                      physics: ref.watch(openReviewsAdIdProvider) != null
+                          ? const NeverScrollableScrollPhysics()
+                          : const FeedPagePhysics(),
+                      itemCount: feedState.ads.length,
+                      onPageChanged: (int index) {
+                        _pendingIndex = index;
+                        _pool.playOnly(feedState.ads[index].id);
+                        ref.read(openReviewsAdIdProvider.notifier).state = null;
+                      },
+                      itemBuilder: (BuildContext context, int index) {
+                        final Ad ad = feedState.ads[index];
+                        if (_playersReleased) {
+                          return const ColoredBox(color: AppColors.darkBackground);
+                        }
+                        return AdVideoCard(
+                          ad: ad,
+                          pool: _pool,
+                          videoService: ref.read(videoServiceProvider),
+                          isActive: index == _activeIndex,
+                          belowCardHeight: barInset,
+                        );
+                      },
+                    ),
+                    Positioned.fill(child: SwipeSeamLine(controller: _pageController)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
