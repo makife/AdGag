@@ -1454,6 +1454,8 @@ Everything is committed and pushed to `master` (github.com/makife/AdGag). Curren
 - Terms of Service + Community Guidelines: https://loquacious-vacherin-e7bd8c.netlify.app/ (`docs/terms/index.html`, links the other two by these absolute URLs)
 Contact address on all pages: makifergan@gmail.com. Play listing images + 512px icon: `tool/store/make_store_images.py` (MOCKUPS — swap real screenshots in with `--screens DIR`).
 
+**Play upload from CI (2026-10-01)**: `android-build.yml` uploads the .aab to Play's INTERNAL track on manual runs and v* tags (never on pushes) via `tool/android/play_upload.py` (Android Publisher API: edit → bundle upload → track → commit) when secret PLAY_SERVICE_ACCOUNT_JSON is set. That secret is currently the **Bielat** app's Firebase admin SA (`firebase-adminsdk-fbsvc@bielat-1c00a`), which the owner had invited in Play Console — verified it can open/delete an edit on com.ergan.adgag (tracks then: internal vc 1, alpha vc 2). Recommend replacing it with an AdGag-only SA. Not yet run end to end.
+
 **Version rule**: Play needs a higher versionCode for every upload — bump `pubspec.yaml` `version: x.y.z+N` before each release build (CI uses `github.run_number` as the build number instead; don't mix local and CI uploads without checking the last versionCode).
 
 **Still to do before launch**: (the 2026-09-29 round below built account deletion, Mux deletion and the age check — its migration/functions are LIVE); a licensed or CC0 music library is optional (user-picked music is the uploader's responsibility per the Terms); iOS needs an Apple Developer account for TestFlight.
