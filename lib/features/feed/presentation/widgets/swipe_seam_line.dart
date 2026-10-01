@@ -3,9 +3,10 @@ import "package:flutter/material.dart";
 import "../../../../core/theme/app_colors.dart";
 
 /// A short brand-gradient line on the seam between two Ads while a vertical
-/// pager is between pages. It travels left -> right in step with the swipe
-/// (0% at the start, gone off the right edge when the next Ad has settled)
-/// — in BOTH swipe directions, so it reads as "progress", not as a direction.
+/// pager is between pages, moving in step with the swipe: swiping UP (to the
+/// next Ad) it travels left -> right, swiping DOWN (back) right -> left
+/// (owner's spec). It starts off one edge and leaves off the other as the
+/// new Ad settles.
 /// Drawn over the pager (ignores touches); nothing is drawn while settled.
 class SwipeSeamLine extends StatefulWidget {
   const SwipeSeamLine({required this.controller, super.key});
@@ -45,11 +46,13 @@ class _SwipeSeamLineState extends State<SwipeSeamLine> {
               return const SizedBox.shrink();
             }
             final double progress = (page - _start).abs().clamp(0.0, 1.0);
+            final bool forward = page > _start; // swiping up, toward the next Ad
             final double width = box.maxWidth;
             final double lineWidth = width * 0.4;
             // The boundary between page floor(page) and the next one.
             final double seamY = (page.floorToDouble() + 1 - page) * box.maxHeight;
-            final double x = progress * (width + lineWidth) - lineWidth;
+            final double travel = forward ? progress : 1 - progress;
+            final double x = travel * (width + lineWidth) - lineWidth;
             return Stack(
               children: <Widget>[
                 Positioned(
