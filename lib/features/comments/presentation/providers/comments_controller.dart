@@ -112,8 +112,19 @@ final class CommentsController extends FamilyAsyncNotifier<CommentsState, String
   /// Posts a review, or a reply when [parentId] is set (the reply shows
   /// under its review, which is expanded).
   Future<void> post(String body, {String? parentId}) async {
-    final Comment comment =
-        await ref.read(commentsRepositoryProvider).create(adId: arg, body: body, parentId: parentId);
+    // Counted BEFORE the request: the live counter (liveAdCountsProvider)
+    // can deliver the new server count while the request is still
+    // returning, and it resets this adjustment — bumping afterwards would
+    // count the review twice.
+    final StateController<int> delta = ref.read(commentCountDeltaProvider(arg).notifier);
+    delta.state++;
+    final Comment comment;
+    try {
+      comment = await ref.read(commentsRepositoryProvider).create(adId: arg, body: body, parentId: parentId);
+    } catch (_) {
+      delta.state--;
+      rethrow;
+    }
     final CommentsState? current = state.valueOrNull;
     if (current != null) {
       if (parentId == null) {
@@ -130,7 +141,6 @@ final class CommentsController extends FamilyAsyncNotifier<CommentsState, String
         );
       }
     }
-    ref.read(commentCountDeltaProvider(arg).notifier).state++;
   }
 
   /// Likes / un-likes [comment] at once on screen, then on the server; the
@@ -167,8 +177,15 @@ final class CommentsController extends FamilyAsyncNotifier<CommentsState, String
   }
 
   Future<void> deleteOwn(Comment comment) async {
-    await ref.read(commentsRepositoryProvider).deleteOwn(comment.id);
-    ref.read(commentCountDeltaProvider(arg).notifier).state--;
+    // Same ordering as post().
+    final StateController<int> delta = ref.read(commentCountDeltaProvider(arg).notifier);
+    delta.state--;
+    try {
+      await ref.read(commentsRepositoryProvider).deleteOwn(comment.id);
+    } catch (_) {
+      delta.state++;
+      rethrow;
+    }
     final CommentsState? current = state.valueOrNull;
     if (current == null) {
       return;

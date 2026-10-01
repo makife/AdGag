@@ -7,34 +7,39 @@ import "../../../../shared/widgets/review_button.dart";
 import "../../../../shared/widgets/share_button.dart";
 import "../../../../shared/widgets/sold_button.dart";
 import "../../domain/ad.dart";
+import "../providers/live_ad_counts_provider.dart";
 
 /// The right-edge action column (CLAUDE.md section 6/64): SOLD, REVIEWS,
 /// AD THIS, SHARE, and a Report/Block entry point (section 30/31).
 /// Composes the shared design-system buttons rather than reimplementing
 /// each one inline in [AdVideoCard].
 class FeedActionRail extends StatelessWidget {
-  const FeedActionRail({required this.ad, super.key});
+  const FeedActionRail({required this.ad, this.live, super.key});
 
   final Ad ad;
+
+  /// Server-fresh counters for the Ad on screen (live); null = the counts
+  /// fetched with the page.
+  final AdCounts? live;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        SoldButton(adId: ad.id, baseSoldCount: ad.soldCount),
+        SoldButton(adId: ad.id, baseSoldCount: live?.sold ?? ad.soldCount),
         const SizedBox(height: AppSpacing.sm),
-        ReviewButton(adId: ad.id, commentCount: ad.commentCount),
+        ReviewButton(adId: ad.id, commentCount: live?.comments ?? ad.commentCount),
         const SizedBox(height: AppSpacing.sm),
         if (ad.subjectDisplayName != null)
           AdThisButton(
             adId: ad.id,
             subjectId: ad.subjectId,
             subjectDisplayName: ad.subjectDisplayName!,
-            adThisCount: ad.adThisCount,
+            adThisCount: live?.adThis ?? ad.adThisCount,
           ),
         const SizedBox(height: AppSpacing.sm),
-        ShareButton(adId: ad.id, subjectDisplayName: ad.subjectDisplayName, shareCount: ad.shareCount),
+        ShareButton(adId: ad.id, subjectDisplayName: ad.subjectDisplayName, shareCount: live?.shares ?? ad.shareCount),
         const SizedBox(height: AppSpacing.sm),
         MoreMenuButton(adId: ad.id, adOwnerUserId: ad.userId, adOwnerUsername: ad.creatorUsername),
       ],

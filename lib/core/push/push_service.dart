@@ -6,6 +6,7 @@ import "package:firebase_core/firebase_core.dart";
 import "package:firebase_messaging/firebase_messaging.dart";
 import "package:shared_preferences/shared_preferences.dart";
 import "package:supabase_flutter/supabase_flutter.dart";
+import "package:uuid/uuid.dart";
 
 import "../config/env_config.dart";
 import "../localization/generated/app_localizations.dart";
@@ -58,6 +59,21 @@ final class PushService {
   final _log = AppLogger.named("PushService");
 
   static const String _askedKey = "push_permission_asked";
+  static const String _installationKey = "push_installation_id";
+
+  /// A random id for this install of the app, sent with the token: the
+  /// server keeps one token per installation, so a refreshed token (or a
+  /// language change / account switch) replaces the old row instead of
+  /// piling up — one phone got the same push several times.
+  String get _installationId {
+    final String? existing = _prefs.getString(_installationKey);
+    if (existing != null) {
+      return existing;
+    }
+    final String id = const Uuid().v4();
+    unawaited(_prefs.setString(_installationKey, id));
+    return id;
+  }
 
   Future<bool>? _firebase;
   String? _token;
@@ -182,6 +198,7 @@ final class PushService {
       "p_token": token,
       "p_platform": Platform.isIOS ? "ios" : "android",
       "p_locale": _effectiveLanguage(_languageCode),
+      "p_installation_id": _installationId,
     },);
   }
 

@@ -17,10 +17,13 @@ import "../../../../core/video/video_service.dart";
 import "../../../../shared/widgets/count_label.dart";
 import "../../../../shared/widgets/creator_header.dart";
 import "../../../../shared/widgets/subject_badge.dart";
+import "../../../comments/presentation/providers/comments_controller.dart";
 import "../../../comments/presentation/widgets/reviews_panel.dart";
 import "../../domain/ad.dart";
 import "../providers/feed_providers.dart";
+import "../providers/live_ad_counts_provider.dart";
 import "../providers/reviews_panel_provider.dart";
+import "../providers/sold_providers.dart";
 import "feed_action_rail.dart";
 
 /// One fullscreen feed item (CLAUDE.md section 6): subject badge, creator
@@ -287,6 +290,26 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
     });
     final bool isMuted = ref.watch(isFeedMutedProvider);
 
+    // Live counters only for the Ad actually on screen (one subscription).
+    // Every live value already includes this viewer's own SOLD / review /
+    // share, so the local "+1" adjustments start over each time one arrives.
+    AdCounts? live;
+    if (_shouldPlay) {
+      ref.listen<AsyncValue<AdCounts>>(liveAdCountsProvider(widget.ad.id), (_, AsyncValue<AdCounts> next) {
+        if (!next.hasValue) {
+          return;
+        }
+        final String id = widget.ad.id;
+        ref.read(commentCountDeltaProvider(id).notifier).state = 0;
+        ref.read(shareCountDeltaProvider(id).notifier).state = 0;
+        final bool? sold = ref.read(soldControllerProvider(id)).valueOrNull;
+        if (sold != null) {
+          ref.read(soldBaselineProvider(id).notifier).state = sold;
+        }
+      });
+      live = ref.watch(liveAdCountsProvider(widget.ad.id)).valueOrNull;
+    }
+
     final bool reviewsOpen = ref.watch(openReviewsAdIdProvider) == widget.ad.id;
     if (reviewsOpen) {
       _reviewsEverOpened = true; // keep the panel mounted so it can slide back out
@@ -438,7 +461,7 @@ class _AdVideoCardState extends ConsumerState<AdVideoCard> with WidgetsBindingOb
                   Positioned(
                     right: AppSpacing.md,
                     bottom: _bottomClearance(context),
-                    child: FeedActionRail(ad: widget.ad),
+                    child: FeedActionRail(ad: widget.ad, live: live),
                   ),
                   Positioned(
                     left: AppSpacing.lg,

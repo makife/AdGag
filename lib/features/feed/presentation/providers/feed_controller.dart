@@ -1,5 +1,6 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../../comments/presentation/providers/comments_controller.dart";
 import "../../domain/ad.dart";
 import "../../domain/feed_repository.dart";
 import "feed_providers.dart";
@@ -86,10 +87,12 @@ final class FeedController extends AsyncNotifier<FeedState> {
     if (ref.read(feedKindProvider) != kind) {
       return;
     }
-    // Fresh counts include the viewer's own SOLDs and shares: start the
-    // local adjustments over.
+    // Fresh counts include the viewer's own SOLDs, shares and reviews: start
+    // the local adjustments over. (The review one was missing, so a review
+    // you posted was counted twice after a refresh — owner report.)
     ref.invalidate(soldBaselineProvider);
     ref.invalidate(shareCountDeltaProvider);
+    ref.invalidate(commentCountDeltaProvider);
     state = AsyncData<FeedState>(FeedState(ads: page.ads, nextCursor: page.nextCursor, isLoadingMore: false));
   }
 }

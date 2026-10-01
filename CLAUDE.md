@@ -1444,7 +1444,7 @@ The ultimate product promise is:
 
 Repo: `C:\Users\LENOVO10OCT2020\Desktop\makifbilgisayar\AdGag`, brand name **AdGag** (codename `everything_is_an_ad` retired — the real name was decided). 14 commits, 124 `lib/` files, 14 test files (59 test cases), 17 SQL migrations, 2 Supabase Edge Functions. Full narrative detail for all of this lives in `README.md` (architecture, ER model, RLS plan, tech choices, and — most importantly — the "Verification log" entries, which are the authoritative record of what's actually been proven against real infrastructure vs. only written).
 
-## >>> RESUME HERE (last session ended 2026-10-01, version 0.1.16+17) <<<
+## >>> RESUME HERE (last session ended 2026-10-02, version 0.1.17+18) <<<
 
 Everything is committed and pushed to `master` (github.com/makife/AdGag). Current app version **0.1.4+5**; signed release AAB + APK built locally (`flutter build appbundle|apk --release --dart-define-from-file=env/dev.json`, config check `unzip -p … libapp.so | grep -c <project ref>`), copies on the owner's Desktop in "AdGag Play Store gorselleri". **Android CI now works** (secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ENV_DEV_JSON added 2026-09-28) and iOS CI (simulator build) is green on every commit since 57d2614. iOS has still never run on a device.
 
@@ -1459,6 +1459,17 @@ Contact address on all pages: makifergan@gmail.com. Play listing images + 512px 
 **Version rule**: Play needs a higher versionCode for every upload — bump `pubspec.yaml` `version: x.y.z+N` before each release build (CI uses `github.run_number` as the build number instead; don't mix local and CI uploads without checking the last versionCode).
 
 **Still to do before launch**: (the 2026-09-29 round below built account deletion, Mux deletion and the age check — its migration/functions are LIVE); a licensed or CC0 music library is optional (user-picked music is the uploader's responsibility per the Terms); iOS needs an Apple Developer account for TestFlight.
+
+## Live counters, double-counted reviews, one token per phone (2026-10-02, 0.1.17+18)
+
+Owner report: review likes "don't work", review counts don't update on other phones or go up wrong, SOLD pushes for some Ads and not others.
+- **Likes**: not a bug — @makifergan had BLOCKED @bebeq (2026-10-01 21:04 UTC) and every review in the DB belonged to one of those two; `toggle_comment_like` correctly answered 42501 "Not allowed" (found by running the RPC as each real user inside a rolled-back transaction: `set local role authenticated; set_config('request.jwt.claims', …)`). Owner unblocked → likes work. The block also (by design) suppressed review/reply/mention notifications between them.
+- **SOLD pushes**: by design only milestones (first SOLD, 10, 50…, once per Ad; Ads that already had SOLDs were backfilled as notified). Explained to the owner; per-SOLD pushes not built.
+- **Double-counted reviews (real bug)**: the local "+1" (`commentCountDeltaProvider`) was never reset on feed refresh (SOLD/share ones were) → your own review counted twice. Fixed, and comments now bump the delta BEFORE the request (undo on failure) so a live update can't land in between.
+- **Live counters** (0027, LIVE): AFTER UPDATE trigger on ads counters → `realtime.send({sold, comments, shares, ad_this}, 'counts', 'ad-counts:<id>', public)` — only the numbers, never the row. App: `liveAdCountsProvider` (autoDispose family: one read + broadcast subscription), watched only by the playing card; each live value resets the local deltas/SOLD baseline; FeedActionRail shows live counts. Verified live (websocket client received `{comments: 1}` right after a review).
+- **One token per phone** (0027): `register_device_token(token, platform, locale, installation_id)` (new 4-arg overload, no defaults; the 3-arg one stays for old builds) deletes this installation's other tokens. App keeps a random `push_installation_id` in SharedPreferences. Verified live (two tokens from one install → one row; 3-arg call still 204). @makifergan had 6 Android rows from repeated installs.
+- Supabase Management API: `analytics/endpoints/logs.all` is gone (410); the new `/logs` endpoint didn't know `edge_logs` — debug through SQL/transactions instead.
+- 78 tests. Not device-tested.
 
 ## Review likes, SOLD/GAG! milestones, swipe polish (2026-10-01, 0.1.16+17)
 
